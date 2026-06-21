@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://taman-backend-lrsa.onrender.com/api/:path*"
+    }
+  ]
+}
