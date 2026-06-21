@@ -1,0 +1,55 @@
+services:
+  taman-db:
+    image: postgres:15-alpine
+    container_name: postgres_taman_local
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - taman_db_data:/var/lib/postgresql/data
+    # 1. Bổ sung kiểm tra sức khỏe của Database
+    healthcheck:
+      # Sử dụng biến $$POSTGRES_USER (2 dấu $ để docker-compose hiểu là biến môi trường bên trong container)
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  taman-backend:
+    build: ./backend
+    container_name: backend_taman_local
+    env_file: .env
+    environment:
+      # Khi backend chạy trong Docker Compose, dùng tên service DB nội bộ
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@taman-db:5432/${DB_NAME}
+    volumes:
+      - ./backend:/app
+    ports:
+      - "5000:5000"
+    # 2. Cập nhật lại điều kiện ràng buộc: Chỉ khởi động khi DB đã "healthy"
+    depends_on:
+      taman-db:
+        condition: service_healthy
+
+  taman-frontend:
+    image: node:22-alpine
+    container_name: frontend_taman_local
+    working_dir: /app
+    env_file: .env
+    environment:
+      - VITE_API_BASE_URL=http://taman-backend:5000
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - taman-backend
+
+volumes:
+  taman_db_data:
