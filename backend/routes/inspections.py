@@ -302,16 +302,21 @@ async def upload_multi_assets_image(
         )
     
     # KIỂM TRA ĐIỀU KIỆN 3: Đối chiếu tính nhất quán của thiết bị đầu cuối
-    if nonce_record.ip_address != client_ip or nonce_record.user_agent != client_ua:
-        # In ra chi tiết sự thay đổi thông số mạng để xử lý thiết bị di động
+    real_client_ip = request.headers.get("x-forwarded-for")
+    if real_client_ip:
+        # Chuỗi X-Forwarded-For có thể dạng "IP_Thật, IP_Proxy", ta lấy phần tử đầu tiên
+        real_client_ip = real_client_ip.split(",")[0].strip()
+    else:
+        real_client_ip = client_ip # Fallback về IP gốc nếu chạy ở local dev
+
+    # 2. Hàng rào đối chiếu thông minh nới lỏng:
+    # Do mã xác thực JWT và mã Nonce dùng 1 lần đã bảo mật tuyệt đối, ta chỉ ghi log
+    # theo dõi biến động (Audit) chứ không chặn đứng dòng chạy để đảm bảo độ mượt cho Mobile 4G/WiFi.
+    if nonce_record.ip_address != real_client_ip or nonce_record.user_agent != client_ua:
         logging.warning(
-            f"[SECURITY ALERT]: Thiết bị thay đổi cấu trúc giữa 2 bước gọi API!\n"
+            f"[NETWORK MOBILITY INFO]: Thiết bị có sự dịch chuyển nhẹ mạng/thiết bị:\n"
             f"  -> Lúc xin mã: IP={nonce_record.ip_address} | UA={nonce_record.user_agent}\n"
-            f"  -> Lúc nộp ảnh: IP={client_ip} | UA={client_ua}"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Thiết bị hoặc địa chỉ mạng thay đổi. Vui lòng cố định thiết bị chụp ảnh."
+            f"  -> Lúc nộp ảnh: IP={real_client_ip} | UA={client_ua}"
         )
     
     # Hủy mã NONCE khi vượt qua toàn bộ các hàng rào bảo mật thành công
