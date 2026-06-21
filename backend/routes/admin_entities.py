@@ -175,10 +175,14 @@ def create_asset(
 # 2. API XEM DANH SÁCH TÀI SẢN (MỞ RỘNG CHO AI CŨNG LẤY ĐƯỢC - KỂ CẢ STAFF)
 @router_assets.get("", response_model=List[AssetResponse])
 def get_all_assets(
+    room_id: Optional[int] = None,  # Added an optional query parameter
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user) # ĐÃ SỬA: Bất kỳ ai đăng nhập đều đọc được
+    current_user: User = Depends(get_current_user)
 ):
-    return db.query(Asset).all()
+    query = db.query(Asset)
+    if room_id is not None:
+        query = query.filter(Asset.room_id == room_id)
+    return query.all()
 
 
 # 3. API XEM CHI TIẾT TÀI SẢN (MỞ RỘNG CHO AI CŨNG LẤY ĐƯỢC - KỂ CẢ STAFF)

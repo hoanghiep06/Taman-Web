@@ -36,7 +36,7 @@ export const PatrolSessionPage = () => {
   const fetchRoomAssets = async (isSilent = false) => {
     try {
       const assetsData = await patrolApi.getAssetsByRoom(roomNumber);
-      setAssets(assetsData);
+      setAssets(assetsData.assets);
     } catch (err) {
       console.error('Lỗi tải dữ liệu phòng', err);
     } finally {

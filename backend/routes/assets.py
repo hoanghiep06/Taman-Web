@@ -30,8 +30,8 @@ def get_all_rooms(db: Session = Depends(get_db)):
 def get_assets_by_room(room_number: str, db: Session = Depends(get_db)):
     """
     Lấy danh sách toàn bộ tài sản đang hoạt động thuộc về một số phòng cụ thể.
-    Đblock ĐƯỢC ĐỒNG BỘ: Kết hợp nhật ký ca trực hiện tại để giữ nguyên trạng thái 
-    Xanh/Vàng/Xám/Đỏ tươi/Đỏ đậm kể cả khi nhân viên tải lại (F5/Reset) giao diện phòng.
+    ĐỒNG BỘ TIẾN ĐỘ LUỒNG ĐI TUẦN: Trả về thêm 'total_assets' và 'inspected_count' 
+    để Frontend chạy hiệu ứng thanh phần trăm tiến độ trực quan theo thời gian thực.
     """
     # 1. Tìm thực thể phòng từ bảng rooms dựa trên số phòng (ví dụ: "4")
     room = db.query(Room).filter(Room.room_number == room_number).first()
@@ -41,7 +41,7 @@ def get_assets_by_room(room_number: str, db: Session = Depends(get_db)):
             detail=f"Không tìm thấy phòng số '{room_number}' trên hệ thống."
         )
     
-    # 2. ĐBỔ SUNG: Tìm ca trực đang mở (Open) hiện tại của hệ thống
+    # 2. Tìm ca trực đang mở (Open) hiện tại của hệ thống
     shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.created_at.desc()).first()
     
     # 3. Truy vấn danh sách tài sản thuộc phòng bằng kỹ thuật joinedload tối ưu mạng
@@ -50,8 +50,9 @@ def get_assets_by_room(room_number: str, db: Session = Depends(get_db)):
         Asset.status == "Active"
     ).order_by(Asset.elder_id, Asset.asset_name).all()
     
-    # 4. ĐBỔ SUNG: Nếu đang có ca trực mở, kéo toàn bộ trạng thái đi tuần mới nhất của các tài sản này lên RAM
+    # 4. Tìm kiếm trạng thái đi tuần mới nhất của các tài sản này lên RAM
     log_dict = {}
+    latest_logs = [] # Khởi tạo danh sách log trống để phục vụ tính toán tiến độ
     tz = pytz.timezone('Asia/Ho_Chi_Minh')
     
     if shift and assets:
@@ -64,8 +65,12 @@ def get_assets_by_room(room_number: str, db: Session = Depends(get_db)):
         # Chuyển mảng log thành cấu trúc Dictionary để tra cứu nhanh với độ phức tạp O(1)
         log_dict = {log.asset_id: log for log in latest_logs}
     
+    # ──── TÍNH TOÁN TIẾN ĐỘ ĐI TUẦN NGAY TRÊN RAM (TỐI ƯU HÓA IO, KHÔNG TỐN CÂU SQL COUNT) ────
+    total_assets = len(assets)
+    inspected_count = len(latest_logs) # Vì đã lọc is_latest = True nên len này chính là số lượng đồ đã tương tác
+    
     # 5. Đóng gói dữ liệu kết hợp động giữa danh mục gốc và nhật ký đi tuần theo ca
-    result = []
+    assets_list = []
     for asset in assets:
         log = log_dict.get(asset.id)
         
@@ -83,13 +88,13 @@ def get_assets_by_room(room_number: str, db: Session = Depends(get_db)):
             if log.created_at:
                 inspected_at = log.created_at.astimezone(tz).strftime("%H:%M:%S")
                 
-        result.append({
+        assets_list.append({
           "asset_id": asset.id,
           "asset_name": asset.asset_name,
           "room_number": room.room_number,
           "catalog_status": asset.status, # Trạng thái tĩnh hoạt động của đồ vật trong kho
           
-          # ──── CÁC TRƯỜNG DỮ LIỆU ĐBỔ SUNG ĐỂ PHỤC VỤ GIỮ TRẠNG THÁI KHI RESET ────
+          # ──── CÁC TRƯỜNG DỮ LIỆU BỔ SUNG ĐỂ PHỤC VỤ GIỮ TRẠNG THÁI KHI RESET ────
           "current_status": current_status, # Giao diện hứng trường này để tô màu: Xanh/Vang/Dang_Xu_Ly/Loi_Upload/Unchecked
           "inspected_at": inspected_at,     # Mốc thời gian thực thực hiện hành động để hiện lên UI
           "log_id": log_id,                 # ID của bản ghi log kiểm kê
@@ -99,4 +104,9 @@ def get_assets_by_room(room_number: str, db: Session = Depends(get_db)):
           "elder_name": asset.elder.full_name if asset.elder else "Tài sản chung của phòng"
         })
         
-    return result
+    # ──── TRẢ VỀ CẤU TRÚC BỌC WRAPPER OBJECT CHUẨN RESTFUL DÀNH CHO DASHBOARD UI ────
+    return {
+        "total_assets": total_assets,
+        "inspected_count": inspected_count,
+        "assets": assets_list
+    }
