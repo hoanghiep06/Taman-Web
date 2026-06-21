@@ -1,13 +1,16 @@
 # routes/admin_entities.py
 import io
+import os
 import logging
 import threading
-from datetime import datetime
+import models
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import UploadFile, File, APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from openpyxl import load_workbook
-from database import get_db
+from database import get_db, engine
 from models import User, Room, Elder, Asset
 from schemas import ElderCreate, ElderResponse, AssetCreate, AssetResponse
 # Nạp cả get_current_user (mọi tài khoản) và get_privileged_user (chức vụ cao)
@@ -19,6 +22,7 @@ from services.drive_service import (
     list_db_backups_from_drive,
     cleanup_old_db_backups,
 )
+from core.constants import DEFAULT_SHIFT_SETTINGS
 
 logger = logging.getLogger("disaster_recovery")
 # Khóa chống chạy khôi phục đồng thời: tránh 2 admin cùng bấm restore 1 lúc gây xung đột DB
@@ -373,7 +377,7 @@ async def import_assets_from_xlsx(
 def get_backup_list_on_cloud(
     current_user: User = Depends(get_admin_user)
 ):
-    """
+    """ 
     API đặc quyền giúp Admin xem danh sách toàn bộ các file backup hiện có trên Drive,
     bao gồm File ID, Tên file, Kích thước (bytes) và Thời gian khởi tạo để làm UI chọn file khôi phục.
     """
@@ -422,23 +426,11 @@ def trigger_manual_backup(
 def restore_database_system(
     drive_file_id: Optional[str] = Query(None, description="Truyền ID file trên Google Drive để khôi phục trực tiếp"),
     file: Optional[UploadFile] = File(None, description="Hoặc đính kèm file .sql từ máy tính cá nhân lên"),
+    db: Session = Depends(get_db), # 🔥 BỔ SUNG: Lấy Session db hiện tại của Request vào đây
     current_user: User = Depends(get_admin_user)
 ):
     """
-    API CỨU HỘ TỐI CAO (Disaster Recovery):
-    - Cơ chế 1: Admin truyền drive_file_id, server tự kéo file từ Google Drive về.
-    - Cơ chế 2: Admin upload file cứng từ máy tính cá nhân (.sql) lên để phục hồi.
-
-    Lớp an toàn bổ sung:
-    - Khóa chống chạy đồng thời: chỉ 1 lệnh restore được thực thi tại 1 thời điểm, các
-      yêu cầu khác đến trong lúc đó sẽ bị từ chối ngay (409) thay vì xếp hàng gây xung đột.
-    - Tự động tạo 1 bản "snapshot an toàn" (pre-restore safety backup) của DB HIỆN TẠI và
-      đẩy lên Drive TRƯỚC KHI ghi đè. Nếu không tạo được snapshot này, HỦY restore ngay lập
-      tức — không liều ghi đè khi không có đường lui nếu chọn nhầm file.
-    - Restore chạy trong 1 transaction duy nhất (xem backup_service.py): lỗi giữa chừng sẽ
-      tự rollback toàn bộ, DB không bao giờ bị kẹt ở trạng thái nửa-khôi-phục.
-    - Ghi log có actor/thời gian/nguồn file cho mọi lần restore, phục vụ truy vết sau này
-      (đặc biệt quan trọng vì đây là thao tác phá hủy dữ liệu mạnh nhất trong hệ thống).
+    API CỨU HỘ TỐI CAO (Disaster Recovery)
     """
     if not _restore_lock.acquire(blocking=False):
         raise HTTPException(
@@ -471,6 +463,14 @@ def restore_database_system(
         if not sql_data_bytes:
             raise HTTPException(status_code=400, detail="Dữ liệu file phục hồi rỗng hoặc bị lỗi.")
 
+        # ──── ĐOẠN VÁ LỖI XUNG ĐỘT PHIÊN BẢN (COMPATIBILITY SHIELD) ────
+        if b"SET transaction_timeout = 0;" in sql_data_bytes:
+            logger.warning("[RECOVERY]: Phát hiện chỉ thị 'transaction_timeout' của PG17. Tiến hành vô hiệu hóa để tương thích với cấu trúc PG15 hiện tại...")
+            sql_data_bytes = sql_data_bytes.replace(
+                b"SET transaction_timeout = 0;", 
+                b"-- SET transaction_timeout = 0;"
+            )
+
         # ──── BƯỚC AN TOÀN BẮT BUỘC: snapshot DB hiện tại trước khi ghi đè ────
         try:
             logger.warning("[RECOVERY] Đang tạo snapshot an toàn của DB hiện tại trước khi ghi đè...")
@@ -486,8 +486,58 @@ def restore_database_system(
                 detail=f"Đã hủy khôi phục vì không thể tạo bản backup an toàn trước khi ghi đè: {safety_err}"
             )
 
+        # =========================================================================
+        # 🔥 BƯỚC CHÍ MẠNG: CHỦ ĐỘNG GIẢI PHÓNG KẾT NỐI ĐỂ BẺ GÃY DEADLOCK
+        # =========================================================================
+        # Đóng session hiện tại và dọn sạch Connection Pool của FastAPI. 
+        # Hành động này giải phóng hoàn toàn các AccessShareLock trên DB live, 
+        # nhường đường cho lệnh khôi phục thô bên dưới chiếm quyền ghi exclusive mượt mà!
+        db.close()
+        from database import engine
+        engine.dispose()
+
         # Kích hoạt lệnh nạp ngầm nhị phân psql tái cấu trúc máy chủ (chạy trong 1 transaction)
         execute_database_restore(sql_data_bytes)
+
+        from sqlalchemy.orm import sessionmaker
+        from services.shift_service import auto_open_shift # Nạp hàm mở ca trực
+        
+        FreshSession = sessionmaker(bind=engine)
+        fallback_db = FreshSession()
+
+        try:
+            vietnam_tz = timezone(timedelta(hours=7))
+            current_hour = datetime.now(vietnam_tz).hour
+            logger.warning(f"[RECOVERY]: Đang tiến hành rà soát khung giờ ({current_hour}h) để khôi phục ca trực live sau restore...")
+
+            # Truy vấn khung giờ cấu hình thực tế từ bảng shift_settings vừa khôi phục thành công từ file SQL
+            setting = fallback_db.query(models.ShiftSetting).first()
+            if setting:
+                m_start = int(setting.morning_start.split(':')[0])
+                m_end = int(setting.morning_end.split(':')[0])
+                e_start = int(setting.evening_start.split(':')[0])
+                e_end = int(setting.evening_end.split(':')[0])
+            else:
+                m_start = int(DEFAULT_SHIFT_SETTINGS["morning_start"].split(':')[0])
+                m_end = int(DEFAULT_SHIFT_SETTINGS["morning_end"].split(':')[0])
+                e_start = int(DEFAULT_SHIFT_SETTINGS["evening_start"].split(':')[0])
+                e_end = int(DEFAULT_SHIFT_SETTINGS["evening_end"].split(':')[0])
+
+            # Đối chiếu số nguyên an toàn để sinh bù ca trực nếu file backup cũ bị thiếu
+            if m_start <= current_hour < m_end:
+                auto_open_shift(fallback_db, "Sang")
+                logger.info("[RECOVERY SUCCESS]: Đã tự động bù đắp lại Ca Sáng thành công cho ngày hôm nay!")
+            elif e_start <= current_hour < e_end:
+                auto_open_shift(fallback_db, "Toi")
+                logger.info("[RECOVERY SUCCESS]: Đã tự động bù đắp lại Ca Tối thành công cho ngày hôm nay!")
+            else:
+                logger.info("[RECOVERY INFO]: Thời điểm khôi phục nằm ngoài khung giờ hành chính, nhường quyền cho Scheduler tự động sinh ca tiếp theo.")
+
+        except Exception as recovery_shift_err:
+            fallback_db.rollback()
+            logger.error(f"[RECOVERY SHIFT WARN]: Quá trình tự động bù đắp ca trực live gặp sự cố: {str(recovery_shift_err)}")
+        finally:
+            fallback_db.close() # Giải phóng kết nối an toàn
 
         logger.warning(f"[RECOVERY SUCCESS] User '{current_user.username}' đã khôi phục DB thành công.")
         return {
@@ -506,3 +556,187 @@ def restore_database_system(
         )
     finally:
         _restore_lock.release()
+
+
+
+@router_backup.post("/reset-database", status_code=status.HTTP_200_OK)
+def hard_reset_database_system(
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    API SIÊU KHẨN CẤP (Hard Reset System) - CHỈ DÀNH CHO ADMIN TỐI CAO
+    """
+    if not _restore_lock.acquire(blocking=False):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Hệ thống đang bận xử lý một tác vụ cứu hộ dữ liệu khác."
+        )
+
+    try:
+        # BƯỚC 1: SAO LƯU AN TOÀN TRƯỚC KHI PHÁ HỦY DỮ LIỆU CŨ
+        logger.warning(f"[HARD RESET DB]: Admin '{current_user.username}' kích hoạt lệnh xóa trắng DB live. Đang làm snapshot dự phòng...")
+        try:
+            pre_reset_bytes = execute_database_dump()
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S") # Sử dụng mượt mà từ import đầu file
+            safety_filename = f"TamAn_PreHardResetSafety_{ts}.sql"
+            safety_drive_link = upload_db_backup_to_drive(file_bytes=pre_reset_bytes, filename=safety_filename)
+            logger.warning(f"[HARD RESET DB]: Đã lưu snapshot dự phòng thành công tại: {safety_drive_link}")
+        except Exception as backup_err:
+            logger.error(f"[HARD RESET ABORTED]: Không thể sao lưu dự phòng, HỦY lệnh xóa trắng DB: {backup_err}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Lệnh xóa trắng DB bị hủy bỏ để bảo vệ an toàn: {backup_err}"
+            )
+
+        # Đóng session hiện tại để giải phóng trạng thái kết nối cũ
+        db.close()
+        from database import engine
+
+        # =========================================================================
+        # BƯỚC 2: GỘT RỬA VÀ TÁI THIẾT LẬP DB BẰNG ORM (TRÁNH LỖI SẬP KẾT NỐI)
+        # =========================================================================
+        logger.warning("[HARD RESET DB]: Tiến hành gỡ bỏ toàn bộ cấu trúc bảng cũ qua ORM...")
+        models.Base.metadata.drop_all(bind=engine)
+
+        logger.warning("[HARD RESET DB]: Tiến hành tái thiết lập cấu trúc bảng sạch mới tinh...")
+        models.Base.metadata.create_all(bind=engine)
+
+        # =========================================================================
+        # BƯỚC 3: TÁI TẠO PHÂN HỆ CHỈ MỤC INDEXES ĐỂ ĐẢM BẢO TỐC ĐỘ TRA CỨU
+        # =========================================================================
+        logger.warning("[HARD RESET DB]: Đang thiết lập các chỉ mục Indexes tối ưu...")
+        with engine.connect() as connection:
+            connection.execute(text("CREATE INDEX idx_inspection_logs_latest ON inspection_logs (shift_id, asset_id) WHERE is_latest = TRUE;"))
+            connection.execute(text("CREATE INDEX idx_assets_room ON assets (room_id);"))
+            connection.execute(text("CREATE INDEX idx_shift_summaries_created ON shift_summaries (created_at DESC);"))
+            connection.commit()
+
+        # =========================================================================
+        # BƯỚC 4: SEED ACCOUNT ADMIN ĐỘNG VỚI MẬT KHẨU BĂM CHUẨN 100% & MỞ LẠI CA LIVE
+        # =========================================================================
+        from sqlalchemy.orm import sessionmaker
+        FreshSession = sessionmaker(bind=engine)
+        fallback_db = FreshSession()
+
+        try:
+            logger.warning("[HARD RESET DB]: Tiến hành nạp tài khoản tối cao mặc định...")
+            from passlib.context import CryptContext
+            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            secure_hashed_password = pwd_context.hash("123456")
+
+            admin_user = User(
+                username="admin",
+                password_hash=secure_hashed_password,
+                full_name="Quản Trị Viên Hệ Thống",
+                role="Admin",
+                is_active=True,
+                must_change_password=True
+            )
+            fallback_db.add(admin_user)
+            fallback_db.commit()
+            logger.info("[HARD RESET SUCCESS]: Tài khoản admin khởi tạo thành công mượt mà!")
+
+            # ──── KHÔI PHỤC CA TRỰC LIVE SỬ DỤNG ÉP KIỂU SỐ NGUYÊN AN TOÀN ────
+            from services.shift_service import auto_open_shift
+            
+            vietnam_tz = timezone(timedelta(hours=7))
+            current_hour = datetime.now(vietnam_tz).hour
+            logger.warning(f"[HARD RESET DB]: Đang kiểm tra khung giờ hiện tại ({current_hour}h) để khôi phục ca trực live...")
+
+            # Bóc tách khung giờ từ Database live để kiểm tra chính xác
+            setting = fallback_db.query(models.ShiftSetting).first()
+            if setting:
+                m_start = int(setting.morning_start.split(':')[0])
+                m_end = int(setting.morning_end.split(':')[0])
+                e_start = int(setting.evening_start.split(':')[0])
+                e_end = int(setting.evening_end.split(':')[0])
+            else:
+                m_start = int(DEFAULT_SHIFT_SETTINGS["morning_start"].split(':')[0])
+                m_end = int(DEFAULT_SHIFT_SETTINGS["morning_end"].split(':')[0])
+                e_start = int(DEFAULT_SHIFT_SETTINGS["evening_start"].split(':')[0])
+                e_end = int(DEFAULT_SHIFT_SETTINGS["evening_end"].split(':')[0])
+
+            if m_start <= current_hour < m_end:
+                auto_open_shift(fallback_db, "Sang")
+                logger.info("[HARD RESET SUCCESS]: Đã tự động mở lại Ca Sáng thành công!")
+            elif e_start <= current_hour < e_end:
+                auto_open_shift(fallback_db, "Toi")
+                logger.info("[HARD RESET SUCCESS]: Đã tự động mở lại Ca Tối thành công!")
+            else:
+                logger.info("[HARD RESET INFO]: Thời điểm reset nằm ngoài giờ trực hành chính.")
+
+        except Exception as fallback_err:
+            fallback_db.rollback()
+            logger.error(f"[HARD RESET ORM ERROR]: Không thể seed dữ liệu hoặc mở ca trực: {str(fallback_err)}")
+        finally:
+            fallback_db.close()
+
+        logger.warning(f"[HARD RESET SUCCESS]: Hệ thống đã được đưa về trạng thái nguyên bản sạch sẽ hoàn toàn bởi User {current_user.username}.")
+        return {
+            "status": "Success",
+            "message": "Đã xóa sạch toàn bộ cấu trúc cũ và thiết lập lại Database sạch sẽ 100%! Sử dụng tài khoản admin / 123456 để đăng nhập.",
+            "emergency_safety_backup_url": safety_drive_link
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[HARD RESET FATAL_ERROR]: Quy trình xóa trắng hệ thống thất bại: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Thất bại trong quá trình Hard Reset hệ thống: {str(e)}"
+        )
+    finally:
+        _restore_lock.release()
+
+
+@router_backup.post("/refresh-current-shift", status_code=status.HTTP_200_OK)
+def refresh_current_shift_by_settings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_privileged_user)
+):
+    try:
+        # 🔥 ÉP KIỂU MÚI GIỜ CHÍ MẠNG: Khởi tạo múi giờ Việt Nam UTC+7
+        vietnam_tz = timezone(timedelta(hours=7))
+        current_hour = datetime.now(vietnam_tz).hour # Lấy giờ chuẩn theo múi giờ VN (Sẽ ra đúng 15h)
+        
+        logger.warning(f"[SHIFT REFRESH]: Người dùng {current_user.username} gọi lệnh làm mới ca trực tại mốc {current_hour}h.")
+
+        setting = db.query(models.ShiftSetting).first()
+        if setting:
+            m_start = int(setting.morning_start.split(':')[0])
+            m_end = int(setting.morning_end.split(':')[0])
+            e_start = int(setting.evening_start.split(':')[0])
+            e_end = int(setting.evening_end.split(':')[0])
+        else:
+            m_start = int(DEFAULT_SHIFT_SETTINGS["morning_start"].split(':')[0])
+            m_end = int(DEFAULT_SHIFT_SETTINGS["morning_end"].split(':')[0])
+            e_start = int(DEFAULT_SHIFT_SETTINGS["evening_start"].split(':')[0])
+            e_end = int(DEFAULT_SHIFT_SETTINGS["evening_end"].split(':')[0])
+
+        from services.shift_service import auto_open_shift
+        activated_shift = None
+
+        if m_start <= current_hour < m_end:
+            activated_shift = "Sang"
+            auto_open_shift(db, "Sang")
+        elif e_start <= current_hour < e_end:
+            activated_shift = "Toi"
+            auto_open_shift(db, "Toi")
+
+        if activated_shift:
+            return {
+                "status": "Success",
+                "message": f"Đã đồng bộ khung giờ thành công! Hệ thống đã tự động bật phiên làm việc cho ca '{activated_shift}' dựa trên cấu hình mới.",
+                "details": {"execution_time": f"{current_hour}h", "activated_shift": activated_shift}
+            }
+        else:
+            return {
+                "status": "Info",
+                "message": "Đã chạy lệnh rà soát, giờ hiện tại nằm ngoài khung giờ ca trực.",
+                "details": {"execution_time": f"{current_hour}h", "activated_shift": None}
+            }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

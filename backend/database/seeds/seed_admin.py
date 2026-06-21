@@ -20,6 +20,7 @@ def seed_admin():
         admin = db.query(User).filter(User.username == "admin").first()
         if not admin:
             hashed_pw = pwd_context.hash("123456")
+            print(hashed_pw)
             new_admin = User(
                 username="admin", 
                 password_hash=hashed_pw, 
@@ -35,4 +36,5 @@ def seed_admin():
         db.close()
 
 if __name__ == "__main__":
-    seed_admin()
+    # seed_admin()
+    print(pwd_context.hash("123456"))

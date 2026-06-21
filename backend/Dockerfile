@@ -2,9 +2,13 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client \
     && rm -rf /var/lib/apt/lists/*
-    
+
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-CMD ["sh", "-c", "python seed_data.py && uvicorn main:app --host 0.0.0.0 --port 5000 --reload"]
+
+# Dành để chạy test trên data sample
+# CMD ["sh", "-c", "python seed_data.py && uvicorn main:app --host 0.0.0.0 --port 5000 --reload"]
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000", "--reload"]

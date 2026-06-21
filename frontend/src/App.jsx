@@ -21,6 +21,8 @@ import { PatrolHistoryPage } from './features/patrol/pages/PatrolHistoryPage';
 
 import { SystemSettingsPage } from './features/settings/pages/SystemSettingsPage';
 
+import { BackupPage } from './features/backup/pages/BackupPage';
+
 import { ROLES } from './utils/constants';
 
 // Placeholder cho màn hình Đi tuần của Staff
@@ -53,6 +55,7 @@ function App() {
             <Route path="/users" element={<UserManagementPage />} />
             <Route path="/catalog" element={<CatalogPage />} />
             <Route path="/settings" element={<SystemSettingsPage />} />
+            <Route path="/backup" element={<BackupPage />} />
           </Route>
 
           {/* =========================================================

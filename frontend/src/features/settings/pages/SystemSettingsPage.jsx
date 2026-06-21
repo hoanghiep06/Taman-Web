@@ -3,15 +3,12 @@ import { settingsApi } from '../api/settingsApi';
 
 export const SystemSettingsPage = () => {
   const [shiftTimes, setShiftTimes] = useState({
-    morning_start: '',
-    morning_end: '',
-    evening_start: '',
-    evening_end: ''
+    morning_start: '', morning_end: '', evening_start: '', evening_end: ''
   });
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false); // State cho nút Refresh
 
-  // 1. TẢI DỮ LIỆU CẤU HÌNH TỪ BACKEND
   const fetchSettings = async () => {
     try {
       const data = await settingsApi.getShiftTimes();
@@ -22,19 +19,14 @@ export const SystemSettingsPage = () => {
         evening_end: data.evening_end || ''
       });
     } catch (err) {
-      console.error("Lỗi tải cấu hình:", err);
-      // Fallback tạm nếu API chưa có data mặc định
       setShiftTimes({ morning_start: '06:00', morning_end: '14:00', evening_start: '18:00', evening_end: '02:00' });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
+  useEffect(() => { fetchSettings(); }, []);
 
-  // 2. XỬ LÝ LƯU CẤU HÌNH
   const handleSaveShiftTimes = async (e) => {
     e.preventDefault();
     setIsSaving(true);
@@ -48,6 +40,19 @@ export const SystemSettingsPage = () => {
     }
   };
 
+  // ──── HÀM XỬ LÝ LÀM MỚI CA TRỰC TỪ API BẠN VỪA VIẾT ────
+  const handleRefreshShift = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await settingsApi.refreshCurrentShift();
+      alert(`✅ KẾT QUẢ ĐỒNG BỘ:\n${res.message}`);
+    } catch (err) {
+      alert(`❌ Lỗi đồng bộ ca trực: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleChange = (e) => {
     setShiftTimes({ ...shiftTimes, [e.target.name]: e.target.value });
   };
@@ -58,15 +63,14 @@ export const SystemSettingsPage = () => {
     <div style={styles.container}>
       <div style={styles.header}>
         <h2 style={styles.title}>⚙️ Cấu Hình Hệ Thống</h2>
-        <p style={styles.subtitle}>Quản lý các tham số vận hành cốt lõi của Trung tâm Tâm An</p>
+        <p style={styles.subtitle}>Quản lý các tham số vận hành cốt lõi của trung tâm</p>
       </div>
 
       <div style={styles.content}>
-        {/* CARD SETTING: KHUNG GIỜ CA TRỰC */}
         <div style={styles.card}>
           <div style={styles.cardHeader}>
             <h3 style={styles.cardTitle}>🕒 Thiết Lập Khung Giờ Ca Trực</h3>
-            <p style={styles.cardDesc}>Hệ thống sẽ dựa vào khung giờ này để tự động chốt ca và gửi email báo cáo.</p>
+            <p style={styles.cardDesc}>Hệ thống sẽ dựa vào khung giờ này để tự động chốt ca và gửi báo cáo.</p>
           </div>
 
           <form onSubmit={handleSaveShiftTimes} style={styles.form}>
@@ -98,16 +102,23 @@ export const SystemSettingsPage = () => {
               </div>
             </div>
 
+            {/* ĐÃ BỔ SUNG NÚT REFRESH CA TRỰC */}
             <div style={styles.formFooter}>
+              <button 
+                type="button" 
+                style={styles.refreshBtn} 
+                onClick={handleRefreshShift}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? '⏳ Đang xử lý...' : '🔄 Áp Dụng & Đồng Bộ Ca Ngay'}
+              </button>
+
               <button type="submit" style={styles.saveBtn} disabled={isSaving}>
                 {isSaving ? 'Đang lưu...' : '💾 Lưu Cấu Hình Khung Giờ'}
               </button>
             </div>
           </form>
         </div>
-
-        {/* Các Card Setting khác sau này có thể nhét thêm vào đây */}
-        {/* <div style={styles.card}> ... Cấu hình Email ... </div> */}
       </div>
     </div>
   );
@@ -119,12 +130,10 @@ const styles = {
   title: { margin: '0 0 8px 0', fontSize: '24px', color: '#0F172A', fontWeight: '800' },
   subtitle: { margin: 0, fontSize: '14px', color: '#64748B' },
   content: { display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '800px' },
-  
   card: { backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' },
   cardHeader: { backgroundColor: '#F8FAFC', padding: '16px 20px', borderBottom: '1px solid #E2E8F0' },
   cardTitle: { margin: '0 0 6px 0', fontSize: '16px', color: '#0F172A', fontWeight: '700' },
   cardDesc: { margin: 0, fontSize: '13px', color: '#64748B' },
-  
   form: { padding: '20px' },
   shiftBlock: { backgroundColor: '#F1F5F9', padding: '16px', borderRadius: '8px', marginBottom: '16px' },
   shiftTitle: { margin: '0 0 12px 0', fontSize: '14px', color: '#1E3A8A', fontWeight: '800', letterSpacing: '0.5px' },
@@ -133,7 +142,11 @@ const styles = {
   label: { marginBottom: '6px', fontSize: '12px', color: '#475569', fontWeight: '600' },
   timeInput: { padding: '10px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', fontSize: '16px', fontWeight: '600', color: '#0F172A', cursor: 'pointer' },
   
-  formFooter: { display: 'flex', justifyContent: 'flex-end', marginTop: '20px' },
-  saveBtn: { padding: '12px 24px', backgroundColor: '#0F172A', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' },
+  // Thay đổi layout footer để chứa 2 nút
+  formFooter: { display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' },
+  
+  refreshBtn: { padding: '12px 20px', backgroundColor: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s' },
+  saveBtn: { padding: '12px 24px', backgroundColor: '#0F172A', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' },
+  
   loading: { padding: '40px', textAlign: 'center', color: '#64748B', fontWeight: '500' }
 };

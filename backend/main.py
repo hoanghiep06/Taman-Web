@@ -9,14 +9,69 @@ from core.limiter import limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-models.Base.metadata.create_all(bind=engine)
+
+from sqlalchemy.orm import Session
+from models import User, ShiftSetting
+
+
+
+# models.Base.metadata.create_all(bind=engine)
 
 
 # ==========================================
-# CẤU HÌNH LIFESPAN (VÒNG ĐỜI APP)
+# CẤU HÌNH LIFESPAN (VÒNG ĐỜI APP CHUẨN CLOUD-READY)
 # ==========================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print(f"[SYSTEM]: Đang kiểm tra trạng thái hạ tầng hệ thống...")
+    
+    # BƯỚC 1: Tự động quét và dựng cấu trúc bảng (Chạy mượt cả Local và Cloud)
+    models.Base.metadata.create_all(bind=engine)
+
+    # BƯỚC 2: Cơ chế "Bọc giáp tầng cao" - Tự động Seed tài khoản Admin tối cao bằng ORM
+    # Sử dụng kết nối trực tiếp từ engine để không phụ thuộc vào chu kỳ Request HTTP
+    db = Session(bind=engine)
+    try:
+        # Kiểm tra xem hệ thống đã có tài khoản Admin nào chưa
+        admin_exists = db.query(User).filter(User.role == "Admin").first()
+        
+        if not admin_exists:
+            print("[SYSTEM - WARN]: Không tìm thấy tài khoản quản trị viên. Tiến hành kích hoạt cơ chế Auto-Seed...")
+            admin_user = User(
+                username="admin",
+                # Hash mật khẩu an toàn của chuỗi "123456"
+                password_hash="$2b$12$BkuMuDdAXXUcoCq53kiIyefOaOc9skmU5btdY.WHcQAUUZ3cWsn1m",
+                full_name="Quản Trị Viên Hệ Thống",
+                role="Admin",
+                is_active=True,
+                must_change_password=True
+            )
+            db.add(admin_user)
+            db.commit()
+            print("[SYSTEM - SUCCESS]: Đã tạo thành công tài khoản admin mặc định: admin / 123456")
+        else:
+            print("[SYSTEM - INFO]: Hệ thống đã có tài khoản quản trị viên bảo mật.")
+        
+        setting_exists = db.query(ShiftSetting).filter(ShiftSetting.id == 1).first()
+        if not setting_exists:
+            print("[SYSTEM - WARN]: Không tìm thấy cấu hình ca trực mặc định. Tiến hành Auto-Seed Khung Giờ...")
+            default_setting = ShiftSetting(
+                id=1,
+                morning_start="04:00",
+                morning_end="13:00",
+                evening_start="14:00",
+                evening_end="23:00"
+            )
+            db.add(default_setting)
+            db.commit()
+            print("[SYSTEM - SUCCESS]: Thiết lập thành công khung giờ ca trực gốc (Ca Sáng: 04:00 / Ca Tối: 14:00)")
+
+    except Exception as e:
+        db.rollback()
+        print(f"[SYSTEM - FATAL ERROR]: Lỗi nghiêm trọng khi thiết lập dữ liệu gốc: {str(e)}")
+    finally:
+        db.close() # Đóng kết nối lập tức để giải phóng Pool cho các dịch vụ khác
+
     # Khởi động bộ lập lịch ngầm
     active_scheduler = init_scheduler()
     app.state.scheduler = active_scheduler
@@ -25,7 +80,6 @@ async def lifespan(app: FastAPI):
 
     active_scheduler.shutdown()
     print(f"[SYSTEM]: Đã tắt toàn bộ hệ thống ngầm")
-
         
 
 app = FastAPI(title="Tâm An Inventory API", docs_url="/docs", lifespan=lifespan)
