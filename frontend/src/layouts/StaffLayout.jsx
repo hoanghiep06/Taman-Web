@@ -13,8 +13,8 @@ export const StaffLayout = () => {
 
   const navLinkStyle = ({ isActive }) => ({
     ...styles.navItem,
-    color: isActive ? '#1F4E78' : '#95A5A6',
-    fontWeight: isActive ? 'bold' : 'normal',
+    color: isActive ? '#0284C7' : '#94A3B8',
+    fontWeight: isActive ? '700' : '600',
   });
 
   return (
@@ -23,27 +23,26 @@ export const StaffLayout = () => {
       <header style={styles.header}>
         <div style={styles.userInfo}>
           <div style={styles.avatar}>👤</div>
-          <div>
+          <div style={styles.userText}>
             <div style={styles.greeting}>Xin chào,</div>
-            <div style={styles.roleName}>{user?.role}</div>
+            <div style={styles.roleName}>{user?.full_name || user?.role}</div>
           </div>
         </div>
         <button onClick={handleLogout} style={styles.logoutBtn}>Thoát</button>
       </header>
 
-      {/* KHU VỰC NỘI DUNG CHÍNH (Sẽ cuộn được) */}
+      {/* KHU VỰC NỘI DUNG CHÍNH (Cuộn mượt, không bao giờ tràn ngang) */}
       <main style={styles.mainContent}>
         <Outlet />
       </main>
 
-      {/* THANH ĐIỀU HƯỚNG ĐÁY (BOTTOM NAVIGATION) */}
+      {/* THANH ĐIỀU HƯỚNG ĐÁY */}
       <nav style={styles.bottomNav}>
         <NavLink to="/rooms" style={navLinkStyle}>
           <span style={styles.navIcon}>📋</span>
           Đi Tuần
         </NavLink>
         
-        {/* ĐÃ SỬA: Đổi to="/staff-history" thành to="/patrol/history" cho khớp với App.jsx */}
         <NavLink to="/patrol/history" style={navLinkStyle}>
           <span style={styles.navIcon}>🕒</span>
           Lịch Sử
@@ -54,15 +53,22 @@ export const StaffLayout = () => {
 };
 
 const styles = {
-  mobileContainer: { display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#F4F6F9', maxWidth: '480px', margin: '0 auto', boxShadow: '0 0 20px rgba(0,0,0,0.1)', position: 'relative' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', backgroundColor: '#FFF', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', zIndex: 10 },
-  userInfo: { display: 'flex', alignItems: 'center', gap: '10px' },
-  avatar: { fontSize: '24px', backgroundColor: '#E9EEF4', borderRadius: '50%', padding: '5px' },
-  greeting: { fontSize: '12px', color: '#7F8C8D' },
-  roleName: { fontSize: '14px', fontWeight: 'bold', color: '#1F4E78' },
-  logoutBtn: { backgroundColor: 'transparent', color: '#E74C3C', border: '1px solid #E74C3C', padding: '5px 12px', borderRadius: '15px', fontSize: '12px', fontWeight: 'bold' },
-  mainContent: { flex: 1, overflowY: 'auto', paddingBottom: '70px' }, 
-  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '65px', backgroundColor: '#FFF', display: 'flex', justifyContent: 'space-around', alignItems: 'center', borderTop: '1px solid #EAECEE', zIndex: 10 },
-  navItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', fontSize: '12px', gap: '4px', width: '33%' },
-  navIcon: { fontSize: '20px' }
+  // Fix 100dvh để chuẩn chiều cao mobile thật, touchAction cấm zoom bằng ngón tay
+  mobileContainer: { display: 'flex', flexDirection: 'column', height: '100dvh', width: '100%', maxWidth: '480px', margin: '0 auto', backgroundColor: '#F8FAFC', position: 'relative', overflow: 'hidden', touchAction: 'pan-y' },
+  
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', backgroundColor: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', zIndex: 10, flexShrink: 0 },
+  userInfo: { display: 'flex', alignItems: 'center', gap: '12px' },
+  avatar: { fontSize: '20px', backgroundColor: '#F1F5F9', borderRadius: '50%', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  userText: { display: 'flex', flexDirection: 'column' },
+  greeting: { fontSize: '11px', color: '#64748B', marginBottom: '2px' },
+  roleName: { fontSize: '14px', fontWeight: '800', color: '#0F172A' },
+  logoutBtn: { backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' },
+  
+  // Xóa thanh cuộn thừa, ép cuộn mượt (Momentum scrolling) cho iOS
+  mainContent: { flex: 1, overflowY: 'auto', overflowX: 'hidden', width: '100%', WebkitOverflowScrolling: 'touch', paddingBottom: '20px' }, 
+  
+  // Thêm safe-area-inset-bottom để tránh bị thanh ngang của iPhone X trở lên đè vào nút
+  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 'calc(65px + env(safe-area-inset-bottom))', paddingBottom: 'env(safe-area-inset-bottom)', backgroundColor: '#FFFFFF', display: 'flex', justifyContent: 'space-around', alignItems: 'center', borderTop: '1px solid #E2E8F0', zIndex: 20 },
+  navItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', fontSize: '12px', gap: '4px', width: '50%', height: '100%', transition: 'color 0.2s' },
+  navIcon: { fontSize: '22px' }
 };

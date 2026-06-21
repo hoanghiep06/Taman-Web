@@ -45,11 +45,11 @@ export const RoomListPage = () => {
 };
 
 const styles = {
-  container: { padding: '20px', fontFamily: "'Segoe UI', sans-serif" },
-  title: { margin: '0 0 5px 0', color: '#1F4E78', fontSize: '22px', fontWeight: 'bold' },
-  subtitle: { margin: '0 0 20px 0', color: '#7F8C8D', fontSize: '13px' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px' },
-  roomCard: { backgroundColor: '#FFF', padding: '20px 15px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', border: '1px solid #EAECEE' },
-  roomBadge: { fontSize: '22px', fontWeight: 'bold', color: '#3498DB', marginBottom: '8px' },
-  roomDesc: { fontSize: '12px', color: '#95A5A6', margin: 0, textAlign: 'center', lineHeight: '1.4' }
+  container: { padding: '20px', paddingBottom: '80px', fontFamily: "system-ui, -apple-system, sans-serif", boxSizing: 'border-box', width: '100%' },
+  title: { margin: '0 0 4px 0', color: '#0F172A', fontSize: '22px', fontWeight: '800' },
+  subtitle: { margin: '0 0 24px 0', color: '#64748B', fontSize: '14px' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' },
+  roomCard: { backgroundColor: '#FFFFFF', padding: '24px 16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', border: '1px solid #F1F5F9', transition: 'transform 0.1s' },
+  roomBadge: { fontSize: '24px', fontWeight: '800', color: '#0284C7', marginBottom: '8px' },
+  roomDesc: { fontSize: '12px', color: '#64748B', margin: 0, textAlign: 'center', lineHeight: '1.4', fontWeight: '500' }
 };

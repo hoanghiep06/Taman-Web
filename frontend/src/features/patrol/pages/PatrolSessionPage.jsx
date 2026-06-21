@@ -278,7 +278,7 @@ export const PatrolSessionPage = () => {
 };
 
 const styles = {
-  container: { padding: '12px', backgroundColor: theme.color.bg, minHeight: '100vh', paddingBottom: '110px', fontFamily: '-apple-system, system-ui, sans-serif', boxSizing: 'border-box' },
+  container: { padding: '12px', backgroundColor: theme.color.bg, minHeight: '100%', paddingBottom: '120px', fontFamily: '-apple-system, system-ui, sans-serif', boxSizing: 'border-box', width: '100%', overflowX: 'hidden' },
   loadingScreen: { textAlign: 'center', marginTop: '80px', color: theme.color.inkTertiary, fontSize: '14px' },
   listContainer: { display: 'flex', flexDirection: 'column', gap: '22px' },
   emptyState: { textAlign: 'center', padding: '40px 0', color: theme.color.inkMuted, fontSize: '13px' },
