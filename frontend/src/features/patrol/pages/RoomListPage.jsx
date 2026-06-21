@@ -7,31 +7,27 @@ export const RoomListPage = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  // Hàm tải dữ liệu danh sách phòng từ API mới của bạn
+  const fetchRooms = async (isSilent = false) => {
+    try {
+      const data = await patrolApi.getRooms();
+      setRooms(data);
+    } catch (err) {
+      console.error('Không thể tải danh sách phòng', err);
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
+  };
+
+  // TỰ ĐỘNG CẬP NHẬT NGẦM MỖI 5 GIÂY (Không gây chớp màn hình, nước tự co giãn realtime)
   useEffect(() => {
-    const fetchRooms = async () => {
-      try {
-        const data = await patrolApi.getRooms();
-        
-        // 💡 ĐỂ HIỆU ỨNG CHẠY THẬT: API /assets/rooms của bạn chỉ cần trả về thêm 
-        // 2 trường số nguyên là 'total_assets' (tổng đồ) và 'inspected_count' (đồ đã quét) của mỗi phòng.
-        // Đoạn map dưới đây bọc thêm logic fallback an toàn để không bị lỗi giao diện nếu BE chưa kịp truyền.
-        const processedRooms = data.map(room => ({
-          ...room,
-          total_assets: room.total_assets || 0,
-          inspected_count: room.inspected_count || 0
-          
-          // 🧪 Muốn test thử hiệu ứng nước dâng ngẫu nhiên trước khi code BE, hãy mở comment dòng dưới:
-          // total_assets: 4, inspected_count: Math.floor(Math.random() * 5)
-        }));
-        
-        setRooms(processedRooms);
-      } catch (err) {
-        console.error('Không thể tải danh sách phòng', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchRooms();
+    fetchRooms(); // Chạy lần đầu hiển thị chữ Đang tải...
+    
+    const intervalId = setInterval(() => {
+      fetchRooms(true); // Chạy ngầm làm mới mực nước liên tục
+    }, 5000);
+
+    return () => clearInterval(intervalId); // Giải phóng bộ nhớ khi thoát trang
   }, []);
 
   if (loading) return <div style={styles.loadingState}>Đang tải khu vực tuần tra...</div>;
@@ -43,15 +39,17 @@ export const RoomListPage = () => {
 
       <div style={styles.grid}>
         {rooms.map((room) => {
-          // 1. TÌM TIẾN ĐỘ % ĐỂ ĐẨY CHIỀU CAO NƯỚC DÂNG
-          const total = room.total_assets;
-          const inspected = room.inspected_count;
-          const percent = total > 0 ? Math.floor((inspected / total) * 100) : 0;
+          // ĐỌC THÔNG SỐ ĐÃ ĐƯỢC TÍNH TOÁN TỪ ENDPOINT MỚI BẠN VỪA SỬA
+          const total = room.total_assets || 0;
+          const inspected = room.inspected_count || 0;
+          
+          // Tính toán phần trăm để gán chiều cao cho hiệu ứng ngập nước (Tối đa 100%)
+          const percent = total > 0 ? Math.min(Math.floor((inspected / total) * 100), 100) : 0;
           
           const isFinished = total > 0 && inspected >= total;
           const isEmpty = total === 0;
 
-          // 2. PHỐI MÀU NƯỚC: Xong rồi -> Xanh lá nhạt | Đang làm dở -> Xanh dương mờ
+          // PHỐI MÀU NỀN NƯỚC: Hoàn tất -> Xanh lá mướt mắt | Chưa xong -> Xanh dương mờ dịu nhẹ
           const waterColor = isFinished ? '#86EFAC' : '#BAE6FD'; 
           const textPrimaryColor = isFinished ? '#14532D' : '#0369A1'; 
           
@@ -59,24 +57,23 @@ export const RoomListPage = () => {
             <div 
               key={room.room_id || room.room_number} 
               style={styles.roomCard}
-              // GIỮ NGUYÊN: Điều hướng bằng room_number chuẩn theo cấu trúc cũ của bạn
               onClick={() => navigate(`/patrol/${room.room_number}`)}
             >
-              {/* LỚP NƯỚC NGẬP DÂNG TỪ ĐÁY LÊN */}
+              {/* LỚP NƯỚC NGẬP DÂNG TỪ ĐÁY LÊN THEO TIẾN ĐỘ % */}
               <div style={{
                 ...styles.waterFill,
                 height: `${percent}%`,
                 backgroundColor: waterColor,
               }}></div>
 
-              {/* LỚP CHỮ NỔI (zIndex cao hơn nước) */}
+              {/* LỚP NỘI DUNG CHỮ (Nổi trên mặt nước) */}
               <div style={styles.cardContent}>
                 <div style={{...styles.roomBadge, color: textPrimaryColor}}>
                   P.{room.room_number}
                 </div>
                 <p style={styles.roomDesc}>{room.description || 'Chưa có mô tả'}</p>
                 
-                {/* NHÃN TIẾN ĐỘ LỌC ĐẸP MẮT */}
+                {/* NHÃN HIỂN THỊ TIẾN ĐỘ KIỂM KÊ */}
                 <div style={styles.progressText}>
                   {isEmpty ? 'Phòng trống' : (
                     isFinished ? '✅ Đã hoàn tất' : `Tiến độ: ${inspected}/${total}`
@@ -95,7 +92,7 @@ const styles = {
   container: { padding: '20px', paddingBottom: '90px', fontFamily: "system-ui, -apple-system, sans-serif", boxSizing: 'border-box', width: '100%' },
   title: { margin: '0 0 4px 0', color: '#0F172A', fontSize: '24px', fontWeight: '800' },
   subtitle: { margin: '0 0 24px 0', color: '#64748B', fontSize: '14px' },
-  loadingState: { textAlign: 'center', padding: '50px', color: '#64748B', fontWeight: '500' },
+  loadingState: { textAlign: 'center', padding: '50px', color: '#64748B', fontWeight: '500', fontSize: '14px' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' },
   
   roomCard: { 
@@ -106,12 +103,14 @@ const styles = {
     overflow: 'hidden', 
     cursor: 'pointer', 
     border: '1px solid #E2E8F0',
-    height: '130px' 
+    height: '130px',
+    transition: 'transform 0.1s ease'
   },
   waterFill: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
     width: '100%',
+    // Hiệu ứng dâng nước gia tốc cubic-bezier cực kỳ cao cấp mượt mà
     transition: 'height 0.8s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s', 
     zIndex: 1,
     opacity: 0.55
@@ -125,5 +124,5 @@ const styles = {
   },
   roomBadge: { fontSize: '26px', fontWeight: '900', marginBottom: '4px', transition: 'color 0.3s' },
   roomDesc: { fontSize: '12px', color: '#475569', margin: '0 0 12px 0', textAlign: 'center', lineHeight: '1.3', fontWeight: '600', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  progressText: { fontSize: '11px', fontWeight: '700', padding: '4px 10px', backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: '12px', color: '#0F172A', backdropFilter: 'blur(4px)', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }
+  progressText: { fontSize: '11px', fontWeight: '700', padding: '4px 10px', backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: '12px', color: '#0F172A', backdropFilter: 'blur(4px)', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }
 };

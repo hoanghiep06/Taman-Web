@@ -2,28 +2,63 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List
-import pytz # BỔ SUNG: Xử lý múi giờ Việt Nam để hiển thị mốc thời gian thực khi reset trang
+import pytz
 from database import get_db
-from models import Asset, Room, Elder, Shift, InspectionLog # BỔ SUNG: Import thêm bảng Shift và InspectionLog để đối chiếu ca trực
+from models import Asset, Room, Elder, Shift, InspectionLog
 
 router = APIRouter(prefix="/assets", tags=["Staff: Danh sách đi tuần"])
 
 @router.get("/rooms")
-def get_all_rooms(db: Session = Depends(get_db)):
+def get_all_rooms_with_patrol_progress(db: Session = Depends(get_db)):
     """
-    Lấy danh sách tất cả các phòng hiện có trong hệ thống để nhân viên 
-    chọn khu vực trước khi bắt đầu đi tuần.
+    API LẤY DANH SÁCH PHÒNG KÈM TIẾN ĐỘ CA TRỰC HIỆN TẠI (ĐÃ SỬA CHUẨN):
+    - Đã xóa hàm cũ bị trùng lặp route gây nuốt dữ liệu.
+    - Bổ sung trường 'total_assets' và 'inspected_count' cho từng thực thể phòng.
+    - Giúp Frontend render hiệu ứng ngập nước xanh lá trực quan ở màn hình sảnh.
     """
+    # 1. Lấy toàn bộ danh sách phòng hệ thống
     rooms = db.query(Room).order_by(Room.room_number).all()
     
-    return [
-        {
+    # 2. Tìm phiên ca trực đang mở (Open) hiện hành
+    shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.created_at.desc()).first()
+    
+    results = []
+    
+    # 3. Quét qua từng phòng để tính toán tiến độ ngay trên RAM / Query tối ưu
+    for room in rooms:
+        # Tính tổng số tài sản đang hoạt động (Active) trong phòng này
+        total_assets = db.query(Asset).filter(
+            Asset.room_id == room.id,
+            Asset.status == "Active"
+        ).count()
+        
+        inspected_count = 0
+        
+        # Nếu có ca trực đang mở và phòng có đồ đạc, tiến hành đếm số đồ đã kiểm kê
+        if shift and total_assets > 0:
+            # Tạo subquery lấy danh sách ID tài sản đang hoạt động của riêng phòng này
+            room_asset_ids = db.query(Asset.id).filter(
+                Asset.room_id == room.id,
+                Asset.status == "Active"
+            ).subquery()
+            
+            # Đếm số lượng log kiểm kê có trạng thái is_latest = True trong ca trực
+            inspected_count = db.query(InspectionLog).filter(
+                InspectionLog.shift_id == shift.id,
+                InspectionLog.asset_id.in_(room_asset_ids),
+                InspectionLog.is_latest == True
+            ).count()
+            
+        # Đóng gói bản tin JSON chuẩn mực cho Frontend mapping dữ liệu
+        results.append({
             "room_id": room.id,
             "room_number": room.room_number,
-            "description": room.description
-        }
-        for room in rooms
-    ]
+            "description": room.description,
+            "total_assets": total_assets,
+            "inspected_count": inspected_count
+        })
+        
+    return results
 
 
 @router.get("/rooms/{room_number}")
@@ -67,22 +102,20 @@ def get_assets_by_room(room_number: str, db: Session = Depends(get_db)):
     
     # ──── TÍNH TOÁN TIẾN ĐỘ ĐI TUẦN NGAY TRÊN RAM (TỐI ƯU HÓA IO, KHÔNG TỐN CÂU SQL COUNT) ────
     total_assets = len(assets)
-    inspected_count = len(latest_logs) # Vì đã lọc is_latest = True nên len này chính là số lượng đồ đã tương tác
+    inspected_count = len(latest_logs)
     
     # 5. Đóng gói dữ liệu kết hợp động giữa danh mục gốc và nhật ký đi tuần theo ca
     assets_list = []
     for asset in assets:
         log = log_dict.get(asset.id)
         
-        # Cấu hình các giá trị mặc định của trạng thái đi tuần ca trực hiện tại
-        current_status = "Unchecked" # Mặc định là Đỏ tươi (Chưa đụng vào)
+        current_status = "Unchecked"
         inspected_at = None
         log_id = None
         note = None
         
-        # Nếu tài sản này đã được nhân viên tương tác trong ca trực hiện tại
         if log:
-            current_status = log.status # Đồng bộ đúng hệ màu: Xanh, Vang, Dang_Xu_Ly, Loi_Upload
+            current_status = log.status
             log_id = log.id
             note = log.note
             if log.created_at:
@@ -92,19 +125,15 @@ def get_assets_by_room(room_number: str, db: Session = Depends(get_db)):
           "asset_id": asset.id,
           "asset_name": asset.asset_name,
           "room_number": room.room_number,
-          "catalog_status": asset.status, # Trạng thái tĩnh hoạt động của đồ vật trong kho
-          
-          # ──── CÁC TRƯỜNG DỮ LIỆU BỔ SUNG ĐỂ PHỤC VỤ GIỮ TRẠNG THÁI KHI RESET ────
-          "current_status": current_status, # Giao diện hứng trường này để tô màu: Xanh/Vang/Dang_Xu_Ly/Loi_Upload/Unchecked
-          "inspected_at": inspected_at,     # Mốc thời gian thực thực hiện hành động để hiện lên UI
-          "log_id": log_id,                 # ID của bản ghi log kiểm kê
-          "note": note,                     # Nội dung giải trình báo mất nếu có
-          
+          "catalog_status": asset.status,
+          "current_status": current_status,
+          "inspected_at": inspected_at,
+          "log_id": log_id,
+          "note": note,
           "elder_id": asset.elder_id,
           "elder_name": asset.elder.full_name if asset.elder else "Tài sản chung của phòng"
         })
         
-    # ──── TRẢ VỀ CẤU TRÚC BỌC WRAPPER OBJECT CHUẨN RESTFUL DÀNH CHO DASHBOARD UI ────
     return {
         "total_assets": total_assets,
         "inspected_count": inspected_count,
