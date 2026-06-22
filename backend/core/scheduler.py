@@ -38,6 +38,7 @@ def scheduled_shift_closure():
     try:
         print("Bắt đầu tiến trình rà soát và đóng ca tự động...")
         auto_close_and_check_missing_assets(db)
+        db.commit() # 🌟 BỔ SUNG DÒNG NÀY để lưu dữ liệu khi chạy ngầm qua Cronjob
     finally:
         db.close()
 

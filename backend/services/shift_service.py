@@ -6,32 +6,24 @@ import logging
 from datetime import date, datetime, time, timedelta
 import pytz
 
-def auto_close_and_check_missing_assets(db: Session):
-    # 1. Tìm ca đang Open
-    shift = db.query(Shift).filter(Shift.status == "Open").first()
+def auto_close_and_check_missing_assets(db: Session, target_shift: Shift = None):
+    """
+    Đã vá lỗi triệt để: Nhận diện target_shift cụ thể và tích hợp cơ chế UPSERT 
+    chống hoàn toàn lỗi UniqueViolation của bảng shift_summaries.
+    """
+    shift = target_shift if target_shift else db.query(Shift).filter(Shift.status == "Open").first()
     if not shift:
         logging.info("Không có ca trực nào đang mở để chốt.")
         return
 
-    # 2. Đổi trạng thái ca
     shift.status = "Submitted"
+    db.flush() 
 
-    # 3. Lấy thông tin tài sản (Kèm phòng)
     active_assets = db.query(Asset, Room.room_number).join(Room).filter(Asset.status == "Active").all()
     active_asset_ids = {asset.id for asset, _ in active_assets}
+    asset_dict = {asset.id: {"name": asset.asset_name, "room_number": room_number} for asset, room_number in active_assets}
 
-    # Lập từ điển (Dict) tra cứu nhanh thông tin tài sản
-    asset_dict = {
-        asset.id: {"name": asset.asset_name, "room_number": room_number} 
-        for asset, room_number in active_assets
-    }
-
-    # 4. Kéo các log mới nhất của ca này
-    latest_logs = db.query(InspectionLog).filter(
-        InspectionLog.shift_id == shift.id,
-        InspectionLog.is_latest == True
-    ).all()
-
+    latest_logs = db.query(InspectionLog).filter(InspectionLog.shift_id == shift.id, InspectionLog.is_latest == True).all()
     inspected_ids = set()
     lost_asset_ids = []
     lost_assets_info = []
@@ -46,46 +38,53 @@ def auto_close_and_check_missing_assets(db: Session):
                 "note": log.note
             })
 
-    # 5. Phân loại tài sản bị bỏ sót
     missing_asset_ids = list(active_asset_ids - inspected_ids)
-    missing_assets_info = [
-        {"name": asset_dict[a_id]["name"], "room_number": asset_dict[a_id]["room_number"]} 
-        for a_id in missing_asset_ids
-    ]
+    missing_assets_info = [{"name": asset_dict[a_id]["name"], "room_number": asset_dict[a_id]["room_number"]} for a_id in missing_asset_ids]
 
-    # 6. Lưu Snapshot vào Dashboard DB
-    summary = ShiftSummary(
-        shift_id=shift.id,
-        total_assets=len(active_assets),
-        inspected_count=len(inspected_ids),
-        missing_count=len(missing_asset_ids),
-        lost_count=len(lost_asset_ids),
-        missing_asset_ids=missing_asset_ids,
-        lost_asset_ids=lost_asset_ids,
-        is_email_sent=False
-    )
-    db.add(summary)
-    db.commit()
+    # 🌟 CƠ CHẾ UPSERT BẢO VỆ TUYỆT ĐỐI CHỐNG TRÙNG KHÓA (UNIQUE CONSTRAINT)
+    summary = db.query(ShiftSummary).filter(ShiftSummary.shift_id == shift.id).first()
 
-    # 7. Gửi Email ngay lập tức nếu có sự cố
+    if summary:
+        summary.total_assets = len(active_assets)
+        summary.inspected_count = len(inspected_ids)
+        summary.missing_count = len(missing_asset_ids)
+        summary.lost_count = len(lost_asset_ids)
+        summary.missing_asset_ids = missing_asset_ids
+        summary.lost_asset_ids = lost_asset_ids
+        print(f"[DEBUG SUMMARY]: Đã cập nhật (Upsert) snapshot thành công cho ca trực ID: {shift.id}")
+    else:
+        summary = ShiftSummary(
+            shift_id=shift.id,
+            total_assets=len(active_assets),
+            inspected_count=len(inspected_ids),
+            missing_count=len(missing_asset_ids),
+            lost_count=len(lost_asset_ids),
+            missing_asset_ids=missing_asset_ids,
+            lost_asset_ids=lost_asset_ids,
+            is_email_sent=False
+        )
+        db.add(summary)
+        print(f"[DEBUG SUMMARY]: Đã tạo mới (Insert) snapshot thành công cho ca trực ID: {shift.id}")
+        
+    db.flush() # 🌟 ĐỔI TỪ db.commit() THÀNH db.flush()
+
     if summary.missing_count > 0 or summary.lost_count > 0:
         try:
             send_alert_email(shift.shift_date, shift.shift_type, missing_assets_info, lost_assets_info)
             summary.is_email_sent = True
-            db.commit()
+            db.flush() # 🌟 ĐỔI TỪ db.commit() THÀNH db.flush()
         except Exception as e:
-            logging.error(f"Hệ thống đã lưu cảnh báo vào DB nhưng gửi Mail thất bại: {e}")
+            logging.error(f"Gửi Mail cảnh báo chốt ca thất bại: {e}")
 
 
 
 def auto_open_shift(db: Session, shift_type: str):
     """
-    Hàm chạy ngầm: Tự động tạo và mở phiên ca trực mới (Sáng / Tối) cho ngày hôm nay
+    Hàm chạy ngầm: Tự động tạo và mở phiên ca trực mới (Sáng / Tối) cho ngày hôm nay theo múi giờ VN
     """
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    today = datetime.now(tz).date()
 
-    today = date.today()
-
-    # Kiểm tra ca trực hôm đó được khởi tạo chưa 
     existing_shift = db.query(Shift).filter(
         Shift.shift_date == today, 
         Shift.shift_type == shift_type
@@ -100,7 +99,6 @@ def auto_open_shift(db: Session, shift_type: str):
         db.add(new_shift)
         db.commit()
         logging.info(f"HỆ THỐNG: Đã tự động mở ca trực mới [{shift_type}] cho ngày {today}")
-
     else:
         if existing_shift.status != "Open":
             existing_shift.status = "Open"
@@ -116,48 +114,42 @@ def check_and_sync_shift_jit(db: Session):
     current_time = now_local.time()
 
     setting = db.query(ShiftSetting).first()
-    m_start_str = setting.morning_start if (setting and setting.morning_start) else "04:00"
-    m_end_str = setting.morning_end if (setting and setting.morning_end) else "13:00"
+    m_start_str = setting.morning_start if (setting and setting.morning_start) else "03:00"
+    m_end_str = setting.morning_end if (setting and setting.morning_end) else "11:00"
     e_start_str = setting.evening_start if (setting and setting.evening_start) else "14:00"
-    e_end_str = setting.evening_end if (setting and setting.evening_end) else "23:00"
+    e_end_str = setting.evening_end if (setting and setting.evening_end) else "21:00"
     
     try:
         m_start = time.fromisoformat(m_start_str)
         m_end = time.fromisoformat(m_end_str)
         e_start = time.fromisoformat(e_start_str)
         e_end = time.fromisoformat(e_end_str)
-    except Exception as parse_err:
-        m_start, m_end = time(4, 0), time(13, 0)
-        e_start, e_end = time(14, 0), time(23, 0)
+    except Exception:
+        m_start, m_end = time(3, 0), time(11, 0)
+        e_start, e_end = time(14, 0), time(21, 0)
+
+    def is_time_in_range(start: time, end: time, current: time) -> bool:
+        if start <= end:
+            return start <= current <= end
+        return current >= start or current <= end
 
     shift_type = None
     shift_date = current_date
 
-    if m_start <= current_time <= m_end:
+    if is_time_in_range(m_start, m_end, current_time):
         shift_type = "Sang"
-        shift_date = current_date
-    else:
-        if e_start > e_end: # Khung giờ tối vắt qua đêm
-            if current_time >= e_start or current_time <= e_end:
-                shift_type = "Toi"
-                if current_time <= e_end:
-                    shift_date = current_date - timedelta(days=1)
-        else:
-            if e_start <= current_time <= e_end:
-                shift_type = "Toi"
-                shift_date = current_date
+        if m_start > m_end and current_time <= m_end:
+            shift_date = current_date - timedelta(days=1)
+    elif is_time_in_range(e_start, e_end, current_time):
+        shift_type = "Toi"
+        if e_start > e_end and current_time <= e_end:
+            shift_date = current_date - timedelta(days=1)
 
-    if not shift_type:
-        return
-
-    # 🔴 ĐOẠN TỐI ƯU HIỆU NĂNG: Kiểm tra xem ca trực hiện tại trong DB đã đúng chưa
-    # Nếu đúng rồi thì kết thúc luôn, không chạy vòng lặp while True phía dưới gây tốn I/O CSDL
-    active_shift = db.query(Shift).filter(Shift.status == "Open").first()
-    if active_shift and active_shift.shift_date == shift_date and active_shift.shift_type == shift_type:
-        return # Khớp hoàn toàn -> Bỏ qua an toàn!
-
-    # 3. LUỒNG QUÉT DỌN LIÊN HOÀN CÁC CA CŨ BỊ BỎ QUÊN
-    while True:
+    # 🌟 1. LOGIC ĐÓNG CA TRỰC MỒ CÔI (LUÔN CHẠY BẤT KỂ KHUNG GIỜ NÀO)
+    MAX_CLOSE_ITERATIONS = 5
+    iterations = 0
+    while iterations < MAX_CLOSE_ITERATIONS:
+        iterations += 1
         old_shift = db.query(Shift).filter(
             Shift.status == "Open",
             (Shift.shift_date < shift_date) | 
@@ -167,17 +159,42 @@ def check_and_sync_shift_jit(db: Session):
         if not old_shift:
             break
         
-        logging.warning(f"[JIT SHIFT]: Phát hiện ca cũ quá hạn chưa đóng: {old_shift.shift_date} [{old_shift.shift_type}]. Tiến hành chốt sổ...")
-        auto_close_and_check_missing_assets(db)
+        print(f"[DEBUG JIT]: Phát hiện ca cũ quá hạn chưa đóng: {old_shift.shift_date} [{old_shift.shift_type}]. Tiến hành chốt sổ...")
+        
+        # 🌟 VÁ LỖI BẪY NGẦM 1: Đưa try...except RA NGOÀI khối begin_nested() để Savepoint rollback chuẩn xác
+        try:
+            with db.begin_nested():
+                auto_close_and_check_missing_assets(db, target_shift=old_shift)
+        except Exception as e:
+            print(f"[DEBUG JIT - LỖI ĐÓNG CA]: Chốt sổ lỗi (Đã tự động Rollback Savepoint): {str(e)}")
+            break
 
-    # 4. TỰ ĐỘNG KHỞI TẠO HOẶC ĐỒNG BỘ PHIÊN CA HIỆN TẠI
-    current_shift = db.query(Shift).filter(
-        Shift.shift_date == shift_date,
-        Shift.shift_type == shift_type
-    ).first()
+    print(f"\n[DEBUG JIT]: Kết quả tính toán ca hiện tại: shift_type='{shift_type}' | shift_date='{shift_date}'")
 
-    if not current_shift:
-        current_shift = Shift(shift_date=shift_date, shift_type=shift_type, status="Open")
-        db.add(current_shift)
-        db.commit()
-        logging.info(f"[JIT SHIFT SUCCESS]: Mở phiên ca trực mới thành công: {shift_date} [{shift_type}]")
+    if not shift_type:
+        print("[DEBUG JIT]: Hiện tại đang nằm trong giờ nghỉ giải lao giữa hai ca trực. Không mở ca mới.")
+        db.commit()  # 🌟 VÁ LỖI: Đảm bảo các ca mồ côi vừa được chốt ở vòng lặp trên được LƯU VĨNH VIỄN vào DB!
+        return
+    
+
+    # 🌟 2. ĐỒNG BỘ HOẶC KHÔI PHỤC TRẠNG THÁI CA HIỆN TẠI (CHỐNG CONCURRENCY RACE CONDITION)
+    try:
+        with db.begin_nested():
+            current_shift = db.query(Shift).filter(Shift.shift_date == shift_date, Shift.shift_type == shift_type).first()
+
+            if not current_shift:
+                current_shift = Shift(shift_date=shift_date, shift_type=shift_type, status="Open")
+                db.add(current_shift)
+                db.flush() # 🌟 VÁ LỖI BẪY NGẦM 2: Ép sinh câu lệnh INSERT ngay tại đây để bắt UniqueViolation kịp thời
+            else:
+                if current_shift.status != "Open":
+                    current_shift.status = "Open"
+                    db.flush()
+    except Exception:
+        # Nếu dính UniqueViolation do luồng đăng nhập khác nhanh tay tạo trước nửa mili-giây, 
+        # Savepoint tự hủy lệnh lỗi, ta truy vấn lại một cách an toàn ở tầng transaction cha:
+        current_shift = db.query(Shift).filter(Shift.shift_date == shift_date, Shift.shift_type == shift_type).first()
+        if current_shift and current_shift.status != "Open":
+            current_shift.status = "Open"
+                
+    db.commit()
