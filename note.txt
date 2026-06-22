@@ -1,0 +1,4 @@
+Cách thức khôi phục lại DB khi chạy Local:
+B1: Tải và chuyển file nằm trong thư mục gốc (ngang với docker-compose.yml)
+B2: Thực thi lệnh như mẫu sau (chạy trên CMD)
+docker exec -i postgres_taman_local psql -U postgres -d postgres < TamAn_Manual_DB_Backup_20260621_123319.sql

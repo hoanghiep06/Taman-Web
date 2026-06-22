@@ -13,6 +13,8 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 from models import User, ShiftSetting
 
+from datetime import datetime
+
 
 
 # models.Base.metadata.create_all(bind=engine)
@@ -90,6 +92,21 @@ app = FastAPI(title="Tâm An Inventory API", docs_url="/docs", lifespan=lifespan
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# ==========================================
+# API PING AWAKE BACKEND
+# ==========================================
+@app.get("/api/health", tags=["System: Awake Gác Cổng"])
+def system_health_awake_check():
+    """
+    API ĐÁNH THỨC SIÊU TỐC (Lightweight Wake-up Endpoint):
+    Endpoint tối giản phản hồi trực tiếp từ RAM, không chạm DB, không sinh log rác.
+    Phục vụ luồng kích hoạt sớm từ Frontend để phá vỡ hiệu ứng ngủ đông trên Render
+    """
+    return {
+        "status": "online",
+        "message": "Hệ thống quản trị Tâm An đã sẵn sàng tiếp nhận nghiệp vụ.",
+        "server_time": datetime.now().isoformat()
+    }
 
 
 # ==========================================
