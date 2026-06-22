@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+// App.jsx
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import axiosClient from './api/axiosClient';
 
@@ -23,57 +24,39 @@ import { BackupPage } from './features/backup/pages/BackupPage';
 import { ROLES } from './utils/constants';
 
 function App() {
-  const [isBackendAwake, setIsBackendAwake] = useState(false);
-  const [awakeError, setAwakeError] = useState(false);
-
   useEffect(() => {
-    const awakeBackendSystem = async () => {
-      try {
-        const NOW = Date.now();
-        const LAST_AWAKE = localStorage.getItem('taman_last_awake_time');
-        
-        // ⏱️ QUY ĐỔI KHOẢNG CÁCH THỜI GIAN (10 phút = 10 * 60 * 1000 mili-giây)
-        const TEN_MINUTES = 10 * 60 * 1000;
+    const awakeBackendSystem = () => {
+      const NOW = Date.now();
+      const LAST_AWAKE = localStorage.getItem('taman_last_awake_time');
+      
+      // ⏱️ QUY ĐỔI KHOẢNG CÁCH THỜI GIAN (10 phút = 10 * 60 * 1000 mili-giây)
+      const TEN_MINUTES = 10 * 60 * 1000;
 
-        if (LAST_AWAKE && (NOW - parseInt(LAST_AWAKE, 10) < TEN_MINUTES)) {
-          // 😎 Server chắc chắn đang On, bỏ qua bước Ping, vào thẳng App lập tức!
-          console.log("⚡ [AWAKE CONTROL]: Dưới 10 phút kể từ lần tương tác trước. Bỏ qua Ping Cloud.");
-          setIsBackendAwake(true);
-          return;
-        }
-
-        // 🚀 Đã quá 10 phút hoặc mở Web lần đầu: Bắn lệnh gọi đánh thức ngầm
-        console.log("⏳ [AWAKE CONTROL]: Đã quá 10 phút. Đang gửi tín hiệu kích hoạt container Render...");
-        await axiosClient.get('/health'); 
-        
-        // Ghi nhận mốc thời gian đánh thức thành công mới vào bộ nhớ trình duyệt
-        localStorage.setItem('taman_last_awake_time', String(Date.now()));
-        setIsBackendAwake(true);
-      } catch (err) {
-        console.error("🔴 [AWAKE CONTROL]: Cổng gác mây gặp sự cố kết nối:", err);
-        setAwakeError(true); 
+      if (LAST_AWAKE && (NOW - parseInt(LAST_AWAKE, 10) < TEN_MINUTES)) {
+        // 😎 Server chắc chắn đang hoạt động tốt, không bắn thêm request rác
+        console.log("⚡ [AWAKE CONTROL]: Trong vòng 10 phút qua đã có tương tác. Bỏ qua lượt gõ cửa Cloud.");
+        return;
       }
+
+      // 🚀 Thực hiện ĐÁNH THỨC NGẦM SONG SONG (Không sử dụng await)
+      console.log("⏳ [AWAKE CONTROL]: Đang âm thầm bắn tín hiệu kích hoạt container Render dưới nền...");
+      localStorage.setItem('taman_last_awake_time', String(NOW));
+
+      // Gọi API dạng Promise độc lập, không block luồng render UI của giao diện khách
+      axiosClient.get('/health')
+        .then(() => {
+          console.log("🟢 [AWAKE CONTROL]: Máy chủ đám mây đã thông suốt và sẵn sàng!");
+        })
+        .catch((err) => {
+          // Lưu ý: Render đang ngủ đông trả về lỗi kết nối ban đầu là bình thường trong 15s đầu
+          console.warn("🟡 [AWAKE CONTROL]: Máy chủ đang trong tiến trình nạp lại container dậy...", err.message);
+        });
     };
 
     awakeBackendSystem();
   }, []);
 
-  // Giao diện màn hình chờ chuyên nghiệp (Chỉ hiện khi thực sự cần đánh thức server)
-  if (!isBackendAwake && !awakeError) {
-    return (
-      <div style={styles.loadingWrapper}>
-        <div style={styles.cardContainer}>
-          <div style={styles.spinner}></div>
-          <h3 style={styles.title}>Kết nối trung tâm Tâm An...</h3>
-          <p style={styles.subtitle}>
-            Hệ thống quản trị đang được kích hoạt từ máy chủ đám mây. <br/>
-            Quá trình khởi động lần đầu sau khi ngủ đông mất khoảng 15-30 giây.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+  // 🚀 ĐÃ CẢI TIẾN: Loại bỏ hoàn toàn màn hình chờ Spinner. Người dùng vào thẳng App ngay lập tức!
   return (
     <AuthProvider>
       <BrowserRouter>
@@ -103,13 +86,5 @@ function App() {
     </AuthProvider>
   );
 }
-
-const styles = {
-  loadingWrapper: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#F8FAFC', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'system-ui, sans-serif' },
-  cardContainer: { backgroundColor: '#FFFFFF', padding: '40px 30px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', border: '1px solid #E2E8F0', maxWidth: '400px', width: '90%', textAlign: 'center' },
-  spinner: { width: '36px', height: '36px', border: '4px solid #E2E8F0', borderTop: '4px solid #0284C7', borderRadius: '50%', margin: '0 auto 16px auto', animation: 'spin 1s linear infinite' },
-  title: { margin: '0 0 8px 0', fontSize: '18px', color: '#0F172A', fontWeight: '800' },
-  subtitle: { margin: 0, fontSize: '13px', color: '#64748B', lineHeight: '1.6', fontWeight: '500' }
-};
 
 export default App;
