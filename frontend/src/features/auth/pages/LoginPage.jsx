@@ -57,7 +57,7 @@ export const LoginPage = () => {
       <form onSubmit={handleLogin} style={styles.card}>
         <div style={styles.logoCircle}>TA</div>
         <h2 style={styles.title}>TÂM AN INVENTORY</h2>
-        <p style={styles.subtitle}>Hệ thống kiểm kê tài sản thông minh</p>
+        <p style={styles.subtitle}>Hệ thống dành cho nhân viên</p>
         
         {error && <div style={styles.errorBox}>{error}</div>}
 
