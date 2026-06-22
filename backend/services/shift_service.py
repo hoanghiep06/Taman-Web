@@ -1,9 +1,10 @@
 # services/shift_service.py
 from sqlalchemy.orm import Session
-from models import Shift, Asset, InspectionLog, ShiftSummary, Room
+from models import Shift, Asset, InspectionLog, ShiftSummary, Room, ShiftSetting
 from services.email_service import send_alert_email
 import logging
-from datetime import date
+from datetime import date, datetime, time, timedelta
+import pytz
 
 def auto_close_and_check_missing_assets(db: Session):
     # 1. Tìm ca đang Open
@@ -105,3 +106,78 @@ def auto_open_shift(db: Session, shift_type: str):
             existing_shift.status = "Open"
             db.commit()
             logging.info(f"HỆ THỐNG: Đã khôi phục trạng thái mở cho ca [{shift_type}] ngày {today}")
+
+
+
+def check_and_sync_shift_jit(db: Session):
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    now_local = datetime.now(tz)
+    current_date = now_local.date()
+    current_time = now_local.time()
+
+    setting = db.query(ShiftSetting).first()
+    m_start_str = setting.morning_start if (setting and setting.morning_start) else "04:00"
+    m_end_str = setting.morning_end if (setting and setting.morning_end) else "13:00"
+    e_start_str = setting.evening_start if (setting and setting.evening_start) else "14:00"
+    e_end_str = setting.evening_end if (setting and setting.evening_end) else "23:00"
+    
+    try:
+        m_start = time.fromisoformat(m_start_str)
+        m_end = time.fromisoformat(m_end_str)
+        e_start = time.fromisoformat(e_start_str)
+        e_end = time.fromisoformat(e_end_str)
+    except Exception as parse_err:
+        m_start, m_end = time(4, 0), time(13, 0)
+        e_start, e_end = time(14, 0), time(23, 0)
+
+    shift_type = None
+    shift_date = current_date
+
+    if m_start <= current_time <= m_end:
+        shift_type = "Sang"
+        shift_date = current_date
+    else:
+        if e_start > e_end: # Khung giờ tối vắt qua đêm
+            if current_time >= e_start or current_time <= e_end:
+                shift_type = "Toi"
+                if current_time <= e_end:
+                    shift_date = current_date - timedelta(days=1)
+        else:
+            if e_start <= current_time <= e_end:
+                shift_type = "Toi"
+                shift_date = current_date
+
+    if not shift_type:
+        return
+
+    # 🔴 ĐOẠN TỐI ƯU HIỆU NĂNG: Kiểm tra xem ca trực hiện tại trong DB đã đúng chưa
+    # Nếu đúng rồi thì kết thúc luôn, không chạy vòng lặp while True phía dưới gây tốn I/O CSDL
+    active_shift = db.query(Shift).filter(Shift.status == "Open").first()
+    if active_shift and active_shift.shift_date == shift_date and active_shift.shift_type == shift_type:
+        return # Khớp hoàn toàn -> Bỏ qua an toàn!
+
+    # 3. LUỒNG QUÉT DỌN LIÊN HOÀN CÁC CA CŨ BỊ BỎ QUÊN
+    while True:
+        old_shift = db.query(Shift).filter(
+            Shift.status == "Open",
+            (Shift.shift_date < shift_date) | 
+            ((Shift.shift_date == shift_date) & (Shift.shift_type != shift_type))
+        ).first()
+        
+        if not old_shift:
+            break
+        
+        logging.warning(f"[JIT SHIFT]: Phát hiện ca cũ quá hạn chưa đóng: {old_shift.shift_date} [{old_shift.shift_type}]. Tiến hành chốt sổ...")
+        auto_close_and_check_missing_assets(db)
+
+    # 4. TỰ ĐỘNG KHỞI TẠO HOẶC ĐỒNG BỘ PHIÊN CA HIỆN TẠI
+    current_shift = db.query(Shift).filter(
+        Shift.shift_date == shift_date,
+        Shift.shift_type == shift_type
+    ).first()
+
+    if not current_shift:
+        current_shift = Shift(shift_date=shift_date, shift_type=shift_type, status="Open")
+        db.add(current_shift)
+        db.commit()
+        logging.info(f"[JIT SHIFT SUCCESS]: Mở phiên ca trực mới thành công: {shift_date} [{shift_type}]")

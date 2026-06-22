@@ -8,9 +8,11 @@ from schemas import UserLogin, TokenResponse
 from core.security import create_access_token
 from core.limiter import limiter
 from passlib.context import CryptContext
+from services.shift_service import check_and_sync_shift_jit
 from core.constants import DEFAULT_SHIFT_SETTINGS
 from datetime import datetime, time
 import pytz
+import logging
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -89,6 +91,11 @@ def login(
 
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tài khoản đã bị khóa")
+
+    try:
+        check_and_sync_shift_jit(db)
+    except Exception as jit_err:
+        logging.error(f"[JIT SHIFT FATAL_ERROR]: Lỗi tiến trình đồng bộ ca trực lúc đăng nhập: {str(jit_err)}")
 
     # Ràng buộc kiểm tra ca trực đối với Nhân viên (Staff)
     shift_id = None

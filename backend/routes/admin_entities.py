@@ -700,47 +700,33 @@ def refresh_current_shift_by_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_privileged_user)
 ):
+    """
+    API CHỦ ĐỘNG ĐỒNG BỘ CA TRỰC - DÀNH CHO ADMIN:
+    Kích hoạt cưỡng chế kiểm tra, chốt sổ toàn bộ ca trực mồ côi cũ quá hạn 
+    và mở ca trực mới theo đúng khung giờ cấu hình hiện tại của hệ thống.
+    """
     try:
-        # 🔥 ÉP KIỂU MÚI GIỜ CHÍ MẠNG: Khởi tạo múi giờ Việt Nam UTC+7
-        vietnam_tz = timezone(timedelta(hours=7))
-        current_hour = datetime.now(vietnam_tz).hour # Lấy giờ chuẩn theo múi giờ VN (Sẽ ra đúng 15h)
-        
-        logger.warning(f"[SHIFT REFRESH]: Người dùng {current_user.username} gọi lệnh làm mới ca trực tại mốc {current_hour}h.")
+        logger.warning(f"[MANUAL SHIFT REFRESH]: Admin '{current_user.username}' chủ động kích hoạt lệnh đồng bộ ca trực toàn hệ thống.")
 
-        setting = db.query(models.ShiftSetting).first()
-        if setting:
-            m_start = int(setting.morning_start.split(':')[0])
-            m_end = int(setting.morning_end.split(':')[0])
-            e_start = int(setting.evening_start.split(':')[0])
-            e_end = int(setting.evening_end.split(':')[0])
-        else:
-            m_start = int(DEFAULT_SHIFT_SETTINGS["morning_start"].split(':')[0])
-            m_end = int(DEFAULT_SHIFT_SETTINGS["morning_end"].split(':')[0])
-            e_start = int(DEFAULT_SHIFT_SETTINGS["evening_start"].split(':')[0])
-            e_end = int(DEFAULT_SHIFT_SETTINGS["evening_end"].split(':')[0])
+        # 🚀 THẦN THẦN TRIỆT TIÊU BUG: Gọi thẳng hàm JIT cốt lõi đã được test kỹ lưỡng
+        # Hàm này tự động lo hết: Xóa ca cũ quá hạn -> Bắn mail -> Mở ca mới chuẩn ngày/giờ/phút
+        from services.shift_service import check_and_sync_shift_jit
+        check_and_sync_shift_jit(db)
 
-        from services.shift_service import auto_open_shift
-        activated_shift = None
+        # Lấy ra ca trực vừa được đồng bộ mở để phản hồi lên UI
+        from models import Shift
+        active_shift = db.query(Shift).filter(Shift.status == "Open").first()
 
-        if m_start <= current_hour < m_end:
-            activated_shift = "Sang"
-            auto_open_shift(db, "Sang")
-        elif e_start <= current_hour < e_end:
-            activated_shift = "Toi"
-            auto_open_shift(db, "Toi")
-
-        if activated_shift:
-            return {
-                "status": "Success",
-                "message": f"Đã đồng bộ khung giờ thành công! Hệ thống đã tự động bật phiên làm việc cho ca '{activated_shift}' dựa trên cấu hình mới.",
-                "details": {"execution_time": f"{current_hour}h", "activated_shift": activated_shift}
+        return {
+            "status": "Success",
+            "message": "Đã thực hiện rà soát và đồng bộ ca trực toàn hệ thống thành công!",
+            "details": {
+                "active_shift_date": str(active_shift.shift_date) if active_shift else "N/A",
+                "active_shift_type": active_shift.shift_type if active_shift else "None",
+                "status": active_shift.status if active_shift else "No active shift open"
             }
-        else:
-            return {
-                "status": "Info",
-                "message": "Đã chạy lệnh rà soát, giờ hiện tại nằm ngoài khung giờ ca trực.",
-                "details": {"execution_time": f"{current_hour}h", "activated_shift": None}
-            }
+        }
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[MANUAL SHIFT REFRESH FAILED]: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Thất bại khi làm mới ca trực: {str(e)}")
