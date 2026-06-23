@@ -307,106 +307,96 @@ async def upload_multi_assets_image(
     client_ip = request.client.host
     client_ua = request.headers.get("user-agent", "Unknown Device")
 
+    # Lấy IP thật qua Proxy một cách đồng bộ
+    real_client_ip = request.headers.get("x-forwarded-for")
+    if real_client_ip:
+        real_client_ip = real_client_ip.split(",")[0].strip()
+    else:
+        real_client_ip = client_ip
+
+    # 1. KIỂM TRA ĐIỀU KIỆN 1: Xác thực mã Nonce
     nonce_record = db.query(Nonce).filter(
         Nonce.id == nonce_id,
         Nonce.user_id == current_user.id,
         Nonce.used == False
     ).first()
 
-    # KIỂM TRA ĐIỀU KIỆN 1: Có tìm thấy mã do điện thoại truyền lên hay không?
     if not nonce_record:
-        # Ghi log cảnh báo trực tiếp ra bảng điều khiển Docker để bạn dễ debug
-        logging.warning(f"[SECURITY ALERT]: Không tìm thấy mã Nonce mã '{nonce_id}' trong DB hoặc mã đã bị sử dụng từ trước!")
-        
+        logging.warning(f"[SECURITY ALERT]: Không tìm thấy mã Nonce '{nonce_id}' hoặc đã bị sử dụng! IP: {real_client_ip}")
         attack_log = AuditLog(
             actor_id=current_user.id,
-            action="ATTACK_DEVICED_INVALID_NONCE",
+            action="ATTACK_DEVICE_INVALID_NONCE",
             target_id=nonce_id,
-            ip_address=client_ip,
-            payload=f"Tài khoản {current_user.username} cố tình nộp ảnh bằng mã Nonce không tồn tại hoặc đã bị hủy."
+            ip_address=real_client_ip,
+            payload=f"Tài khoản {current_user.username} cố tình nộp ảnh bằng mã Nonce không hợp lệ."
         )
         db.add(attack_log)
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Mã bảo mật (Nonce) không hợp lệ hoặc phiên làm việc của bạn đã hết hạn."
+            detail="Mã bảo mật (Nonce) không hợp lệ hoặc phiên làm việc đã hết hạn."
         )
     
-    # KIỂM TRA ĐIỀU KIỆN 2: Ép kiểu dữ liệu an toàn tuyệt đối chống lỗi lệch múi giờ Driver
+    # 2. KIỂM TRA ĐIỀU KIỆN 2: Ép toàn bộ về trục chuẩn UTC để so sánh thời gian hết hạn
     expires_at_utc = nonce_record.expires_at
     if expires_at_utc.tzinfo is None:
-        # Nếu DB trả về dạng naive datetime, gán cứng múi giờ gốc của nó là UTC
         expires_at_utc = expires_at_utc.replace(tzinfo=timezone.utc)
     else:
-        # Nếu có múi giờ sẵn, ép đưa về trục chuẩn UTC
         expires_at_utc = expires_at_utc.astimezone(timezone.utc)
 
     current_time_utc = datetime.now(timezone.utc)
 
     if expires_at_utc < current_time_utc:
-        # In ra màn hình Docker thời gian lệch để đối chiếu cấu trúc máy chủ
-        logging.warning(f"[SECURITY ALERT]: Mã Nonce '{nonce_id}' bị hết hạn! Thời điểm hết hạn (UTC): {expires_at_utc} | Thời điểm nộp ảnh (UTC): {current_time_utc}")
+        logging.warning(f"[SECURITY ALERT]: Mã Nonce '{nonce_id}' hết hạn! Hết hạn: {expires_at_utc} | Hiện tại: {current_time_utc}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Mã bảo mật hết hạn, vui lòng tắt camera và mở lại để làm mới lại phiên kiểm tra"
+            detail="Mã bảo mật hết hạn, vui lòng tắt camera và mở lại."
         )
     
-    # KIỂM TRA ĐIỀU KIỆN 3: Đối chiếu tính nhất quán của thiết bị đầu cuối
-    real_client_ip = request.headers.get("x-forwarded-for")
-    if real_client_ip:
-        # Chuỗi X-Forwarded-For có thể dạng "IP_Thật, IP_Proxy", ta lấy phần tử đầu tiên
-        real_client_ip = real_client_ip.split(",")[0].strip()
-    else:
-        real_client_ip = client_ip # Fallback về IP gốc nếu chạy ở local dev
-
-    # 2. Hàng rào đối chiếu thông minh nới lỏng:
-    # Do mã xác thực JWT và mã Nonce dùng 1 lần đã bảo mật tuyệt đối, ta chỉ ghi log
-    # theo dõi biến động (Audit) chứ không chặn đứng dòng chạy để đảm bảo độ mượt cho Mobile 4G/WiFi.
+    # 3. KIỂM TRA ĐIỀU KIỆN 3: Ghi nhận dịch chuyển mạng (chỉ Audit log, không chặn)
     if nonce_record.ip_address != real_client_ip or nonce_record.user_agent != client_ua:
-        logging.warning(
-            f"[NETWORK MOBILITY INFO]: Thiết bị có sự dịch chuyển nhẹ mạng/thiết bị:\n"
+        logging.info(
+            f"[NETWORK MOBILITY]: Thiết bị dịch chuyển mạng nhẹ:\n"
             f"  -> Lúc xin mã: IP={nonce_record.ip_address} | UA={nonce_record.user_agent}\n"
             f"  -> Lúc nộp ảnh: IP={real_client_ip} | UA={client_ua}"
         )
     
-    # Hủy mã NONCE khi vượt qua toàn bộ các hàng rào bảo mật thành công
+    # Đánh dấu hủy mã ngay lập tức (Chống trùng lặp request / Double submit từ iPhone)
     nonce_record.used = True
     db.flush()
 
-    # FILE VALIDATOR & ĐỌC BYTES GIẢI PHÓNG CACHE
-    file_contents = await file.read()
-    validate_live_camera_image(file_contents=file_contents, max_size_mb=MAX_SIZE_MB)
-
+    # 4. VALIDATE FILE & HỖ TRỢ XỬ LÝ KHẨN CẤP LỖI FILE
     try:
-        asset_ids = json.loads(asset_ids_str)
-        if not isinstance(asset_ids, list) or len(asset_ids_str) == 0:
+        file_contents = await file.read()
+        validate_live_camera_image(file_contents=file_contents, max_size_mb=MAX_SIZE_MB)
+    except Exception as e:
+        logging.error(f"[FILE VALIDATION ERROR]: Lỗi validate ảnh (Có thể do định dạng HEIC từ iPhone): {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Định dạng ảnh không được hỗ trợ hoặc file bị lỗi. Nếu dùng iPhone, hãy đảm bảo camera chụp ở chế độ Tương thích nhất (Most Compatible)."
+        )
+
+    # PARSE DANH SÁCH ASSET IDS
+    try:
+        asset_ids = json.loads(asset_ids_str.strip())
+        if not isinstance(asset_ids, list) or len(asset_ids) == 0:
             raise ValueError()
-    
     except Exception:
         raise HTTPException(status_code=400, detail="Định dạng mảng asset_ids_str không hợp lệ")
 
-
-    # 2. Lấy ca trực Open hiện tại
+    # Lấy ca trực
     shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.created_at.desc()).first()
     if not shift:
         raise HTTPException(status_code=400, detail="Hiện tại chưa có ca trực nào được mở trên hệ thống")
 
-    # 3. Lấy thông tin chi tiết của danh sách tài sản để kiểm tra tính hợp lệ và lấy tên đồ vật
+    # Kiểm tra tính tồn tại của tài sản
     asset_items = db.query(Asset, Elder.full_name).outerjoin(Elder, Asset.elder_id == Elder.id).filter(Asset.id.in_(asset_ids)).all()
     if len(asset_items) != len(asset_ids):
         raise HTTPException(status_code=404, detail="Có chứa ID tài sản không tồn tại trên hệ thống")
 
-    drive_asset_names = []
-    for asset, elder_name in asset_items:
-        if elder_name:
-            drive_asset_names.append(f"{asset.asset_name}_{elder_name}")
-        else:
-            drive_asset_names.append(asset.asset_name)
+    drive_asset_names = [f"{asset.asset_name}_{elder_name}" if elder_name else asset.asset_name for asset, elder_name in asset_items]
 
-    # 4. CHỐNG SPAM: Vòng lặp kiểm tra thời gian khóa 1 phút (Rate Limit) cho từng tài sản
-    tz = pytz.timezone('Asia/Ho_Chi_Minh')
-    now_tz = datetime.now(tz)
-    
+    # 5. CHỐNG SPAM (RATE LIMIT) - ĐÃ SỬA AN TOÀN TUYỆT ĐỐI THEO TRỤC UTC
     for asset, _ in asset_items:
         latest_log = db.query(InspectionLog).filter(
             InspectionLog.shift_id == shift.id,
@@ -415,23 +405,28 @@ async def upload_multi_assets_image(
         ).first()
         
         if latest_log:
-            # Ép kiểu thời gian trong DB về đúng múi giờ UTC+7 để tính toán chính xác
-            log_time = latest_log.created_at.astimezone(tz)
-            time_passed = now_tz - log_time
+            # Ép thời gian DB về UTC để tính toán không bị ảnh hưởng bởi timezone của Docker/Hệ điều hành
+            log_time_utc = latest_log.created_at
+            if log_time_utc.tzinfo is None:
+                log_time_utc = log_time_utc.replace(tzinfo=timezone.utc)
+            else:
+                log_time_utc = log_time_utc.astimezone(timezone.utc)
+            
+            time_passed = current_time_utc - log_time_utc
             
             if time_passed < timedelta(seconds=TIME_DELAY_SUBMIT):
                 seconds_left = int(TIME_DELAY_SUBMIT - time_passed.total_seconds())
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Tài sản '{asset.asset_name}' (ID: {asset.id}) vừa mới được chụp cách đây chưa đầy {TIME_DELAY_SUBMIT} giây. Vui lòng đợi thêm {seconds_left} giây."
+                    detail=f"Tài sản '{asset.asset_name}' vừa được chụp cách đây ít lâu. Vui lòng đợi thêm {seconds_left} giây."
                 )
 
-    # 5. Xác định số phòng dựa vào phần tử đầu tiên để chia cây thư mục
+    # Xác định số phòng
     first_asset = asset_items[0][0]
     room = db.query(Room).filter(Room.id == first_asset.room_id).first()
     room_number = room.room_number if room else "Chung"
 
-    # 7. Tạo trước bản ghi trạng thái "DANG_XU_LY" VÀ KHÓA VERSION CŨ 
+    # Tạo bản ghi log mới
     created_log_ids = []
     for asset_id in asset_ids:
         old_log = db.query(InspectionLog).filter(
@@ -440,9 +435,8 @@ async def upload_multi_assets_image(
             InspectionLog.is_latest == True
         ).first()
 
-        new_version = 1
+        new_version = old_log.version + 1 if old_log else 1
         if old_log:
-            new_version = old_log.version + 1
             old_log.is_latest = False
         
         new_log = InspectionLog(
@@ -455,7 +449,6 @@ async def upload_multi_assets_image(
             is_latest=True,
             nonce_id=nonce_id
         )
-
         db.add(new_log)
         db.flush()
         created_log_ids.append(new_log.id)
@@ -464,29 +457,27 @@ async def upload_multi_assets_image(
         actor_id=current_user.id,
         action="CHECKIN_REQUEST_ACCEPTED",
         target_id=str(asset_ids),
-        ip_address=client_ip,
+        ip_address=real_client_ip,
         payload=str({"tracking_logs": created_log_ids, "nonce_used": nonce_id})
     )
     db.add(success_audit)
     db.commit()
 
-    # 5. Đẩy vào WORKER chạy ngầm
+    # Đẩy vào Worker xử lý ngầm
     background_tasks.add_task(
         image_processing_worker,
         file_contents=file_contents,
         log_ids=created_log_ids,
         user_full_name=current_user.full_name,
         room_number=room_number,
-        asset_names=drive_asset_names  # 🚀 Truyền thẳng mảng đã format sẵn vào đây!
+        asset_names=drive_asset_names
     )
 
-    # Trả về phản hồi sau 0.1s, đẩy vào danh sách ID vừa tạo để FE tiện tracking 
     return {
         "status": "Processing",
-        "message": f"Đã tiếp nhận yêu cầu kiểm kê cho {len(asset_ids)} tài sản. Tiến trình đang được xử lý ngầm.",
+        "message": f"Đã tiếp nhận yêu cầu kiểm kê cho {len(asset_ids)} tài sản.",
         "tracking_log_ids": created_log_ids
     }
-
 
 
 
