@@ -246,67 +246,39 @@ def validate_live_camera_image(file_contents: bytes, max_size_mb: int = 10):
         image = Image.open(io.BytesIO(file_contents))
         exif_data = image._getexif()
 
-        # Nếu không có EXIF, có 2 khả năng: Chụp bằng app bên thứ 3 hoặc Frontend làm mất EXIF khi nén/resize
+        # NỚI LỎNG: Nếu không có EXIF hoặc EXIF thiếu thẻ phần cứng, chỉ ghi log theo dõi chứ không báo lỗi 400
         if not exif_data:
-            logging.error("[VALIDATION FAILED]: Ảnh không có dữ liệu EXIF. Có thể Frontend đã làm mất EXIF khi nén ảnh.")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Từ chối nhận ảnh. Bạn phải chụp trực tiếp từ Camera (Dữ liệu cấu trúc ảnh gốc bị thiếu)."
-            )
+            logging.warning("[VALIDATION INFO]: Ảnh không có EXIF (Có thể do thiết bị/trình duyệt tự động xóa hoặc Frontend nén ảnh).")
+            return # Cho qua luôn
         
         exif = {ExifTags.TAGS.get(tag, tag): value for tag, value in exif_data.items()}
 
-        # 3. Kiểm tra vết thiết bị phần cứng
-        if "Make" not in exif and "Model" not in exif and "Software" not in exif:
-            logging.error(f"[VALIDATION FAILED]: EXIF tồn tại nhưng không có Make/Model. Thẻ EXIF tìm thấy: {list(exif.keys())}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Ảnh không hợp lệ, không tìm thấy vết định danh cho phần cứng camera thiết bị."
-            )
-        
-        # 4. Kiểm tra thời gian chụp
+        # Kiểm tra thời gian chụp (Chỉ kiểm tra NẾU CÓ thẻ thời gian)
         photo_time_str = exif.get("DateTimeOriginal") or exif.get("DateTime")
-        if not photo_time_str:
-            logging.error("[VALIDATION FAILED]: Không tìm thấy thẻ DateTimeOriginal/DateTime trong EXIF.")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Không thể xác định thời gian chụp thực tế từ bức ảnh này."
-            )
-        
-        try:
-            photo_time = datetime.strptime(photo_time_str, "%Y:%m:%d %H:%M:%S")
-        except ValueError:
-            # Sửa lỗi một số dòng máy ghi format thời gian kèm chuỗi lạ
-            logging.error(f"[VALIDATION FAILED]: Định dạng thời gian EXIF lạ: {photo_time_str}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cấu trúc thời gian của ảnh không hợp lệ."
-            )
-
-        tz = pytz.timezone('Asia/Ho_Chi_Minh')
-        photo_time = tz.localize(photo_time)
-        now_tz = datetime.now(tz)
-
-        time_diff = now_tz - photo_time
-
-        # Nới lỏng thời gian cho phép lệch lên 5 phút (Đề phòng điện thoại chạy nhanh hơn server)
-        # Giả định UPLOAD_IMG_EXPIRE_TIMES của bạn là khoảng 5-10 phút
-        UPLOAD_IMG_EXPIRE_TIMES = 10 
-        
-        if time_diff > timedelta(minutes=UPLOAD_IMG_EXPIRE_TIMES) or time_diff < timedelta(minutes=-5):
-            logging.error(f"[VALIDATION FAILED]: Thời gian chụp không hợp lệ. Thời gian ảnh: {photo_time} | Hiện tại: {now_tz} | Lệch: {time_diff}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Ảnh chụp đã quá hạn hoặc thời gian trên điện thoại không đồng bộ với máy chủ. Vui lòng chụp lại."
-            )
-        
+        if photo_time_str:
+            try:
+                photo_time = datetime.strptime(photo_time_str, "%Y:%m:%d %H:%M:%S")
+                tz = pytz.timezone('Asia/Ho_Chi_Minh')
+                photo_time = tz.localize(photo_time)
+                now_tz = datetime.now(tz)
+                time_diff = now_tz - photo_time
+                
+                UPLOAD_IMG_EXPIRE_TIMES = 10
+                if time_diff > timedelta(minutes=UPLOAD_IMG_EXPIRE_TIMES) or time_diff < timedelta(minutes=-5):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Ảnh chụp đã quá hạn. Vui lòng chụp lại trực tiếp."
+                    )
+            except ValueError:
+                pass # Bỏ qua nếu format thời gian lỗi
+                
     except HTTPException as http_err:
         raise http_err
     except Exception as e:
         logging.exception("[VALIDATION CRASH]: Lỗi hệ thống khi phân tích cấu trúc ảnh")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cấu trúc tệp tin ảnh bị lỗi hoặc không thể phân tích dữ liệu bảo mật. Chi tiết: {str(e)}"
+            detail="Cấu trúc tệp tin ảnh bị lỗi hoặc không an toàn."
         )
     
 
