@@ -12,14 +12,13 @@ import { SearchBar } from '../components/SearchBar';
 import { groupAssetsByElder, getFinalStatus, STATUS_SEARCH_KEYWORDS } from '../utils/patrolHelpers';
 
 import { theme } from '../utils/theme';
-
 import axiosClient from '../../../api/axiosClient';
 
 export const PatrolSessionPage = () => {
   const { roomNumber } = useParams();
   const navigate = useNavigate();
   
-  const [assets, setAssets] = useState([]); // Luôn mặc định là mảng sạch
+  const [assets, setAssets] = useState([]); 
   const [selectedAssetIds, setSelectedAssetIds] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,52 +31,39 @@ export const PatrolSessionPage = () => {
 
   const { uploadStatus, processUploadInBackground, setUploadStatus } = useBackgroundQueue();
 
-  // 🔴 HÀM TẢI DỮ LIỆU ĐÃ ĐƯỢC BỌC GIÁP CHỐNG SẬP TUYỆT ĐỐI
   const fetchRoomAssets = async (isSilent = false) => {
     try {
       const assetsData = await patrolApi.getAssetsByRoom(roomNumber);
-      
-      // Kiểm tra mọi tình huống dữ liệu để ép buộc assets luôn là mảng chuẩn
       if (assetsData && assetsData.assets && Array.isArray(assetsData.assets)) {
-        setAssets(assetsData.assets); // Tình huống BE mới: Object bọc tệp con
+        setAssets(assetsData.assets); 
       } else if (Array.isArray(assetsData)) {
-        setAssets(assetsData); // Tình huống fallback: BE trả về mảng thẳng tuột
+        setAssets(assetsData); 
       } else {
-        setAssets([]); // Tình huống khẩn cấp: Trả về mảng rỗng để UI không crash
+        setAssets([]); 
       }
     } catch (err) {
       console.error('Lỗi tải dữ liệu phòng:', err);
-      setAssets([]); // Lỗi mạng giữ nguyên mảng rỗng
+      setAssets([]); 
     } finally {
       if (!isSilent) setLoading(false);
     }
   };
 
-  // CƠ CHẾ AUTO-REFRESH (POLLING) NGẦM MỖI 5 GIÂY ĐỂ ĐỒNG BỘ TIẾN ĐỘ WORKER
   useEffect(() => {
-    fetchRoomAssets(); // Chạy có Loading lần đầu tiên
-    
-    const intervalId = setInterval(() => {
-      fetchRoomAssets(true); 
-    }, 5000); 
-
-    return () => clearInterval(intervalId); // Hủy vòng lặp khi thoát phòng
+    fetchRoomAssets(); 
+    const intervalId = setInterval(() => fetchRoomAssets(true), 5000); 
+    return () => clearInterval(intervalId); 
   }, [roomNumber]);
 
-
-  // Tải danh sách phòng để lấy logic nút "Qua phòng kế"
   useEffect(() => { 
     patrolApi.getRooms()
       .then(res => {
-        // Hỗ trợ phòng thủ nếu API getRooms trả về object thay vì mảng
         if (Array.isArray(res)) setRooms(res);
         else if (res && res.rooms) setRooms(res.rooms);
       })
       .catch(err => console.error(err));
   }, []);
   
-
-  // Đảm bảo an toàn khi gọi .filter bằng toán tử điều kiện an toàn Array.isArray
   const safeAssets = Array.isArray(assets) ? assets : [];
 
   const completedCount = safeAssets.filter(a => 
@@ -97,7 +83,6 @@ export const PatrolSessionPage = () => {
     return acc;
   }, {});
 
-  // Lọc assets theo search
   const filteredAssets = safeAssets.filter(a => {
     const finalStatus = getFinalStatus(a, uploadStatus);
     if (statusFilter !== 'All' && finalStatus !== statusFilter) return false;
@@ -112,7 +97,6 @@ export const PatrolSessionPage = () => {
     return matchName || matchElder || matchStatusKeyword;
   });
   const groupedData = groupAssetsByElder(filteredAssets);
-
 
   const handleToggleSelect = (assetId) => {
     setSelectedAssetIds((prev) =>
@@ -199,26 +183,28 @@ export const PatrolSessionPage = () => {
   if (loading) return <div style={styles.loadingScreen}>Đang đồng bộ dữ liệu phòng...</div>;
 
   return (
-    <div style={styles.container}>
-      <PatrolHeader roomNumber={roomNumber} onBack={() => navigate('/rooms')} />
-
-      <ProgressSection 
-        completedCount={completedCount} 
-        totalCount={safeAssets.length} 
-        isFinished={isFinished}
-        nextRoomName={nextRoom?.room_number}
-        onNextRoom={() => nextRoom ? navigate(`/patrol/${nextRoom.room_number}`) : navigate('/rooms')}
-      />
-
-      <SearchBar
-        searchTerm={searchTerm}
-        onSearch={setSearchTerm}
-        statusFilter={statusFilter}
-        onStatusFilterChange={onStatusFilterChange => setStatusFilter(onStatusFilterChange)}
-        statusCounts={statusCounts}
-      />
+    <div style={styles.wrapperContainer}>
+      {/* KHU VỰC ĐẦU TRANG CỐ ĐỊNH PHẦN TRĂM */}
+      <div style={styles.stickyTopArea}>
+        <PatrolHeader roomNumber={roomNumber} onBack={() => navigate('/rooms')} />
+        <ProgressSection 
+          completedCount={completedCount} 
+          totalCount={safeAssets.length} 
+          isFinished={isFinished}
+          nextRoomName={nextRoom?.room_number}
+          onNextRoom={() => nextRoom ? navigate(`/patrol/${nextRoom.room_number}`) : navigate('/rooms')}
+        />
+        <SearchBar
+          searchTerm={searchTerm}
+          onSearch={setSearchTerm}
+          statusFilter={statusFilter}
+          onStatusFilterChange={onStatusFilterChange => setStatusFilter(onStatusFilterChange)}
+          statusCounts={statusCounts}
+        />
+      </div>
       
-      <div style={styles.listContainer}>
+      {/* KHU VỰC CUỘN DANH SÁCH ĐỒ ĐẠC TỰ LỌC THEO KHUNG CÒN LẠI */}
+      <div style={styles.scrollListArea}>
         {groupedData.length > 0 ? (
           groupedData.map((group, index) => (
             <ElderSection
@@ -232,10 +218,11 @@ export const PatrolSessionPage = () => {
             />
           ))
         ) : (
-          <div style={styles.emptyState}>Phòng trống hoặc chưa có đồ đạc nào.</div>
+          <div style={styles.emptyState}>Phòng trống hoặc chưa có đồ đạc nào phù hợp bộ lọc.</div>
         )}
       </div>
 
+      {/* THANH THAO TÁC NỔI CHỮA BIÊN AN TOÀN CALC DÀNH RIÊNG CHO IPHONE */}
       {selectedAssetIds.length > 0 && (
         <div style={styles.stickyFooterContainer}>
           <div style={styles.stickyFooter}>
@@ -267,12 +254,26 @@ export const PatrolSessionPage = () => {
 };
 
 const styles = {
-  container: { padding: '12px', backgroundColor: theme.color.bg, minHeight: '100%', paddingBottom: '120px', fontFamily: '-apple-system, system-ui, sans-serif', boxSizing: 'border-box', width: '100%', overflowX: 'hidden' },
+  wrapperContainer: { display: 'flex', flexDirection: 'column', height: '100%', width: '100%', boxSizing: 'border-box' },
+  stickyTopArea: { padding: '4px 12px 0 12px', flexShrink: 0, backgroundColor: theme.color.bg, zIndex: 10 },
+  
+  // 🔴 SỬA CHÍ MẠNG: Độc lập vùng cuộn danh sách, chừa khế ước đáy 100px để không bao giờ bị thanh chụp đè nghẹt chữ
+  scrollListArea: { flex: 1, overflowY: 'auto', padding: '4px 12px 100px 12px', WebkitOverflowScrolling: 'touch' },
+  
   loadingScreen: { textAlign: 'center', marginTop: '80px', color: theme.color.inkTertiary, fontSize: '14px' },
-  listContainer: { display: 'flex', flexDirection: 'column', gap: '22px' },
   emptyState: { textAlign: 'center', padding: '40px 0', color: theme.color.inkMuted, fontSize: '13px' },
-  stickyFooterContainer: { position: 'fixed', bottom: 16, left: 12, right: 12, zIndex: 999 },
-  stickyFooter: { backgroundColor: theme.color.ink, padding: '12px 16px', borderRadius: theme.radius.xl, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: theme.shadow.lg },
+  
+  // 🔴 ĐỊNH VỊ PHAO NỔI THÔNG MINH CHỐNG CHU KỲ SAFARI TÀI THỎ
+  stickyFooterContainer: { 
+    position: 'fixed', 
+    bottom: 'calc(60px + 12px + env(safe-area-inset-bottom))', // Neo chuẩn xác lơ lửng phía trên BottomNav 12px
+    left: '50%',
+    transform: 'translateX(-50%)',
+    width: 'calc(100% - 24px)',
+    maxWidth: '456px',
+    zIndex: 999 
+  },
+  stickyFooter: { backgroundColor: theme.color.ink, padding: '12px 16px', borderRadius: theme.radius.xl, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 8px 24px rgba(15,23,42,0.25)' },
   footerInfo: { color: '#E2E8F0', fontSize: '13px' },
   cameraTrigger: { backgroundColor: theme.color.primary, color: '#FFF', padding: '10px 18px', borderRadius: theme.radius.md, fontSize: '13px', fontWeight: '700', cursor: 'pointer' },
 };

@@ -89,40 +89,31 @@ export const RoomListPage = () => {
 };
 
 const styles = {
-  container: { padding: '20px', paddingBottom: '90px', fontFamily: "system-ui, -apple-system, sans-serif", boxSizing: 'border-box', width: '100%' },
-  title: { margin: '0 0 4px 0', color: '#0F172A', fontSize: '24px', fontWeight: '800' },
-  subtitle: { margin: '0 0 24px 0', color: '#64748B', fontSize: '14px' },
-  loadingState: { textAlign: 'center', padding: '50px', color: '#64748B', fontWeight: '500', fontSize: '14px' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' },
+  container: { display: 'flex', flexDirection: 'column', height: '100%', width: '100%', boxSizing: 'border-box' },
+  titleSection: { padding: '16px 16px 8px 16px', flexShrink: 0 },
+  title: { margin: '0 0 2px 0', color: '#0F172A', fontSize: '22px', fontWeight: '800' },
+  subtitle: { margin: 0, color: '#64748B', fontSize: '13px' },
+  
+  // Vùng lưới cuộn nội bộ biệt lập, cấm đẩy tràn khung layout cha
+  scrollGridArea: { flex: 1, overflowY: 'auto', padding: '12px 16px', WebkitOverflowScrolling: 'touch' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', paddingBottom: '20px' },
   
   roomCard: { 
     position: 'relative', 
     backgroundColor: '#FFFFFF', 
-    borderRadius: '16px', 
-    boxShadow: '0 4px 10px rgba(0,0,0,0.04)', 
+    borderRadius: '14px', 
+    boxShadow: '0 2px 6px rgba(0,0,0,0.03)', 
     overflow: 'hidden', 
-    cursor: 'pointer', 
     border: '1px solid #E2E8F0',
-    height: '130px',
-    transition: 'transform 0.1s ease'
+    aspectRatio: '1 / 0.85', // Ép tỉ lệ ô vuông cân đối trên mọi kích thước bề ngang máy
+    minHeight: '115px'
   },
-  waterFill: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    width: '100%',
-    // Hiệu ứng dâng nước gia tốc cubic-bezier cực kỳ cao cấp mượt mà
-    transition: 'height 0.8s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s', 
-    zIndex: 1,
-    opacity: 0.55
-  },
-  cardContent: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    padding: '16px',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    zIndex: 2 
-  },
-  roomBadge: { fontSize: '26px', fontWeight: '900', marginBottom: '4px', transition: 'color 0.3s' },
-  roomDesc: { fontSize: '12px', color: '#475569', margin: '0 0 12px 0', textAlign: 'center', lineHeight: '1.3', fontWeight: '600', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  progressText: { fontSize: '11px', fontWeight: '700', padding: '4px 10px', backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: '12px', color: '#0F172A', backdropFilter: 'blur(4px)', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }
+  waterFill: { position: 'absolute', bottom: 0, left: 0, right: 0, width: '100%', transition: 'height 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s', zIndex: 1, opacity: 0.5 },
+  cardContent: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: '12px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', zIndex: 2, boxSizing: 'border-box' },
+  
+  roomBadge: { fontSize: '22px', fontWeight: '900', transition: 'color 0.3s' },
+  // Bọc giáp text mô tả: Cấm tuyệt đối việc wrap xuống dòng làm vỡ phông nền hoặc chồng lên chữ khác
+  roomDesc: { fontSize: '11px', color: '#475569', margin: 0, textAlign: 'center', fontWeight: '600', width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  progressText: { fontSize: '10.5px', fontWeight: '700', padding: '3px 8px', backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: '10px', color: '#0F172A', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' },
+  loadingState: { textAlign: 'center', padding: '40px', color: '#64748B', fontSize: '13px', fontWeight: '500' }
 };

@@ -195,7 +195,7 @@ export const PatrolHistoryPage = () => {
 
 // CSS Giao diện Timeline chuẩn Mobile
 const styles = {
-  container: { padding: '12px', backgroundColor: '#F8FAFC', minHeight: '100%', paddingBottom: '90px', fontFamily: '-apple-system, system-ui, sans-serif', boxSizing: 'border-box', width: '100%', overflowX: 'hidden' },
+  container: { padding: '12px', backgroundColor: '#F8FAFC', minHeight: '100%', paddingBottom: '30px', fontFamily: '-apple-system, system-ui, sans-serif', boxSizing: 'border-box', width: '100%', overflowX: 'hidden' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', marginBottom: '14px' },
   backBtn: { background: 'none', border: 'none', color: '#0284C7', fontSize: '15px', fontWeight: '600', cursor: 'pointer' },
   title: { margin: 0, fontSize: '17px', fontWeight: '700', color: '#1E293B', flex: 1, textAlign: 'center' },
