@@ -1,14 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { UI_COLORS } from '../../../utils/constants';
 
-export const OverviewTab = ({ dashboardData }) => {
+export const OverviewTab = ({ dashboardData, shiftProgressLive }) => {
+  // ──── 🔴 KHỞI TẠO CÁC BỘ LỌC ĐA NĂNG LIVE ────
+  const [searchAsset, setSearchAsset] = useState('');
+  const [searchElder, setSearchElder] = useState('');
+  const [selectRoom, setSelectRoom] = useState('');
+
   if (!dashboardData) return null;
 
-  const { current_shift, recent_incidents } = dashboardData;
+  const { current_shift } = dashboardData;
+
+  // Trích xuất mảng thô từ cổng tiến độ ngầm ngắt giờ
+  const reportedMissingItems = shiftProgressLive?.reported_missing || [];
+  const uncheckedItems = shiftProgressLive?.unchecked || [];
+
+  // ⚙️ TỰ ĐỘNG GOM DANH SÁCH SỐ PHÒNG ĐANG CÓ LỖI THỰC TẾ (Để làm danh mục Option chọn nhanh)
+  const dynamicRoomsWithAnomalies = Array.from(
+    new Set([
+      ...reportedMissingItems.map((item) => String(item.room_number)),
+      ...uncheckedItems.map((item) => String(item.room_number)),
+    ])
+  ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+  // 🔍 THUẬT TOÁN LỌC LIÊN HOÀN (ĐỐI CHIẾU 3 ĐIỀU KIỆN SONG SONG)
+  const executeFilter = (item) => {
+    const matchAsset = item.asset_name.toLowerCase().includes(searchAsset.toLowerCase().trim());
+    const matchElder = (item.elder_name || '').toLowerCase().includes(searchElder.toLowerCase().trim());
+    const matchRoom = selectRoom === '' || String(item.room_number) === String(selectRoom);
+    
+    return matchAsset && matchElder && matchRoom;
+  };
+
+  const filteredMissing = reportedMissingItems.filter(executeFilter);
+  const filteredUnchecked = uncheckedItems.filter(executeFilter);
 
   return (
     <div style={styles.container}>
-      {/* KHỐI CHỈ SỐ TIẾN ĐỘ CA TRỰC */}
+      {/* KHỐI CHỈ SỐ TIẾN ĐỘ TỔNG QUAN */}
       <div style={styles.mainCard}>
         <div style={styles.cardHeader}>
           <div style={styles.titleBox}>
@@ -62,87 +91,173 @@ export const OverviewTab = ({ dashboardData }) => {
         )}
       </div>
 
-      {/* BẢNG NHẬT KÝ SỰ CỐ KHẨN CẤP */}
-      <div style={styles.mainCard}>
-        <div style={styles.cardHeader}>
-          <div style={styles.titleBox}>
-            <span style={styles.headerIcon}>🚨</span>
-            <h3 style={styles.cardTitle}>Nhật Ký Cảnh Báo Thất Thoát Tài Sản (Đã bắn Gmail)</h3>
+      {/* ──── 🔴 PHÂN HỆ MỚI: THANH ĐIỀU TỐC BỘ LỌC ĐA NĂNG ĐỒNG BỘ ──── */}
+      {current_shift.status === "In Progress" && (
+        <div style={styles.filterConsoleCard}>
+          <div style={styles.consoleTitle}>🔍 Bộ Lọc Rà Soát Sự Cố Nhanh</div>
+          
+          <div style={styles.filterInputsRow}>
+            {/* Bộ lọc 1: Loại thiết bị / Tên đồ vật */}
+            <div style={styles.inputControlWrapper}>
+              <span style={styles.controlIcon}>📦</span>
+              <input 
+                type="text" 
+                placeholder="Tìm tên thiết bị, đồ đạc..." 
+                value={searchAsset}
+                onChange={(e) => setSearchAsset(e.target.value)}
+                style={styles.textInputStyle}
+              />
+              {searchAsset && <button onClick={() => setSearchAsset('')} style={styles.clearMiniX}>✕</button>}
+            </div>
+
+            {/* Bộ lọc 2: Tên cụ già */}
+            <div style={styles.inputControlWrapper}>
+              <span style={styles.controlIcon}>👵</span>
+              <input 
+                type="text" 
+                placeholder="Tìm theo tên NCT sở hữu..." 
+                value={searchElder}
+                onChange={(e) => setSearchElder(e.target.value)}
+                style={styles.textInputStyle}
+              />
+              {searchElder && <button onClick={() => setSearchElder('')} style={styles.clearMiniX}>✕</button>}
+            </div>
+
+            {/* Bộ lọc 3: Dropdown chọn phòng động */}
+            <div style={styles.selectControlWrapper}>
+              <span style={styles.controlIcon}>📍</span>
+              <select 
+                value={selectRoom} 
+                onChange={(e) => setSelectRoom(e.target.value)}
+                style={styles.selectInputStyle}
+              >
+                <option value="">Tất cả phòng dính lỗi</option>
+                {dynamicRoomsWithAnomalies.map((roomNum) => (
+                  <option key={roomNum} value={roomNum}>Phòng {roomNum}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
-        
-        {recent_incidents.length > 0 ? (
-          <div style={styles.tableWrapper}>
-            <table style={styles.table}>
-              <thead>
-                <tr style={styles.thRow}>
-                  <th style={styles.th}>Ngày Ca Trực</th>
-                  <th style={styles.th}>Phiên Ca</th>
-                  <th style={styles.th}>Mức Độ Rủi Ro</th>
-                  <th style={styles.th}>Danh Sách Vật Phẩm Cần Xử Lý Khẩn Cấp</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent_incidents.map((incident) => (
-                  <tr key={incident.shift_id} style={styles.trRow}>
-                    <td style={styles.tdDate}><strong>{incident.shift_date}</strong></td>
-                    <td style={styles.td}>{incident.shift_type}</td>
-                    <td style={styles.td}>
-                      <span style={styles.alertBadge}>{incident.lost_count} vật phẩm mất</span>
-                    </td>
-                    <td style={styles.td}>
-                      <div style={styles.tagContainer}>
-                        {incident.lost_assets_details.map(item => (
-                          <span key={item.asset_id} style={styles.itemTag}>
-                            📦 Phòng {item.room_number}: <b>{item.asset_name}</b>
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      )}
+
+      {/* KHỐI HIỂN THỊ CHI TIẾT SỰ CỐ SAU KHI QUA BỘ LỌC */}
+      {current_shift.status === "In Progress" && (
+        <div style={styles.detailGridContainer}>
+          
+          {/* CỘT TRÁI: DANH SÁCH VẬT TƯ BÁO MẤT (ĐÃ LỌC) */}
+          <div style={styles.detailCard}>
+            <div style={styles.detailCardHeader}>
+              <div style={styles.boxTitleWithCount}>
+                <span style={{ color: '#D97706', fontSize: '15px', fontWeight: '800' }}>⚠️ Tài Sản Báo Thất Thoát Khẩn Cấp</span>
+                <span style={styles.countIndicatorTagOrange}>Tìm thấy: {filteredMissing.length}/{reportedMissingItems.length}</span>
+              </div>
+            </div>
+            <div style={styles.listScrollBox}>
+              {filteredMissing.length > 0 ? (
+                filteredMissing.map((item, idx) => (
+                  <div key={idx} style={{ ...styles.anomalyItemCard, borderLeft: '4px solid #D97706', backgroundColor: '#FFFBEB' }}>
+                    <div style={styles.anomalyCardLine1}>
+                      <strong style={styles.assetNameText}>{item.asset_name}</strong>
+                      <span style={styles.roomBadgeMini}>Phòng {item.room_number}</span>
+                    </div>
+                    <div style={styles.anomalyCardLine2}>
+                      <span style={styles.subTextOwner}>👤 Sở hữu: <b style={{color: '#B45309'}}>{item.elder_name || "Tài sản chung của phòng"}</b></span>
+                      <span>⏱️ Báo lúc: <b>{item.inspected_at}</b></span>
+                      {item.note && <p style={styles.noteReportText}>💬 Lý do: {item.note}</p>}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={styles.emptySearchBox}>Không tìm thấy món đồ báo mất nào khớp với từ khóa.</div>
+              )}
+            </div>
           </div>
-        ) : (
-          <div style={styles.emptyState}>Tuyệt vời! Không ghi nhận sự cố thất thoát nào trong các ca trực gần đây.</div>
-        )}
-      </div>
+
+          {/* CỘT PHẢI: DANH SÁCH VẬT TƯ BỊ BỎ SÓT (ĐÃ LỌC) */}
+          <div style={styles.detailCard}>
+            <div style={styles.detailCardHeader}>
+              <div style={styles.boxTitleWithCount}>
+                <span style={{ color: '#475569', fontSize: '15px', fontWeight: '800' }}>🚨 Danh Mục Bỏ Sót Chưa Quét Ảnh</span>
+                <span style={styles.countIndicatorTagGray}>Tìm thấy: {filteredUnchecked.length}/{uncheckedItems.length}</span>
+              </div>
+            </div>
+            <div style={styles.listScrollBox}>
+              {filteredUnchecked.length > 0 ? (
+                filteredUnchecked.map((item, idx) => (
+                  <div key={idx} style={{ ...styles.anomalyItemCard, borderLeft: '4px solid #64748B', backgroundColor: '#F8FAFC' }}>
+                    <div style={styles.anomalyCardLine1}>
+                      <strong style={styles.assetNameText}>{item.asset_name}</strong>
+                      <span style={styles.roomBadgeMuted}>Phòng {item.room_number}</span>
+                    </div>
+                    <p style={styles.subTextOwner}>👤 Sở hữu: <b style={{color: '#475569'}}>{item.elder_name || "Tài sản chung của phòng"}</b></p>
+                  </div>
+                ))
+              ) : (
+                <div style={styles.emptySearchBox}>Không tìm thấy món đồ bỏ sót nào khớp với từ khóa.</div>
+              )}
+            </div>
+          </div>
+
+        </div>
+      )}
     </div>
   );
 };
 
 const styles = {
-  container: { display: 'flex', flexDirection: 'column', gap: '24px' },
-  mainCard: { backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '24px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.02)' },
+  container: { display: 'flex', flexDirection: 'column', gap: '20px' },
+  mainCard: { backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '24px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.01)' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #F1F5F9' },
   titleBox: { display: 'flex', alignItems: 'center', gap: '10px' },
   headerIcon: { fontSize: '20px' },
   cardTitle: { margin: 0, fontSize: '16px', fontWeight: '700', color: '#1E293B' },
   shiftHighlight: { color: '#E67E22', backgroundColor: '#FFF7ED', padding: '4px 10px', borderRadius: '8px', fontSize: '15px' },
   livePulse: { fontSize: '11px', fontWeight: '800', color: '#EF4444', backgroundColor: '#FEE2E2', padding: '4px 12px', borderRadius: '20px', letterSpacing: '0.5px' },
-  
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' },
-  statBox: { backgroundColor: '#F8FAFC', padding: '18px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '6px', border: '1px solid #F1F5F9', boxShadow: '0 1px 2px rgba(0,0,0,0.01)' },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' },
+  statBox: { backgroundColor: '#F8FAFC', padding: '18px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '6px', border: '1px solid #F1F5F9' },
   statLabel: { fontSize: '12px', color: '#64748B', fontWeight: '600' },
   statValue: { fontSize: '26px', fontWeight: '800', color: '#0F172A' },
-  
   progressSection: { backgroundColor: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #F1F5F9' },
   progressInfo: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' },
   progressLabel: { fontSize: '13px', color: '#475569', fontWeight: '600' },
   progressValue: { fontSize: '15px', fontWeight: '700' },
   barBg: { width: '100%', height: '10px', backgroundColor: '#E2E8F0', borderRadius: '6px', overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: '6px', transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)' },
+  emptyState: { textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', padding: '32px', fontSize: '14px' },
+
+  // ──── 🔴 STYLES THANH ĐIỀU TỐC BỘ LỌC ĐA NĂNG PHONG CÁCH SAAS ────
+  filterConsoleCard: { backgroundColor: '#FFFFFF', borderRadius: '14px', padding: '16px 20px', border: '1px solid #E2E8F0', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' },
+  consoleTitle: { fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  filterInputsRow: { display: 'flex', gap: '12px', width: '100%', flexWrap: 'wrap' },
   
-  tableWrapper: { overflowX: 'auto' },
-  table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
-  thRow: { backgroundColor: '#F8FAFC' },
-  th: { padding: '14px 16px', fontSize: '13px', color: '#475569', fontWeight: '700', borderBottom: '2px solid #E2E8F0' },
-  trRow: { borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.2s' },
-  td: { padding: '14px 16px', fontSize: '13px', color: '#334155', verticalAlign: 'middle' },
-  tdDate: { padding: '14px 16px', fontSize: '13px', color: '#0F172A', verticalAlign: 'middle' },
-  alertBadge: { backgroundColor: '#FEE2E2', color: '#991B1B', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', display: 'inline-block' },
-  tagContainer: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
-  itemTag: { display: 'inline-flex', alignItems: 'center', backgroundColor: '#F1F5F9', color: '#1E293B', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', border: '1px solid #E2E8F0' },
-  emptyState: { textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', padding: '32px', fontSize: '14px' }
+  inputControlWrapper: { display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '0 10px', flex: 2, minWidth: '180px', position: 'relative' },
+  selectControlWrapper: { display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', flex: 1, minWidth: '150px' },
+  controlIcon: { fontSize: '14px', marginRight: '8px', color: '#94A3B8' },
+  textInputStyle: { padding: '9px 0', border: 'none', fontSize: '13px', outline: 'none', color: '#1E293B', width: '100%', backgroundColor: 'transparent' },
+  selectInputStyle: { padding: '9px 0', border: 'none', fontSize: '13px', outline: 'none', color: '#1E293B', backgroundColor: 'transparent', width: '100%', cursor: 'pointer' },
+  clearMiniX: { background: '#E2E8F0', border: 'none', borderRadius: '50%', color: '#64748B', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', cursor: 'pointer', position: 'absolute', right: '10px' },
+
+  // GIAO DIỆN LƯỚI HAI CỘT
+  detailGridContainer: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px', width: '100%' },
+  detailCard: { backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '20px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', height: '460px' },
+  detailCardHeader: { paddingBottom: '12px', borderBottom: '1px solid #F1F5F9', marginBottom: '14px', flexShrink: 0 },
+  
+  boxTitleWithCount: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
+  countIndicatorTagOrange: { backgroundColor: '#FEF3C7', color: '#92400E', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px' },
+  countIndicatorTagGray: { backgroundColor: '#F1F5F9', color: '#334155', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px' },
+
+  listScrollBox: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' },
+  anomalyItemCard: { padding: '12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '4px', boxSizing: 'border-box', border: '1px solid #E2E8F0' },
+  anomalyCardLine1: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
+  assetNameText: { fontSize: '14px', color: '#0F172A', fontWeight: '700' },
+  roomBadgeMini: { backgroundColor: '#FEF3C7', color: '#92400E', fontSize: '11px', fontWeight: '800', padding: '2px 8px', borderRadius: '6px' },
+  roomBadgeMuted: { backgroundColor: '#E2E8F0', color: '#334155', fontSize: '11px', fontWeight: '800', padding: '2px 8px', borderRadius: '6px' },
+  anomalyCardLine2: { fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' },
+  noteReportText: { margin: '2px 0 0 0', fontStyle: 'italic', color: '#B45309', backgroundColor: 'rgba(255,255,255,0.7)', padding: '4px 8px', borderRadius: '6px', fontSize: '11.5px', border: '1px dashed #FDE68A' },
+  subTextOwner: { margin: 0, fontSize: '12.5px', color: '#1E293B', fontWeight: '500' },
+
+  emptySearchBox: { textAlign: 'center', padding: '30px 10px', color: '#94A3B8', fontStyle: 'italic', fontSize: '12.5px' },
+  cleanStateGreen: { textAlign: 'center', padding: '24px', color: '#16A34A', backgroundColor: '#DCFCE7', borderRadius: '10px', fontSize: '12.5px', fontWeight: '600', height: 'fit-content' },
+  cleanStateBlue: { textAlign: 'center', padding: '24px', color: '#2563EB', backgroundColor: '#EFF6FF', borderRadius: '10px', fontSize: '12.5px', fontWeight: '600', height: 'fit-content' }
 };

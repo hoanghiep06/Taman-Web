@@ -590,8 +590,11 @@ def get_shift_progress(
                 detail="Bạn chưa thực hiện kiểm kê tài sản nào trong ca này. Vui lòng cập nhật đồ đạc thuộc khu vực của bạn trước khi xem tiến độ tổng."
             )
 
-    # 3. Kéo toàn bộ tài sản đang hoạt động và map với số phòng
-    active_assets = db.query(Asset, Room.room_number).join(Room).filter(Asset.status == "Active").all()
+    # 3. 🔴 ĐÃ SỬA CẨN THẬN: Kéo thêm trường tên NCT bằng cơ chế kết nối ngoài để chống mất mát dữ liệu tài sản chung
+    active_assets = db.query(Asset, Room.room_number, Elder.full_name).\
+        join(Room, Asset.room_id == Room.id).\
+        outerjoin(Elder, Asset.elder_id == Elder.id).\
+        filter(Asset.status == "Active").all()
     
     # 4. Kéo các log kiểm kê mới nhất của ca này
     latest_logs = db.query(InspectionLog).filter(
@@ -608,13 +611,14 @@ def get_shift_progress(
     failed_upload = []      # Trạng thái Đỏ đậm (Lỗi upload cần nộp lại)
     unchecked = []          # Trạng thái Đỏ tươi (Chưa từng đụng vào)
 
-    # 5. Phân loại tài sản
-    for asset, room_number in active_assets:
+    # 5. 🔴 ĐÃ SỬA CẨN THẬN: Cập nhật vòng lặp lấy thêm elder_name từ câu lệnh SQL ở trên
+    for asset, room_number, elder_name in active_assets:
         log = log_dict.get(asset.id)
         asset_info = {
             "asset_id": asset.id,
             "asset_name": asset.asset_name,
-            "room_number": room_number
+            "room_number": room_number,
+            "elder_name": elder_name if elder_name else "Tài sản chung của phòng" # Tự động tạo nhãn nếu tài sản không thuộc cụ nào
         }
 
         if log:

@@ -30,4 +30,13 @@ export const dashboardApi = {
     // Khớp hoàn toàn với @router.get("/audit/login-logs") của bạn
     return axiosClient.get('/admin/audit/login-logs', { params }); 
   },
+  // 1. Lấy danh sách lịch sử tổng hợp các ca trực (Có phân trang & lọc ngày)
+  getHistoricalShifts: (params) => {
+    return axiosClient.get('/admin/shifts/history', { params });
+  },
+  // 2. Trích xuất báo cáo bất thường đích danh của 1 ca trực
+  getShiftAnomalyReport: (params) => {
+    return axiosClient.get('/admin/shifts/missing-report', { params });
+  },
+  
 };

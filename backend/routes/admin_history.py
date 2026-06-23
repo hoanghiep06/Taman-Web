@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional 
 
 from database import get_db
-from models import User, InspectionLog, Shift, ShiftSummary, Asset, Room, LoginLog
+from datetime import date, timedelta, timezone
+from models import User, InspectionLog, Shift, ShiftSummary, Asset, Room, LoginLog, Elder, ShiftSetting
 from schemas import StaffHistoryResponse, DashboardResponse, LoginLogResponse
 from core.dependencies import get_privileged_user
+import pytz
 
+tz_vn = pytz.timezone('Asia/Ho_Chi_Minh')
 
 router = APIRouter(prefix="/admin", tags=["Admin Dashboard & History"])
 
@@ -185,3 +188,171 @@ def get_login_audit_logs(
     logs = query.order_by(desc(LoginLog.login_time)).offset(skip).limit(limit).all()
 
     return logs
+
+
+
+# =========================================================================
+# 4. API: BÁO CÁO BẤT THƯỜNG CỦA MỘT CA ĐÍCH DANH (Đã chuyển từ inspections sang)
+# =========================================================================
+@router.get("/shifts/missing-report")
+def get_shift_missing_anomaly_report(
+    shift_id: Optional[int] = Query(None, description="Tra cứu đích danh bằng ID ca trực"),
+    shift_date: Optional[str] = Query(None, description="Tra cứu theo ngày (Định dạng: YYYY-MM-DD)"),
+    shift_type: Optional[str] = Query(None, description="Tra cứu theo loại ca ('Sang' hoặc 'Toi')"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_privileged_user)
+):
+    """
+    ENDPOINT BÁO CÁO BẤT THƯỜNG CA TRỰC:
+    - Mặc định: Tự động bốc ca trực đang Open hiện tại.
+    - Có tham số: Tra cứu ngược lịch sử bất kỳ ca trực nào trong quá khứ.
+    """
+    from models import Elder, ShiftSetting
+    
+    shift = None
+    if shift_id:
+        shift = db.query(Shift).filter(Shift.id == shift_id).first()
+    elif shift_date and shift_type:
+        try:
+            parsed_date = date.fromisoformat(shift_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Định dạng ngày không hợp lệ. Vui lòng sử youthful YYYY-MM-DD")
+        shift = db.query(Shift).filter(Shift.shift_date == parsed_date, Shift.shift_type == shift_type).first()
+    else:
+        shift = db.query(Shift).filter(Shift.status == "Open").order_by(desc(Shift.created_at)).first()
+        if not shift:
+            shift = db.query(Shift).order_by(desc(Shift.created_at)).first()
+
+    if not shift:
+        raise HTTPException(status_code=404, detail="Hệ thống chưa ghi nhận ca trực nào khớp với điều kiện.")
+
+    active_assets = db.query(Asset, Room.room_number, Elder.full_name).\
+        join(Room, Asset.room_id == Room.id).\
+        outerjoin(Elder, Asset.elder_id == Elder.id).\
+        filter(Asset.status == "Active").all()
+
+    latest_logs = db.query(InspectionLog, User.full_name).\
+        join(User, InspectionLog.user_id == User.id).\
+        filter(InspectionLog.shift_id == shift.id, InspectionLog.is_latest == True).all()
+
+    log_map = {log.asset_id: (log, user_name) for log, user_name in latest_logs}
+
+    anomaly_items = []
+    checked_count = 0
+    reported_missing_count = 0
+    unchecked_count = 0
+    others_count = 0
+
+    for asset, room_number, elder_name in active_assets:
+        log_data = log_map.get(asset.id)
+        asset_base_info = {
+            "asset_id": asset.id,
+            "asset_name": asset.asset_name,
+            "room_number": room_number,
+            "elder_name": elder_name if elder_name else "Tài sản chung của phòng",
+        }
+
+        if log_data:
+            log, operator_name = log_data
+            log_time_str = log.created_at.astimezone(tz_vn).strftime("%H:%M:%S") if log.created_at else None
+
+            if log.status == "Xanh":
+                checked_count += 1
+            elif log.status == "Vang":
+                reported_missing_count += 1
+                anomaly_items.append({
+                    **asset_base_info,
+                    "anomaly_type": "Báo Mất (Vắng)",
+                    "note": log.note if log.note else "Không có ghi chú lý do.",
+                    "reporter_name": operator_name,
+                    "inspected_at": log_time_str
+                })
+            else:
+                others_count += 1
+        else:
+            unchecked_count += 1
+            anomaly_items.append({
+                **asset_base_info,
+                "anomaly_type": "Bỏ Sót (Chưa kiểm kê)",
+                "note": "Nhân viên đi tuần chưa quét qua món đồ này.",
+                "reporter_name": "N/A",
+                "inspected_at": None
+            })
+
+    return {
+        "shift_info": {
+            "shift_id": shift.id,
+            "shift_date": str(shift.shift_date),
+            "shift_type": shift.shift_type,
+            "status": shift.status
+        },
+        "statistics": {
+            "total_assets": len(active_assets),
+            "checked_count": checked_count,
+            "reported_missing_count": reported_missing_count,
+            "unchecked_count": unchecked_count,
+            "others_pending_count": others_count
+        },
+        "anomaly_items": anomaly_items
+    }
+
+
+# =========================================================================
+# 5. API: TRA CỨU LỊCH SỬ TẤT CẢ CÁC CA TRỰC ĐÃ CHỐT SỔ (PHÂN TRANG CÔNG NGHIỆP)
+# =========================================================================
+@router.get("/shifts/history")
+def get_historical_shifts_report(
+    page: int = Query(1, ge=1),
+    size: int = Query(10, ge=1, le=50),
+    target_date: Optional[str] = Query(None, description="Lọc theo ngày (YYYY-MM-DD)"),
+    shift_type: Optional[str] = Query(None, description="Lọc theo phiên: 'Sang' hoặc 'Toi'"),  # NEW
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_privileged_user)
+):
+    query = db.query(ShiftSummary, Shift).join(Shift, ShiftSummary.shift_id == Shift.id)
+ 
+    if target_date:
+        try:
+            parsed_date = date.fromisoformat(target_date)
+            query = query.filter(Shift.shift_date == parsed_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Định dạng ngày không đúng YYYY-MM-DD")
+ 
+    # NEW: filter theo phiên ca
+    if shift_type and shift_type in ("Sang", "Toi"):
+        query = query.filter(Shift.shift_type == shift_type)
+ 
+    query = query.order_by(desc(ShiftSummary.created_at))
+ 
+    total_records = query.count()
+    offset = (page - 1) * size
+    recent_summaries = query.offset(offset).limit(size).all()
+ 
+    shifts_history_list = []
+    for summary, shift in recent_summaries:
+        shifts_history_list.append({
+            "shift_id": shift.id,
+            "shift_date": str(shift.shift_date),
+            "shift_type": shift.shift_type,
+            "status": shift.status,
+            # CHANGE: Trả về datetime đầy đủ thay vì chỉ format string 
+            # FE sẽ tự slice [11:16] để lấy HH:MM
+            "created_at": summary.created_at.astimezone(tz_vn).strftime("%Y-%m-%d %H:%M:%S") if summary.created_at else None,
+            "statistics": {
+                "total_assets": summary.total_assets,
+                "checked_count": summary.inspected_count,
+                "reported_missing_count": summary.lost_count,
+                "unchecked_count": summary.missing_count,
+                "is_email_sent": summary.is_email_sent,   # đã có sẵn, FE dùng được ngay
+            }
+        })
+ 
+    return {
+        "pagination": {
+            "total_records": total_records,
+            "current_page": page,
+            "page_size": size,
+            "total_pages": (total_records + size - 1) // size
+        },
+        "shifts_data": shifts_history_list
+    }
