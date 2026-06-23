@@ -10,15 +10,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends postgresql-clie
 
 WORKDIR /app
 
-# # Tách riêng phần cài đặt dependencies để tận dụng Docker Layer Cache tối đa
-# COPY requirements.txt .
-# RUN pip install --no-cache-dir -r requirements.txt
+# Tách riêng phần cài đặt dependencies để tận dụng Docker Layer Cache tối đa
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# # Sao chép toàn bộ mã nguồn vào container
-# COPY . .
+# Sao chép toàn bộ mã nguồn vào container
+COPY . .
 
-# # Khởi chạy Uvicorn ở chế độ Production (Xóa bỏ hoàn toàn cờ --reload gây tốn RAM)
-# CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]
+# Khởi chạy Uvicorn ở chế độ Production (Xóa bỏ hoàn toàn cờ --reload gây tốn RAM)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]
 
 
 # RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client \
