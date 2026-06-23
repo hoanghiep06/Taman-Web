@@ -40,23 +40,25 @@ export const AssetItemCard = ({ asset, isSelected, uploadStatus, onToggleSelect,
           {isSelected && <span style={styles.checkMark}>✓</span>}
         </div>
 
+        {/* KHỐI CHỮ CHỐNG KHUẤT/MẤT TEXT KHI TÊN DÀI */}
         <div style={styles.textDetails}>
           <span style={styles.assetName}>{asset.asset_name}</span>
           <div style={styles.metaInfoRow}>
             <span style={styles.idSubtext}>Mã: #{asset.asset_id}</span>
             {asset.note && <span style={styles.noteSubtext}>• Ghi chú: {asset.note}</span>}
           </div>
-          <div style={{marginTop: '6px'}}>{renderStatusBadge()}</div>
+          <div style={{marginTop: '5px'}}>{renderStatusBadge()}</div>
         </div>
       </div>
 
+      {/* CỐ ĐỊNH CỘT THAO TÁC KHÔNG CHO CO GIẬT HÌNH */}
       <div style={styles.actionRightBlock}>
         {canViewImage && asset.log_id && (
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenPreview(asset.log_id, asset.asset_name); }}
             style={styles.previewBtn}
           >
-            🖼️ Xem ảnh
+            🖼️ Ảnh
           </button>
         )}
 
@@ -65,7 +67,7 @@ export const AssetItemCard = ({ asset, isSelected, uploadStatus, onToggleSelect,
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenMissing(asset.asset_id); }}
             style={isMissing ? styles.actionBtnUpdate : styles.actionBtn}
           >
-            {isMissing ? 'Sửa báo mất' : 'Báo mất'}
+            {isMissing ? 'Sửa mất' : 'Báo mất'}
           </button>
         )}
       </div>
@@ -74,23 +76,27 @@ export const AssetItemCard = ({ asset, isSelected, uploadStatus, onToggleSelect,
 };
 
 const styles = {
-  assetItemCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px', borderRadius: theme.radius.lg, border: '1.5px solid', boxShadow: theme.shadow.sm, transition: 'all 0.15s ease', position: 'relative' },
-  cardMainInfo: { display: 'flex', alignItems: 'center', gap: '12px', flex: 1 },
+  assetItemCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: theme.radius.lg, border: '1.5px solid', boxShadow: theme.shadow.sm, transition: 'all 0.15s ease', position: 'relative', gap: '8px' },
+  
+  cardMainInfo: { display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }, // minWidth: 0 bắt buộc để flex-child co lại dưới kích thước content
   checkbox: { width: '22px', height: '22px', borderRadius: theme.radius.sm, border: '2px solid', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s ease' },
   checkMark: { color: '#FFF', fontSize: '13px', fontWeight: 'bold' },
-  textDetails: { display: 'flex', flexDirection: 'column', gap: '2px' },
-  assetName: { fontSize: '15px', fontWeight: '700', color: theme.color.ink },
+  
+  textDetails: { display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 },
+  assetName: { fontSize: '15px', fontWeight: '700', color: theme.color.ink, wordBreak: 'break-word', overflowWrap: 'break-word' }, // Ép text tự ngắt dòng
+  
   metaInfoRow: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' },
   idSubtext: { fontSize: '11px', color: theme.color.inkMuted, fontWeight: '500' },
-  noteSubtext: { fontSize: '11px', color: theme.color.warningDark, fontWeight: '500' },
+  noteSubtext: { fontSize: '11px', color: theme.color.warningDark, fontWeight: '500', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   badge: { fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: theme.radius.sm, display: 'inline-block' },
   badgeUnchecked: { backgroundColor: theme.color.surfaceMuted, color: theme.color.inkTertiary },
   badgeProcessing: { backgroundColor: theme.color.infoTint, color: theme.color.infoDark },
   badgeSuccess: { backgroundColor: theme.color.successTint, color: theme.color.successDark },
   badgeMissing: { backgroundColor: theme.color.warningTint, color: theme.color.warningDark },
   badgeError: { backgroundColor: theme.color.dangerTint, color: theme.color.dangerDark },
-  actionRightBlock: { display: 'flex', gap: '6px', alignItems: 'center', zIndex: 10 },
-  actionBtn: { padding: '6px 12px', backgroundColor: theme.color.surface, color: theme.color.danger, border: `1px solid ${theme.color.dangerTint}`, borderRadius: theme.radius.sm, fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
-  actionBtnUpdate: { padding: '6px 12px', backgroundColor: theme.color.surface, color: theme.color.warningDark, border: '1px solid #FDE68A', borderRadius: theme.radius.sm, fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
-  previewBtn: { padding: '6px 12px', backgroundColor: theme.color.primaryTint, color: theme.color.primaryDark, border: '1px solid #BAE6FD', borderRadius: theme.radius.sm, fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
+  
+  actionRightBlock: { display: 'flex', gap: '6px', alignItems: 'center', zIndex: 10, flexShrink: 0 },
+  actionBtn: { padding: '6px 10px', backgroundColor: theme.color.surface, color: theme.color.danger, border: `1px solid ${theme.color.dangerTint}`, borderRadius: theme.radius.sm, fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
+  actionBtnUpdate: { padding: '6px 10px', backgroundColor: theme.color.surface, color: theme.color.warningDark, border: '1px solid #FDE68A', borderRadius: theme.radius.sm, fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
+  previewBtn: { padding: '6px 10px', backgroundColor: theme.color.primaryTint, color: theme.color.primaryDark, border: '1px solid #BAE6FD', borderRadius: theme.radius.sm, fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
 };
