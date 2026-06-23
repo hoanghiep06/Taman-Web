@@ -72,7 +72,7 @@ export const PatrolSessionPage = () => {
     uploadStatus[a.asset_id] === 'success' || uploadStatus[a.asset_id] === 'missing'
   ).length;
   
-  const isFinished = safeAssets.length > 0 && completedCount === safeAssets.length;
+  const isFinished = safeAssets.length === 0 || completedCount === safeAssets.length;
   
   const currentRoomIdx = rooms.findIndex(r => String(r.room_number) === String(roomNumber));
   const nextRoom = currentRoomIdx !== -1 ? rooms[currentRoomIdx + 1] : undefined;

@@ -2,7 +2,7 @@ import React from 'react';
 import { theme } from '../utils/theme';
 
 export const ProgressSection = ({ completedCount, totalCount, onNextRoom, nextRoomName, isFinished }) => {
-  const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 100;
 
   return (
     <div style={styles.progressSection}>

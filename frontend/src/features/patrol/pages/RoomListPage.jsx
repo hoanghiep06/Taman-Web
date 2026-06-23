@@ -44,9 +44,9 @@ export const RoomListPage = () => {
           const inspected = room.inspected_count || 0;
           
           // Tính toán phần trăm để gán chiều cao cho hiệu ứng ngập nước (Tối đa 100%)
-          const percent = total > 0 ? Math.min(Math.floor((inspected / total) * 100), 100) : 0;
+          const percent = total > 0 ? Math.min(Math.floor((inspected / total) * 100), 100) : 100;
           
-          const isFinished = total > 0 && inspected >= total;
+          const isFinished = total === 0 || inspected >= total;
           const isEmpty = total === 0;
 
           // PHỐI MÀU NỀN NƯỚC: Hoàn tất -> Xanh lá mướt mắt | Chưa xong -> Xanh dương mờ dịu nhẹ
