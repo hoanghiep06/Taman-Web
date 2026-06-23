@@ -11,6 +11,8 @@ google-auth
 google-api-python-client
 pandas
 
+pillow-heif
+
 openpyxl
 python-dotenv
 pytz

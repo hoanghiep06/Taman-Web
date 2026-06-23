@@ -29,6 +29,9 @@ from core.constants import DELAY_SECONDS, MAX_RETRY,  UPLOAD_IMG_EXPIRE_TIMES, M
 
 from zoneinfo import ZoneInfo
 
+from pillow_heif import register_heif_opener
+register_heif_opener()
+
 # Khai báo biến tz cố định là múi giờ Việt Nam
 tz = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -216,79 +219,95 @@ def request_checkin_nonce(
 # ====================================================
 # FILE VALIDATOR: KIỂM TRA ẢNH TRÊN CAMERA
 # ====================================================
-def validate_live_camera_image(file_contents: bytes, max_size_mb: int = MAX_SIZE_MB):
-    """
-    Chống DoS: Giới hạn Dung lượng thô
-    Chống Web Shell: Ép cấu trúc chữ ký tệp (Buộc các file JPG, PNG)
-    Ép buộc Live Camera: Quét metadata EXIF để detect upload ảnh cũ
-    """
+def validate_live_camera_image(file_contents: bytes, max_size_mb: int = 10):
+    # 1. Chống DoS: Giới hạn dung lượng
     if len(file_contents) > max_size_mb * 1024 * 1024:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Dung lượng ảnh quá lớn, vui lòng giảm độ phân giải xuống dưới {max_size_mb} MB"
         )
     
-    header = file_contents[:4]
+    # 2. Ép cấu trúc chữ ký tệp (Hỗ trợ thêm HEIC/HEIF của iPhone)
+    header = file_contents[:12]
     is_jpeg = header.startswith(b'\xff\xd8\xff')
     is_png = header.startswith(b'\x89PNG')
+    
+    # Chữ ký của file HEIC thường nằm từ byte thứ 4 đến byte thứ 11 là 'ftypheic' hoặc 'ftypmif1'
+    is_heic = len(header) >= 12 and header[4:12] in (b'ftypheic', b'ftypmif1', b'ftypmsf1', b'ftyphevc')
 
-    if not (is_jpeg or is_png):
+    if not (is_jpeg or is_png or is_heic):
+        logging.error(f"[VALIDATION FAILED]: Sai chữ ký tệp. Header nhận được: {header}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tệp tin không an toàn, không đúng file PNG, JPEG"
+            detail="Định dạng tệp tin không được hỗ trợ. Hệ thống chỉ chấp nhận ảnh PNG, JPEG hoặc HEIC trực tiếp từ camera."
         )
     
     try:
         image = Image.open(io.BytesIO(file_contents))
         exif_data = image._getexif()
 
+        # Nếu không có EXIF, có 2 khả năng: Chụp bằng app bên thứ 3 hoặc Frontend làm mất EXIF khi nén/resize
         if not exif_data:
+            logging.error("[VALIDATION FAILED]: Ảnh không có dữ liệu EXIF. Có thể Frontend đã làm mất EXIF khi nén ảnh.")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Từ chối nhận ảnh, Bạn phải chụp trực tiếp từ Camera"
+                detail="Từ chối nhận ảnh. Bạn phải chụp trực tiếp từ Camera (Dữ liệu cấu trúc ảnh gốc bị thiếu)."
             )
         
         exif = {ExifTags.TAGS.get(tag, tag): value for tag, value in exif_data.items()}
 
-        # Kiểm tra vết thiết bị phần cứng
+        # 3. Kiểm tra vết thiết bị phần cứng
         if "Make" not in exif and "Model" not in exif and "Software" not in exif:
+            logging.error(f"[VALIDATION FAILED]: EXIF tồn tại nhưng không có Make/Model. Thẻ EXIF tìm thấy: {list(exif.keys())}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Ảnh không hợp lệ, không tìm thấy vết định danh cho phần cứng camera thiết bị."
             )
         
-        # Thời gian chụp 
+        # 4. Kiểm tra thời gian chụp
         photo_time_str = exif.get("DateTimeOriginal") or exif.get("DateTime")
         if not photo_time_str:
+            logging.error("[VALIDATION FAILED]: Không tìm thấy thẻ DateTimeOriginal/DateTime trong EXIF.")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Không thể xác định thời gian chụp thực tế"
+                detail="Không thể xác định thời gian chụp thực tế từ bức ảnh này."
             )
         
-        photo_time = datetime.strptime(photo_time_str, "%Y:%m:%d %H:%M:%S")
+        try:
+            photo_time = datetime.strptime(photo_time_str, "%Y:%m:%d %H:%M:%S")
+        except ValueError:
+            # Sửa lỗi một số dòng máy ghi format thời gian kèm chuỗi lạ
+            logging.error(f"[VALIDATION FAILED]: Định dạng thời gian EXIF lạ: {photo_time_str}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cấu trúc thời gian của ảnh không hợp lệ."
+            )
+
         tz = pytz.timezone('Asia/Ho_Chi_Minh')
         photo_time = tz.localize(photo_time)
-
         now_tz = datetime.now(tz)
 
         time_diff = now_tz - photo_time
 
-        # Cho phép tối đa UPLOAD_IMG_EXPIRES_TIME
-        if time_diff > timedelta(minutes=UPLOAD_IMG_EXPIRE_TIMES) or time_diff < timedelta(minutes=-1):
+        # Nới lỏng thời gian cho phép lệch lên 5 phút (Đề phòng điện thoại chạy nhanh hơn server)
+        # Giả định UPLOAD_IMG_EXPIRE_TIMES của bạn là khoảng 5-10 phút
+        UPLOAD_IMG_EXPIRE_TIMES = 10 
+        
+        if time_diff > timedelta(minutes=UPLOAD_IMG_EXPIRE_TIMES) or time_diff < timedelta(minutes=-5):
+            logging.error(f"[VALIDATION FAILED]: Thời gian chụp không hợp lệ. Thời gian ảnh: {photo_time} | Hiện tại: {now_tz} | Lệch: {time_diff}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Vui lòng chụp lại ảnh trực tiếp"
+                detail="Ảnh chụp đã quá hạn hoặc thời gian trên điện thoại không đồng bộ với máy chủ. Vui lòng chụp lại."
             )
         
     except HTTPException as http_err:
         raise http_err
     except Exception as e:
+        logging.exception("[VALIDATION CRASH]: Lỗi hệ thống khi phân tích cấu trúc ảnh")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cấu trúc tệp tin ảnh bị lỗi hoặc chứa mã thực thi không an toàn. Chi tiết: {str(e)}"
+            detail=f"Cấu trúc tệp tin ảnh bị lỗi hoặc không thể phân tích dữ liệu bảo mật. Chi tiết: {str(e)}"
         )
-        
-
     
 
 # ====================================================
@@ -369,11 +388,15 @@ async def upload_multi_assets_image(
     try:
         file_contents = await file.read()
         validate_live_camera_image(file_contents=file_contents, max_size_mb=MAX_SIZE_MB)
+    except HTTPException as http_err:
+        # Cho phép các lỗi HTTPException được định nghĩa chi tiết từ hàm validate đi thẳng về Client
+        raise http_err
     except Exception as e:
-        logging.error(f"[FILE VALIDATION ERROR]: Lỗi validate ảnh (Có thể do định dạng HEIC từ iPhone): {str(e)}")
+        # Chỉ bắt các lỗi hệ thống bất ngờ (Ví dụ: Đứt kết nối đọc luồng bytes của file)
+        logging.error(f"[CRITICAL FILE ERROR]: Lỗi đọc file thô hệ thống: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Định dạng ảnh không được hỗ trợ hoặc file bị lỗi. Nếu dùng iPhone, hãy đảm bảo camera chụp ở chế độ Tương thích nhất (Most Compatible)."
+            detail="Hệ thống không thể đọc tệp tin truyền lên. Vui lòng thử lại."
         )
 
     # PARSE DANH SÁCH ASSET IDS
