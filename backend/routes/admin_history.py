@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+import random 
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional 
-
+from jose import jwt
 from database import get_db
-from datetime import date, timedelta, timezone
+from datetime import date, timedelta, timezone, datetime
 from models import User, InspectionLog, Shift, ShiftSummary, Asset, Room, LoginLog, Elder, ShiftSetting
 from schemas import StaffHistoryResponse, DashboardResponse, LoginLogResponse
 from core.dependencies import get_privileged_user
+from core.config import settings
+from core.security import ALGORITHM
 import pytz
 
 tz_vn = pytz.timezone('Asia/Ho_Chi_Minh')
@@ -355,4 +358,132 @@ def get_historical_shifts_report(
             "total_pages": (total_records + size - 1) // size
         },
         "shifts_data": shifts_history_list
+    }
+
+
+
+# =========================================================================
+# 6. API: RANDOM AUDIT HÌNH ẢNH KIỂM KÊ TRONG CA (DÀNH CHO MANAGER)
+# =========================================================================
+@router.get("/shifts/random-audit")
+def get_random_inspection_images_for_audit(
+    request: Request,
+    # 🌟 ĐIỂM SỬA 1: Đổi từ mặc định = 5 thành Optional và mặc định = None
+    limit: Optional[int] = Query(None, ge=1, description="Số lượng ảnh muốn lấy. Nếu trống, mặc định lấy TOÀN BỘ (MAX) ảnh của ca"),
+    shift_id: Optional[int] = Query(None, description="ID ca trực muốn kiểm tra"),
+    shift_date: Optional[str] = Query(None, description="Ngày ca trực muốn kiểm tra (YYYY-MM-DD)"),
+    shift_type: Optional[str] = Query(None, description="Loại ca cần kiểm tra ('Sang' hoặc 'Toi')"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_privileged_user)
+):
+    """
+    ENDPOINT KIỂM TRA NGẪU NHIÊN HÌNH ẢNH (RANDOM SAMPLING AUDIT):
+    - 🌟 ĐÃ CẢI TIẾN: Nếu không truyền 'limit', hệ thống tự động bốc TOÀN BỘ ảnh (Max) của ca đó.
+    - Giải quyết triệt để bài toán 1 ảnh chứa nhiều vật phẩm thông qua gom nhóm dữ liệu.
+    """
+
+    # 1. LOGIC ĐỊNH VỊ PHIÊN CA TRỰC
+    shift = None
+    if shift_id:
+        shift = db.query(Shift).filter(Shift.id == shift_id).first()
+    elif shift_date and shift_type:
+        try:
+            parsed_date = date.fromisoformat(shift_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Định dạng ngày không hợp lệ (YYYY-MM-DD)")
+        shift = db.query(Shift).filter(Shift.shift_date == parsed_date, Shift.shift_type == shift_type).first()
+    else:
+        shift = db.query(Shift).filter(Shift.status == "Open").order_by(desc(Shift.created_at)).first()
+        if not shift:
+            shift = db.query(Shift).order_by(desc(Shift.created_at)).first()
+
+    if not shift:
+        raise HTTPException(status_code=404, detail="Hệ thống trống, chưa ghi nhận ca trực nào.")
+
+    # 2. TRUY VẤN TOÀN BỘ CÁC LOGS ĐÃ KIỂM KÊ THÀNH CÔNG (XANH) CỦA CA ĐÓ
+    records = db.query(
+        InspectionLog, Asset.asset_name, Room.room_number, Elder.full_name, User.full_name
+    ).join(Asset, InspectionLog.asset_id == Asset.id)\
+     .join(Room, Asset.room_id == Room.id)\
+     .outerjoin(Elder, Asset.elder_id == Elder.id)\
+     .join(User, InspectionLog.user_id == User.id)\
+     .filter(
+         InspectionLog.shift_id == shift.id,
+         InspectionLog.status == "Xanh",
+         InspectionLog.image_url.isnot(None),
+         InspectionLog.is_latest == True
+     ).all()
+
+    if not records:
+        return {
+            "shift_info": {
+                "shift_id": shift.id,
+                "shift_date": str(shift.shift_date),
+                "shift_type": shift.shift_type
+            },
+            "total_unique_images_found": 0,
+            "audit_samples": []
+        }
+
+    # 3. THUẬT TOÁN GOM NHÓM THEO IMAGE_URL (1 ẢNH - NHIỀU ĐỒ VẬT)
+    image_groups = {}
+    for log, asset_name, room_number, elder_name, operator_name in records:
+        img_url = log.image_url
+        if img_url not in image_groups:
+            image_groups[img_url] = {
+                "room_number": room_number,
+                "operator_name": operator_name,
+                "inspected_at": log.created_at.astimezone(tz_vn).strftime("%H:%M:%S") if log.created_at else None,
+                "permanent_drive_url": img_url,
+                "associated_log_ids": [],
+                "items": []
+            }
+        image_groups[img_url]["associated_log_ids"].append(log.id)
+        image_groups[img_url]["items"].append({
+            "asset_name": asset_name,
+            "elder_name": elder_name if elder_name else "Tài sản chung"
+        })
+
+    unique_images_list = list(image_groups.values())
+    total_unique_images = len(unique_images_list)
+
+    # 🌟 ĐIỂM SỬA 2: XỬ LÝ LOGIC MẶC ĐỊNH MÙA MAX
+    # Nếu client không truyền tham số limit lên, mặc định gán limit = tổng số ảnh hiện có (Max)
+    if limit is None:
+        limit = total_unique_images
+
+    # Giới hạn số lượng random tối đa bằng chính dung lượng ảnh thực tế
+    actual_limit = min(limit, total_unique_images)
+
+    # Thực hiện thuật toán bốc thăm ngẫu nhiên
+    sampled_audits = random.sample(unique_images_list, actual_limit) if actual_limit > 0 else []
+
+    # 5. SINH LINK BẢO MẬT XEM TẠM THỜI 15 PHÚT
+    base_url = str(request.base_url).rstrip("/")
+    secret_key = getattr(settings, "JWT_SECRET", getattr(settings, "SECRET_KEY", "TamAn_Fallback_Secret_Key"))
+    from jose import jwt
+
+    for sample in sampled_audits:
+        primary_log_id = sample["associated_log_ids"][0]
+        expiration_timestamp = int((datetime.now(timezone.utc) + timedelta(minutes=15)).timestamp())
+        
+        token_payload = {
+            "log_id": primary_log_id,
+            "exp": expiration_timestamp
+        }
+        
+        signed_image_token = jwt.encode(token_payload, secret_key, algorithm=ALGORITHM)
+        sample["temporary_shareable_url"] = f"{base_url}/api/inspections/public-view/{signed_image_token}"
+
+    return {
+        "shift_info": {
+            "shift_id": shift.id,
+            "shift_date": str(shift.shift_date),
+            "shift_type": shift.shift_type,
+            "status": shift.status
+        },
+        "total_unique_images_found": total_unique_images,
+        "requested_limit": limit if limit != total_unique_images else "Max (All)",
+        "actual_sampled_count": actual_limit,
+        "audit_samples": sampled_audits
     }

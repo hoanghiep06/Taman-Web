@@ -38,5 +38,7 @@ export const dashboardApi = {
   getShiftAnomalyReport: (params) => {
     return axiosClient.get('/admin/shifts/missing-report', { params });
   },
-  
+  getRandomAudit: (params) => {
+    return axiosClient.get('/admin/shifts/random-audit', { params });
+  },
 };

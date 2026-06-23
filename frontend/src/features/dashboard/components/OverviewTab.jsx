@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UI_COLORS } from '../../../utils/constants';
 
-export const OverviewTab = ({ dashboardData, shiftProgressLive }) => {
+export const OverviewTab = ({ dashboardData, shiftProgressLive, onOpenAudit }) => {
   // ──── 🔴 KHỞI TẠO CÁC BỘ LỌC ĐA NĂNG LIVE ────
   const [searchAsset, setSearchAsset] = useState('');
   const [searchElder, setSearchElder] = useState('');
@@ -11,11 +11,9 @@ export const OverviewTab = ({ dashboardData, shiftProgressLive }) => {
 
   const { current_shift } = dashboardData;
 
-  // Trích xuất mảng thô từ cổng tiến độ ngầm ngắt giờ
   const reportedMissingItems = shiftProgressLive?.reported_missing || [];
   const uncheckedItems = shiftProgressLive?.unchecked || [];
 
-  // ⚙️ TỰ ĐỘNG GOM DANH SÁCH SỐ PHÒNG ĐANG CÓ LỖI THỰC TẾ (Để làm danh mục Option chọn nhanh)
   const dynamicRoomsWithAnomalies = Array.from(
     new Set([
       ...reportedMissingItems.map((item) => String(item.room_number)),
@@ -23,7 +21,6 @@ export const OverviewTab = ({ dashboardData, shiftProgressLive }) => {
     ])
   ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-  // 🔍 THUẬT TOÁN LỌC LIÊN HOÀN (ĐỐI CHIẾU 3 ĐIỀU KIỆN SONG SONG)
   const executeFilter = (item) => {
     const matchAsset = item.asset_name.toLowerCase().includes(searchAsset.toLowerCase().trim());
     const matchElder = (item.elder_name || '').toLowerCase().includes(searchElder.toLowerCase().trim());
@@ -46,8 +43,19 @@ export const OverviewTab = ({ dashboardData, shiftProgressLive }) => {
               Ca Trực Hiện Tại: <span style={styles.shiftHighlight}>{current_shift.shift_type || 'Chưa mở ca'}</span>
             </h3>
           </div>
+          
+          {/* CỤM CHỈ BÁO REALTIME TÍCH HỢP NÚT AUDIT NGẪU NHIÊN CỦA MANAGER */}
           {current_shift.status === "In Progress" && (
-            <span style={styles.livePulse}>● ĐANG DIỄN RA</span>
+            <div style={styles.headerRightActionsBox}>
+              <button 
+                onClick={() => onOpenAudit && onOpenAudit()} 
+                style={styles.auditTriggerBtn}
+                title="Bốc mẫu ngẫu nhiên ảnh nhân viên chụp để kiểm tra chống gian lận"
+              >
+                🕵️‍♂️ Thanh Tra Ảnh Ngẫu Nhiên
+              </button>
+              <span style={styles.livePulse}>● ĐANG DIỄN RA</span>
+            </div>
           )}
         </div>
         
@@ -91,13 +99,12 @@ export const OverviewTab = ({ dashboardData, shiftProgressLive }) => {
         )}
       </div>
 
-      {/* ──── 🔴 PHÂN HỆ MỚI: THANH ĐIỀU TỐC BỘ LỌC ĐA NĂNG ĐỒNG BỘ ──── */}
+      {/* THANH ĐIỀU TỐC BỘ LỌC ĐA NĂNG PHONG CÁCH SAAS */}
       {current_shift.status === "In Progress" && (
         <div style={styles.filterConsoleCard}>
           <div style={styles.consoleTitle}>🔍 Bộ Lọc Rà Soát Sự Cố Nhanh</div>
           
           <div style={styles.filterInputsRow}>
-            {/* Bộ lọc 1: Loại thiết bị / Tên đồ vật */}
             <div style={styles.inputControlWrapper}>
               <span style={styles.controlIcon}>📦</span>
               <input 
@@ -110,7 +117,6 @@ export const OverviewTab = ({ dashboardData, shiftProgressLive }) => {
               {searchAsset && <button onClick={() => setSearchAsset('')} style={styles.clearMiniX}>✕</button>}
             </div>
 
-            {/* Bộ lọc 2: Tên cụ già */}
             <div style={styles.inputControlWrapper}>
               <span style={styles.controlIcon}>👵</span>
               <input 
@@ -123,7 +129,6 @@ export const OverviewTab = ({ dashboardData, shiftProgressLive }) => {
               {searchElder && <button onClick={() => setSearchElder('')} style={styles.clearMiniX}>✕</button>}
             </div>
 
-            {/* Bộ lọc 3: Dropdown chọn phòng động */}
             <div style={styles.selectControlWrapper}>
               <span style={styles.controlIcon}>📍</span>
               <select 
@@ -178,7 +183,7 @@ export const OverviewTab = ({ dashboardData, shiftProgressLive }) => {
           <div style={styles.detailCard}>
             <div style={styles.detailCardHeader}>
               <div style={styles.boxTitleWithCount}>
-                <span style={{ color: '#475569', fontSize: '15px', fontWeight: '800' }}>🚨 Danh Mục Bỏ Sót Chưa Quét Ảnh</span>
+                <span style={{ color: '#475569', fontSize: '15px', fontWeight: '800' }}>🚨 Danh Mục Bỏ Sót Chưa Từng Quét Ảnh</span>
                 <span style={styles.countIndicatorTagGray}>Tìm thấy: {filteredUnchecked.length}/{uncheckedItems.length}</span>
               </div>
             </div>
@@ -213,7 +218,12 @@ const styles = {
   headerIcon: { fontSize: '20px' },
   cardTitle: { margin: 0, fontSize: '16px', fontWeight: '700', color: '#1E293B' },
   shiftHighlight: { color: '#E67E22', backgroundColor: '#FFF7ED', padding: '4px 10px', borderRadius: '8px', fontSize: '15px' },
-  livePulse: { fontSize: '11px', fontWeight: '800', color: '#EF4444', backgroundColor: '#FEE2E2', padding: '4px 12px', borderRadius: '20px', letterSpacing: '0.5px' },
+  
+  // NÚT TRÍCH XUẤT ẢNH QUẢN TRÝ
+  headerRightActionsBox: { display: 'flex', alignItems: 'center', gap: '12px' },
+  auditTriggerBtn: { backgroundColor: '#0F172A', color: '#FFFFFF', border: 'none', padding: '6px 14px', borderRadius: '8px', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', transition: 'all 0.15s ease' },
+  livePulse: { fontSize: '11px', fontWeight: '800', color: '#EF4444', backgroundColor: '#FEE2E2', padding: '6px 12px', borderRadius: '20px', letterSpacing: '0.5px' },
+  
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' },
   statBox: { backgroundColor: '#F8FAFC', padding: '18px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '6px', border: '1px solid #F1F5F9' },
   statLabel: { fontSize: '12px', color: '#64748B', fontWeight: '600' },
@@ -226,11 +236,9 @@ const styles = {
   barFill: { height: '100%', borderRadius: '6px', transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)' },
   emptyState: { textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', padding: '32px', fontSize: '14px' },
 
-  // ──── 🔴 STYLES THANH ĐIỀU TỐC BỘ LỌC ĐA NĂNG PHONG CÁCH SAAS ────
   filterConsoleCard: { backgroundColor: '#FFFFFF', borderRadius: '14px', padding: '16px 20px', border: '1px solid #E2E8F0', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' },
   consoleTitle: { fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' },
   filterInputsRow: { display: 'flex', gap: '12px', width: '100%', flexWrap: 'wrap' },
-  
   inputControlWrapper: { display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '0 10px', flex: 2, minWidth: '180px', position: 'relative' },
   selectControlWrapper: { display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', flex: 1, minWidth: '150px' },
   controlIcon: { fontSize: '14px', marginRight: '8px', color: '#94A3B8' },
@@ -238,15 +246,12 @@ const styles = {
   selectInputStyle: { padding: '9px 0', border: 'none', fontSize: '13px', outline: 'none', color: '#1E293B', backgroundColor: 'transparent', width: '100%', cursor: 'pointer' },
   clearMiniX: { background: '#E2E8F0', border: 'none', borderRadius: '50%', color: '#64748B', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', cursor: 'pointer', position: 'absolute', right: '10px' },
 
-  // GIAO DIỆN LƯỚI HAI CỘT
   detailGridContainer: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px', width: '100%' },
   detailCard: { backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '20px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', height: '460px' },
   detailCardHeader: { paddingBottom: '12px', borderBottom: '1px solid #F1F5F9', marginBottom: '14px', flexShrink: 0 },
-  
   boxTitleWithCount: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
   countIndicatorTagOrange: { backgroundColor: '#FEF3C7', color: '#92400E', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px' },
   countIndicatorTagGray: { backgroundColor: '#F1F5F9', color: '#334155', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px' },
-
   listScrollBox: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' },
   anomalyItemCard: { padding: '12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '4px', boxSizing: 'border-box', border: '1px solid #E2E8F0' },
   anomalyCardLine1: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' },

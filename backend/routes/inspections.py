@@ -575,7 +575,7 @@ def get_shift_progress(
     shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.created_at.desc()).first()
     if not shift:
         raise HTTPException(status_code=400, detail="Hiện tại chưa có ca trực nào đang mở.")
-
+    
     # 2. Phân quyền truy cập
     if current_user.role == "Staff":
         # Staff phải có ít nhất 1 thao tác kiểm kê trong ca này mới được xem tiến độ tổng

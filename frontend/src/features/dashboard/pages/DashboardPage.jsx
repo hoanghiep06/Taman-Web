@@ -8,6 +8,8 @@ import { GlobalHistoryTab } from '../components/GlobalHistoryTab';
 import { SecurityLogsTab } from '../components/SecurityLogsTab';
 import { ShiftHistoryTab } from '../components/ShiftHistoryTab';
 
+import { AuditGalleryModal } from '../components/AuditGalleryModal';
+
 export const DashboardPage = () => {
   const [activeTab, setActiveTab] = useState('overview'); 
   const [dashboardData, setDashboardData] = useState(null);
@@ -49,7 +51,17 @@ export const DashboardPage = () => {
   const [activeAnomalyReport, setActiveAnomalyReport] = useState(null);
   const [loadingAnomalyReport, setLoadingAnomalyReport] = useState(false);
   
+  // Lightbox Modal hiển thị ảnh đơn
   const [imageModal, setImageModal] = useState({ isOpen: false, url: '', assetName: '', isLoading: false });
+
+  const [auditModal, setAuditModal] = useState({
+    isOpen: false,
+    shiftInfo: null,
+    samples: [],
+    totalFound: 0,
+    isLoading: false,
+    currentLimit: 6 // Mặc định bốc mẫu ngẫu nhiên 6 tấm ảnh gọn gàng tôn dáng UI
+  });
 
   // 🔴 ĐÃ CẢI TIẾN LUỒNG POLLING: Kéo song song cả thông số tổng và danh sách chi tiết live mỗi 5s
   const fetchDashboardRealtime = async (isSilent = false) => {
@@ -169,6 +181,47 @@ export const DashboardPage = () => {
     setLoadingAnomalyReport(false);
   };
 
+  const handleTriggerShiftAudit = async (customLimit = 4) => {
+    setAuditModal(prev => ({ ...prev, isOpen: true, isLoading: true, currentLimit: customLimit }));
+    try {
+      // Gọi API bốc ảnh ngẫu nhiên ca hiện hành từ Backend
+      const response = await dashboardApi.getRandomAudit({ limit: customLimit });
+      
+      // Tính toán base URL chuẩn đang hoạt động ổn định của Client trình duyệt
+      const configuredBaseUrl = axiosClient.defaults.baseURL || '';
+      let absoluteBaseUrl = configuredBaseUrl;
+      if (!absoluteBaseUrl.startsWith('http')) {
+        absoluteBaseUrl = window.location.origin + (configuredBaseUrl.startsWith('/') ? '' : '/') + configuredBaseUrl;
+      }
+      absoluteBaseUrl = absoluteBaseUrl.replace(/\/$/, ""); // Xóa dấu gạch chéo cuối nếu có
+
+      // Duyệt qua danh sách ảnh mẫu trả về để khử hoàn toàn chữ "taman-backend" lỗi
+      const sanitizedSamples = (response.audit_samples || []).map(sample => {
+        if (sample.temporary_shareable_url) {
+          // Trích xuất lấy chính xác mã Token mã hóa ở cuối đường dẫn
+          const token = sample.temporary_shareable_url.split('/').pop();
+          // Ép cấu trúc URL tuyệt đối khớp chuẩn với cổng public-view đang chạy thực tế
+          sample.temporary_shareable_url = `${absoluteBaseUrl}/inspections/public-view/${token}`;
+        }
+        return sample;
+      });
+
+      // Cập nhật lại vào State lưu trữ của tab tổng quan
+      setAuditModal(prev => ({
+        ...prev,
+        shiftInfo: response.shift_info,
+        samples: sanitizedSamples, // Đổ mảng dữ liệu sạch đã được bọc giáp vào đây
+        totalFound: response.total_unique_images_found || 0,
+        isLoading: false
+      }));
+
+    } catch (err) {
+      console.error("Lỗi trích xuất kho ảnh kiểm tra:", err);
+      alert("⚠️ Không thể tải kho ảnh thanh tra ngẫu nhiên.");
+      setAuditModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
+    }
+  };
+
   const handleViewImage = async (logId, assetName) => {
     setImageModal({ isOpen: true, url: '', assetName, isLoading: true });
     try {
@@ -219,8 +272,14 @@ export const DashboardPage = () => {
 
       {/* RENDER KHU VỰC CÁC PHÂN HỆ TÍNH NĂNG CON BIỆT LẬP */}
       {/* 🔴 ĐÃ CHUYỂN PHÁT: Truyền thêm data bóc tách chi tiết live vào OverviewTab */}
-      {activeTab === 'overview' && <OverviewTab dashboardData={dashboardData} shiftProgressLive={shiftProgressLive} />}
-      
+      {activeTab === 'overview' && (
+        <OverviewTab 
+          dashboardData={dashboardData} 
+          shiftProgressLive={shiftProgressLive} 
+          onOpenAudit={() => handleTriggerShiftAudit(4)} 
+        />
+      )}
+
       {activeTab === 'room_details' && (
         <RoomMatrixTab 
           rooms={rooms} selectedRoomId={selectedRoomId} onSelectRoom={setSelectedRoomId} 
@@ -252,6 +311,19 @@ export const DashboardPage = () => {
       )}
       
       {activeTab === 'security_logs' && <SecurityLogsTab loginLogs={loginLogs} loadingLogs={loadingLogs} />}
+
+
+      {/* 🔴 MODAL 1: LIGHTBOX THÀNH TRA HÌNH ẢNH NGẪU NHIÊN LIVE */}
+      <AuditGalleryModal 
+        isOpen={auditModal.isOpen}
+        onClose={() => setAuditModal(prev => ({ ...prev, isOpen: false, samples: [] }))}
+        shiftInfo={auditModal.shiftInfo}
+        auditSamples={auditModal.samples}
+        totalFound={auditModal.totalFound}
+        onRefreshRandom={() => handleTriggerShiftAudit(auditModal.currentLimit)}
+        isLoading={auditModal.isLoading}
+      />
+
 
       {/* Lightbox hiển thị file gốc */}
       {imageModal.isOpen && (
