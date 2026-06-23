@@ -13,3 +13,4 @@ dist/
 *.egg-info/
 /.vscode/
 *.log
+backend/Dockerfile
