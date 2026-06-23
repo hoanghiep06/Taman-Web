@@ -2,20 +2,20 @@
 import json
 import pytz
 import logging
-import time
+import time as time_module
 import uuid
 import io
 from PIL import Image, ExifTags
 
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse # Trả luồng ảnh thô
 from jose import jwt, JWTError # Mã hóa link drive
 from sqlalchemy.orm import Session
 
 from database import get_db, SessionLocal
-from models import User, Shift, Room, Asset, InspectionLog, Nonce, AuditLog
+from models import User, Shift, Room, Asset, InspectionLog, Nonce, AuditLog, Elder, ShiftSetting
 from core.config import settings
 from core.dependencies import get_current_user
 from core.security import ALGORITHM   # thuật mã hóa JWT
@@ -62,26 +62,77 @@ def image_processing_worker(
         # 1. Tiến hành nén ảnh và đóng dấu Watermark (Thao tác trên Local RAM)
         processed_image_bytes = process_and_compress_image(file_contents, user_full_name)
 
-        # 2. RETRY Khi gọi API mạng ngoài
+        # 🌟 2. XỬ LÝ PHẦN THỜI GIAN ĐỘNG THEO SETTING CỦA DATABASE (CHỐNG LỆCH TIMEZONE CLOUD)
+        tz = pytz.timezone('Asia/Ho_Chi_Minh')
+        now_local = datetime.now(tz)
+        current_date = now_local.date()
+        current_time = now_local.time()
+
+        # Truy vấn khung giờ cấu hình thực tế từ CSDL
+        setting = db.query(ShiftSetting).first()
+        m_start_str = setting.morning_start if (setting and setting.morning_start) else "03:00"
+        m_end_str = setting.morning_end if (setting and setting.morning_end) else "11:00"
+        e_start_str = setting.evening_start if (setting and setting.evening_start) else "14:00"
+        e_end_str = setting.evening_end if (setting and setting.evening_end) else "21:00"
+        
+        try:
+            m_start = time.fromisoformat(m_start_str)
+            m_end = time.fromisoformat(m_end_str)
+            e_start = time.fromisoformat(e_start_str)
+            e_end = time.fromisoformat(e_end_str)
+        except Exception:
+            m_start, m_end = time(3, 0), time(11, 0)
+            e_start, e_end = time(14, 0), time(21, 0)
+
+        # Hàm trợ lý kiểm tra khung giờ (Hỗ trợ cả ca trực vắt qua đêm nửa đêm)
+        def is_time_in_range(start: time, end: time, current: time) -> bool:
+            if start <= end:
+                return start <= current <= end
+            return current >= start or current <= end
+
+        # Thiết lập giá trị mặc định phòng hộ
+        shift_type_str = "Sang"
+        shift_date_str = str(current_date)
+
+        # So khớp thời gian thực tế chạy Worker với cấu hình để xác định phân hệ ca trực
+        if is_time_in_range(m_start, m_end, current_time):
+            shift_type_str = "Sang"
+            if m_start > m_end and current_time <= m_end:
+                shift_date_str = str(current_date - timedelta(days=1))
+        elif is_time_in_range(e_start, e_end, current_time):
+            shift_type_str = "Toi"
+            if e_start > e_end and current_time <= e_end:
+                shift_date_str = str(current_date - timedelta(days=1))
+        else:
+            # HỘ VỆ ĐẶC BIỆT: Nếu ảnh được xử lý trễ vào khung giờ giải lao giữa 2 ca,
+            # Bốc ngược lại dữ liệu ca trực của log gốc để lấy Ngày và Loại ca chính xác 100%
+            first_log = db.query(InspectionLog).filter(InspectionLog.id == log_ids[0]).first()
+            if first_log and first_log.shift_id:
+                shift_obj = db.query(Shift).filter(Shift.id == first_log.shift_id).first()
+                if shift_obj:
+                    shift_date_str = str(shift_obj.shift_date)
+                    shift_type_str = shift_obj.shift_type
+
+        # 3. RETRY Khi gọi API mạng ngoài (Google Drive API)
         for attempt in range(max_retries):
             try:
                 logging.info(f"WORKER: Tiến hành upload Drive lần {attempt + 1}/{max_retries}...")
                 image_url = upload_image_to_drive(
                     file_bytes=processed_image_bytes, 
-                    shift_date=str(datetime.now().date()),
-                    shift_type="Sang" if datetime.now().hour < 12 else "Toi",
+                    shift_date=shift_date_str,
+                    shift_type=shift_type_str,
                     room_number=room_number,
-                    asset_names=asset_names
+                    asset_names=asset_names  # 🌟 Dùng trực tiếp mảng tên đã được chuẩn hóa NCT từ ngoài đưa vô
                 )
-                break # Upload thành công
+                break # Upload lên Google Drive thành công, thoát khỏi vòng lặp thử lại
             except Exception as drive_err:
                 logging.warning(f"[WORKER WARNING]: Lần thử {attempt + 1} thất bại do: {drive_err}")
                 if attempt < max_retries - 1:
-                    time.sleep(delay_seconds)
+                    time_module.sleep(delay_seconds)
                 else:
-                    raise drive_err # Quá số lần thử
+                    raise drive_err # Quá số lần thử tối đa, đẩy lỗi lên khối catch tổng
         
-        # 3. Nếu thành công: Cập nhật status và lưu link ảnh thật
+        # 4. Nếu thành công: Cập nhật trạng thái sang màu Xanh và ghi nhận Link Drive
         db.query(InspectionLog).filter(InspectionLog.id.in_(log_ids)).update({
             "status": "Xanh",
             "image_url": image_url
@@ -93,7 +144,7 @@ def image_processing_worker(
         db.rollback() 
         logging.error(f"[WORKER FATAL_ERROR]: Đã thử lại {max_retries} lần nhưng upload Drive vẫn thất bại: {final_err}")
 
-        # 4. Khi thất bại: Đánh dấu lỗi để FE báo cho nhân viên chụp lại
+        # 5. Khi thất bại: Đánh dấu lỗi để FE hiển thị nút chụp lại cho nhân viên
         db.query(InspectionLog).filter(InspectionLog.id.in_(log_ids)).update({
             "status": "Loi_Upload"
         }, synchronize_session=False)
@@ -101,7 +152,6 @@ def image_processing_worker(
     
     finally:
         db.close()
-
 
 # ====================================================
 # API XIN CẤP MÃ NONCE DÙNG 1 LẦN 
@@ -342,15 +392,22 @@ async def upload_multi_assets_image(
         raise HTTPException(status_code=400, detail="Hiện tại chưa có ca trực nào được mở trên hệ thống")
 
     # 3. Lấy thông tin chi tiết của danh sách tài sản để kiểm tra tính hợp lệ và lấy tên đồ vật
-    assets = db.query(Asset).filter(Asset.id.in_(asset_ids)).all()
-    if len(assets) != len(asset_ids):
+    asset_items = db.query(Asset, Elder.full_name).outerjoin(Elder, Asset.elder_id == Elder.id).filter(Asset.id.in_(asset_ids)).all()
+    if len(asset_items) != len(asset_ids):
         raise HTTPException(status_code=404, detail="Có chứa ID tài sản không tồn tại trên hệ thống")
+
+    drive_asset_names = []
+    for asset, elder_name in asset_items:
+        if elder_name:
+            drive_asset_names.append(f"{asset.asset_name}_{elder_name}")
+        else:
+            drive_asset_names.append(asset.asset_name)
 
     # 4. CHỐNG SPAM: Vòng lặp kiểm tra thời gian khóa 1 phút (Rate Limit) cho từng tài sản
     tz = pytz.timezone('Asia/Ho_Chi_Minh')
     now_tz = datetime.now(tz)
     
-    for asset in assets:
+    for asset, _ in asset_items:
         latest_log = db.query(InspectionLog).filter(
             InspectionLog.shift_id == shift.id,
             InspectionLog.asset_id == asset.id,
@@ -370,11 +427,9 @@ async def upload_multi_assets_image(
                 )
 
     # 5. Xác định số phòng dựa vào phần tử đầu tiên để chia cây thư mục
-    room = db.query(Room).filter(Room.id == assets[0].room_id).first()
+    first_asset = asset_items[0][0]
+    room = db.query(Room).filter(Room.id == first_asset.room_id).first()
     room_number = room.room_number if room else "Chung"
-
-    # 6. Read bytes thật nhanh giải phóng bộ nhớ đệm
-    asset_names = [a.asset_name for a in assets]
 
     # 7. Tạo trước bản ghi trạng thái "DANG_XU_LY" VÀ KHÓA VERSION CŨ 
     created_log_ids = []
@@ -405,7 +460,6 @@ async def upload_multi_assets_image(
         db.flush()
         created_log_ids.append(new_log.id)
     
-    # Ghi Audit khi tiếp nhận thành công
     success_audit = AuditLog(
         actor_id=current_user.id,
         action="CHECKIN_REQUEST_ACCEPTED",
@@ -423,7 +477,7 @@ async def upload_multi_assets_image(
         log_ids=created_log_ids,
         user_full_name=current_user.full_name,
         room_number=room_number,
-        asset_names=asset_names
+        asset_names=drive_asset_names  # 🚀 Truyền thẳng mảng đã format sẵn vào đây!
     )
 
     # Trả về phản hồi sau 0.1s, đẩy vào danh sách ID vừa tạo để FE tiện tracking 
