@@ -1,9 +1,8 @@
 # schemas.py
 from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from datetime import datetime, date
-
-from enum import Enum
+from enum import Enum 
 
 
 # ==========================================
@@ -12,7 +11,24 @@ from enum import Enum
 class RoleType(str, Enum):
     Admin = "Admin"
     Manager = "Manager"
-    Staff = "Staff"
+    Doctor = "Doctor"
+    Coordinator = "Coordinator"  # Điều phối
+    Caregiver = "Caregiver"      # NVCS
+    Security = "Security"        # Bảo vệ
+    Kitchen = "Kitchen"          # Bếp
+    Janitor = "Janitor"          # Tạp vụ
+    Relative = "Relative"        # Người thân
+
+class ShiftType(str, Enum):
+    Sang = "Sang"
+    Toi = "Toi"
+
+class DocumentType(str, Enum):
+    Phieu_Kham = "Phieu_Kham"
+    Ket_Qua_Kham = "Ket_Qua_Kham"
+    Xuat_Vien = "Xuat_Vien"
+    Xet_Nghiem = "Xet_Nghiem"
+    Chan_Doan_Hinh_Anh = "Chan_Doan_Hinh_Anh"
 
 
 # ==========================================
@@ -25,14 +41,18 @@ class UserLogin(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
-    role: str
+    role: RoleType
+    facility_id: Optional[int] = None
     must_change_password: bool
 
 class UserBase(BaseModel):
     username: str
     full_name: str
     role: RoleType
+    facility_id: Optional[int] = None
+    phone_number: Optional[str] = None
     is_active: bool = True
+
 
 class UserCreate(UserBase):
     password: str
@@ -57,14 +77,39 @@ class PasswordChange(BaseModel):
 # ==========================================
 class LoginLogResponse(BaseModel):
     id: int
-    username: str
-    full_name: str
+    user_id: int
     login_time: datetime
     ip_address: str
     user_agent: Optional[str] = None
-
     model_config = ConfigDict(from_attributes=True)
 
+# ==========================================
+# HỆ THỐNG CƠ SỞ & PHÂN KHU (FACILITY & ZONE)
+# ==========================================
+class FacilityBase(BaseModel):
+    name: str
+    address: Optional[str] = None
+
+class FacilityCreate(FacilityBase):
+    pass
+
+class FacilityResponse(FacilityBase):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class ZoneBase(BaseModel):
+    facility_id: int
+    name: str
+    description: Optional[str] = None
+
+class ZoneCreate(ZoneBase):
+    pass
+
+class ZoneResponse(ZoneBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+    
 
 # ==========================================
 # THỰC THỂ: PHÒNG (ROOM)
