@@ -109,7 +109,7 @@ class ZoneCreate(ZoneBase):
 class ZoneResponse(ZoneBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
-    
+
 
 # ==========================================
 # THỰC THỂ: PHÒNG (ROOM)
@@ -144,12 +144,219 @@ class ElderResponse(ElderBase):
     model_config = ConfigDict(from_attributes=True)
 
 # ==========================================
+# THỰC THỂ: PHÒNG
+# ==========================================
+class RoomBase(BaseModel):
+    zone_id: int
+    room_number: str
+    description: Optional[str] = None
+
+class RoomCreate(RoomBase):
+    pass
+
+class RoomResponse(RoomBase):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# ==========================================
+# 5. NGƯỜI CAO TUỔI (ELDER) & HỒ SƠ Y TẾ
+# ==========================================
+class ElderBase(BaseModel):
+    full_name: str
+    room_id: Optional[int] = None
+    photo_url: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    admission_date: Optional[date] = None
+    manager_notes: Optional[str] = None
+
+class ElderCreate(ElderBase):
+    pass
+
+class ElderResponse(ElderBase):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# Hồ sơ sức khỏe
+class ElderHealthProfileBase(BaseModel):
+    has_surgery: bool = False
+    surgery_describe: Optional[str] = None
+    has_fall: bool = False
+    fall_describe: Optional[str] = None
+    has_stroke: bool = False
+    stroke_describe: Optional[str] = None
+    has_cardiovascular: bool = False
+    cardiovascular_describe: Optional[str] = None
+    
+    underlying_conditions: Optional[str] = None
+    doctor_notes: Optional[str] = None
+    drug_allergies: List[str] = []
+    food_allergies: List[str] = []
+    chronic_diseases: List[str] = []
+
+
+class ElderHealthProfileUpdate(ElderHealthProfileBase):
+    pass
+
+class ElderHealthProfileResponse(ElderHealthProfileBase):
+    id: int
+    elder_id: int
+    model_config = ConfigDict(from_attributes=True)
+
+# Người thân liên kết
+class RelativeElderLinkRequest(BaseModel):
+    relative_id: int
+    elder_id: int
+    relationship_type: str
+
+class RelativeElderResponse(BaseModel):
+    id: int
+    relative_id: int
+    elder_id: int
+    relationship_type: str
+    is_approved: bool
+    model_config = ConfigDict(from_attributes=True)
+
+# ==========================================
+# THỰC THỂ: NGHIỆP VỤ Y TẾ (DẤU SINH HIỆU, THUỐC)
+# ==========================================
+class VitalSignCreate(BaseModel):
+    elder_id: int
+    shift_type: ShiftType
+    bp_systolic: Optional[int] = Field(None, description="Huyết áp tâm thu")
+    bp_diastolic: Optional[int] = Field(None, description="Huyết áp tâm trương")
+    pulse: Optional[int] = Field(None, description="Mạch (lần/phút)")
+    spo2: Optional[float] = Field(None, description="Chỉ số SpO2 (%)")
+    temperature: Optional[float] = Field(None, description="Nhiệt độ (độ C)")
+    notes: Optional[str] = None
+
+class VitalSignResponse(VitalSignCreate):
+    id: int
+    measured_by: Optional[int]
+    measured_at: datetime
+    is_abnormal: bool
+    model_config = ConfigDict(from_attributes=True)
+
+class PrescriptionCreate(BaseModel):
+    elder_id: int
+    image_url: Optional[str] = None
+    start_date: date
+    prescribed_by: str
+    follow_up_date: Optional[date] = None
+
+class PrescriptionChangeLog(BaseModel):
+    change_type: str
+    change_notes: str
+
+class PrescriptionResponse(BaseModel):
+    id: int
+    elder_id: int
+    image_url: Optional[str]
+    start_date: date
+    prescribed_by: str
+    follow_up_date: Optional[date]
+    is_active: bool
+    model_config = ConfigDict(from_attributes=True)
+
+class TreatmentDiaryCreate(BaseModel):
+    elder_id: int
+    event_type: str
+    content: str
+    image_url: Optional[str] = None
+
+class TreatmentDiaryResponse(TreatmentDiaryCreate):
+    id: int
+    created_by: Optional[int]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# ==========================================
+# 7. QUẢN LÝ VẬN HÀNH: BÁO CÁO, KHO, BẾP, BẢO VỆ
+# ==========================================
+# --- Báo cáo ca trực của Điều Phối ---
+class ShiftReportCreate(BaseModel):
+    facility_id: int
+    shift_date: date
+    shift_type: ShiftType
+    highlighted_issues: str
+    elder_descriptions: Optional[str] = None
+    handover_notes: Optional[str] = None
+
+class ShiftReportResponse(ShiftReportCreate):
+    id: int
+    coordinator_id: Optional[int]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# Nhập / Xuất Kho
+class InventoryItemCreate(BaseModel):
+    facility_id: int
+    name: str
+    unit: str
+
+class InventoryTransactionCreate(BaseModel):
+    item_id: int
+    transaction_type: str
+    quatity: float
+    note: Optional[str] = None
+
+class InventoryTransactionResponse(InventoryItemCreate):
+    id: int
+    user_id: Optional[int]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# Báo cáo cho Bếp & Bảo vệ
+class DailyMenuCreate(BaseModel):
+    facility_id: int
+    menu_date: date
+    desciption: str
+    image_url: Optional[str] = None
+
+class VisitorLogCreate(BaseModel):
+    facility_id: int
+    elder_id: int
+    visitor_name: str
+    image_url: Optional[str] = None
+
+class VisitorLogResponse(VisitorLogCreate):
+    id: int
+    check_in_time: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# ==========================================
+# 8. QUẢN LÝ HỢP ĐỒNG (AUTOMATION)
+# ==========================================
+class ContractCreate(BaseModel):
+    facility_id: int
+    elder_id: int
+    relative_id: Optional[int] = None
+    contract_number: str
+    dossier_folder_id: str
+    start_date: date
+    end_date: Optional[date] = None
+
+class ContractResponse(ContractCreate):
+    id: int
+    status: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+
+# ==========================================
 # THỰC THỂ: TÀI SẢN (ASSET)
 # ==========================================
 class AssetBase(BaseModel):
     asset_name: str
     room_id: int
     elder_id: Optional[int] = None
+    contract_id: Optional[int] = None
+
+    requires_inspection: bool = True
+
     status: Optional[str] = 'Active'
 
 class AssetCreate(AssetBase):
@@ -212,15 +419,10 @@ class StaffHistoryResponse(BaseModel):
     asset_id: int
     status: str
     note: Optional[str] = None
-    created_at: datetime  # Thời điểm thực hiện hành động
-    
-    # Thông tin bổ sung từ bảng Shift (lấy qua quan hệ)
+    created_at: datetime
     shift_date: Optional[str] = None 
     shift_type: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
     
 # ===================================
 # Luồng DASHBOARD

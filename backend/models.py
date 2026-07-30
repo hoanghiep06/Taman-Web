@@ -305,6 +305,8 @@ class Asset(Base):
 
     contract_id = Column(Integer, ForeignKey("contracts.id", ondelete="SET NULL"), nullable=True)
 
+    requires_inspection = Column(Boolean, default=True, nullable=False)
+
     status = Column(String(20), default='Active')
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
