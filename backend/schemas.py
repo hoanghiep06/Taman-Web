@@ -118,7 +118,7 @@ class ZoneResponse(ZoneBase):
     total_inspection_assets: int = 0        # Tổng tư trang bắt buộc kiểm kê
     model_config = ConfigDict(from_attributes=True)
 
-    
+
 # ==========================================
 # THỰC THỂ: PHÒNG (ROOM)
 # ==========================================
@@ -283,6 +283,32 @@ class TreatmentDiaryResponse(TreatmentDiaryCreate):
     created_by: Optional[int]
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# THEO DÕI CÂN NẶNG HÀNG THÁNG
+# ==========================================
+class WeightRecordCreate(BaseModel):
+    elder_id: int
+    weight: float = Field(..., gt=0, description="Cân nặng tính bằng kg (VD: 54.5)")
+    notes: Optional[str] = None
+
+class WeightRecordResponse(WeightRecordCreate):
+    id: int
+    measured_month: str
+    measured_by: Optional[int] = None
+    staff_name: Optional[str] = None
+    measured_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ElderWeightDueResponse(BaseModel):
+    elder_id: int
+    elder_name: str
+    room_number: Optional[str] = None
+    last_weight_date: Optional[date] = None
+    days_since_last_weight: Optional[int] = None
+    is_overdue: bool # True nếu > 30 ngày chưa cân
 
 # ==========================================
 # 7. QUẢN LÝ VẬN HÀNH: BÁO CÁO, KHO, BẾP, BẢO VỆ

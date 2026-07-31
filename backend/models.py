@@ -99,13 +99,17 @@ class Elder(Base):
     admission_date = Column(Date)
     manager_notes = Column(Text)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    last_weight_date = Column(Date, nullable=True)
+
 
     room = relationship("Room", back_populates="elders")
     assets = relationship("Asset", back_populates="elder")
     health_profile = relationship("ElderHealthProfile", back_populates="elder", uselist=False, cascade="all, delete-orphan")
     relatives = relationship("RelativeElder", back_populates="elder", cascade="all, delete-orphan")
-    
+    weight_records = relationship("WeightRecord", back_populates="elder", cascade="all, delete-orphan")
+
     contracts = relationship("Contract", back_populates="elder", cascade="all, delete-orphan")
+
 
 
 class RelativeElder(Base):
@@ -226,6 +230,21 @@ class TreatmentDiary(Base):
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+
+class WeightRecord(Base):
+    __tablename__ = "weight_records"
+    id = Column(Integer, primary_key=True, index=True)
+    elder_id = Column(Integer, ForeignKey("elders.id", ondelete="CASCADE"), nullable=False)
+    measured_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True) # NVCS thực hiện
+    
+    weight = Column(Float, nullable=False)              # Cân nặng (kg), VD: 52.5
+    measured_month = Column(String(7), nullable=False)  # Định dạng YYYY-MM (VD: "2026-07")
+    measured_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    notes = Column(Text, nullable=True)                 # Ghi chú (nếu có)
+
+    elder = relationship("Elder", back_populates="weight_records")
+    staff = relationship("User")
+    
 
 # =========================
 # 5. VẬN HÀNH: BÁO CÁO, KHO, BẾP, BẢO VỆ
