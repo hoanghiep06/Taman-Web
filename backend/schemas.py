@@ -95,7 +95,11 @@ class FacilityCreate(FacilityBase):
 
 class FacilityResponse(FacilityBase):
     id: int
+    total_zones: int = 0
+    total_rooms: int = 0
+    total_elders: int = 0
     created_at: datetime
+
     model_config = ConfigDict(from_attributes=True)
 
 class ZoneBase(BaseModel):
@@ -108,9 +112,13 @@ class ZoneCreate(ZoneBase):
 
 class ZoneResponse(ZoneBase):
     id: int
+    facility_name: Optional[str] = None
+    total_rooms: int = 0
+    total_elders: int = 0
+    total_inspection_assets: int = 0        # Tổng tư trang bắt buộc kiểm kê
     model_config = ConfigDict(from_attributes=True)
 
-
+    
 # ==========================================
 # THỰC THỂ: PHÒNG (ROOM)
 # ==========================================
