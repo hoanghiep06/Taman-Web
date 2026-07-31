@@ -115,6 +115,7 @@ class ZoneResponse(ZoneBase):
 # THỰC THỂ: PHÒNG (ROOM)
 # ==========================================
 class RoomBase(BaseModel):
+    zone_id: int
     room_number: str
     description: Optional[str] = None
 
@@ -123,6 +124,9 @@ class RoomCreate(RoomBase):
 
 class RoomResponse(RoomBase):
     id: int
+    zone_name: Optional[str] = None
+    facility_id: Optional[int] = None
+    facility_name: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

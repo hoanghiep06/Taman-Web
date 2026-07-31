@@ -1,6 +1,7 @@
 # main.py
 from fastapi import FastAPI
-from routes import auth, admin_entities, admin_users, users, admin_history, inspections, admin_settings, assets, admin_rooms, admin_data
+from backend.routes import rooms
+from routes import auth, admin_entities, admin_users, users, admin_history, inspections, admin_settings, assets, admin_data
 from database import engine
 import models
 from contextlib import asynccontextmanager
@@ -103,7 +104,7 @@ app.include_router(admin_entities.router_elders, prefix="/api")
 app.include_router(admin_entities.router_assets, prefix="/api")
 app.include_router(admin_entities.router_backup, prefix='/api')
 app.include_router(admin_history.router, prefix="/api")
-app.include_router(admin_rooms.router, prefix="/api")
+app.include_router(rooms.router, prefix="/api")
 app.include_router(admin_data.router, prefix="/api") 
 app.include_router(inspections.router, prefix="/api")
 app.include_router(assets.router, prefix="/api")
