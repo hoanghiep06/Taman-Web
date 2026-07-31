@@ -38,7 +38,7 @@ def scheduled_shift_closure():
     try:
         print("Bắt đầu tiến trình rà soát và đóng ca tự động...")
         auto_close_and_check_missing_assets(db)
-        db.commit() # 🌟 BỔ SUNG DÒNG NÀY để lưu dữ liệu khi chạy ngầm qua Cronjob
+        db.commit()
     finally:
         db.close()
 
@@ -251,22 +251,22 @@ def init_scheduler():
     db.close()
 
     # Đăng ký các lịch trình chạy (Cron & Interval) kèm ID định danh
-    scheduler.add_job(scheduled_open_morning_shift, 'cron', hour=m_start_h, minute=m_start_m, id='open_morning_task')
-    scheduler.add_job(scheduled_shift_closure, 'cron', hour=m_end_h, minute=m_end_m, id='close_morning_task')
+    scheduler.add_job(scheduled_open_morning_shift, 'cron', hour=m_start_h, minute=m_start_m, id='open_morning_task', replace_existing=True)
+    scheduler.add_job(scheduled_shift_closure, 'cron', hour=m_end_h, minute=m_end_m, id='close_morning_task', replace_existing=True)
 
-    scheduler.add_job(scheduled_open_evening_shift, 'cron', hour=e_start_h, minute=e_start_m, id='open_evening_task')
-    scheduler.add_job(scheduled_shift_closure, 'cron', hour=e_end_h, minute=e_end_m, id='close_evening_task')
+    scheduler.add_job(scheduled_open_evening_shift, 'cron', hour=e_start_h, minute=e_start_m, id='open_evening_task', replace_existing=True)
+    scheduler.add_job(scheduled_shift_closure, 'cron', hour=e_end_h, minute=e_end_m, id='close_evening_task', replace_existing=True)
 
     # Dọn dẹp ảnh đi tuần cũ trong thư mục /ProveImage (Đã đồng bộ lên 7 ngày)
-    scheduler.add_job(scheduled_drive_cleanup, 'cron', hour=2, minute=0, id='cleanup_drive_task')
+    scheduler.add_job(scheduled_drive_cleanup, 'cron', hour=2, minute=0, id='cleanup_drive_task', replace_existing=True)
     
     # Tự động dọn dẹp mã Nonce bảo mật định kỳ 5 phút một lần
-    scheduler.add_job(scheduled_nonce_cleanup, 'interval', minutes=5, id='cleanup_nonce_task')
+    scheduler.add_job(scheduled_nonce_cleanup, 'interval', minutes=5, id='cleanup_nonce_task', replace_existing=True)
 
     # Tác vụ lưu trữ AuditLog lên /tmp và Purge sạch LoginLog rác định kỳ cách nhau 3 ngày
     scheduler.add_job(
         scheduled_audit_log_archive_and_cleanup,
-        IntervalTrigger(days=3, start_date="2026-06-21 03:00:00"),
+        IntervalTrigger(days=3),
         id='archive_and_cleanup_audit_log_task',
         replace_existing=True
     )
@@ -274,7 +274,7 @@ def init_scheduler():
     # Tác vụ kết xuất bản sao lưu thảm họa .sql lên /backup (Cách nhau 3 ngày, lệch giờ 30 phút để tránh nghẽn)
     scheduler.add_job(
         scheduled_database_backup_task,
-        IntervalTrigger(days=3, start_date="2026-06-21 03:30:00"),
+        IntervalTrigger(days=3),
         id='database_backup_task',
         replace_existing=True
     )
