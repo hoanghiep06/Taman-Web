@@ -1,0 +1,365 @@
+# backend/routes/health.py
+from typing import List, Optional
+from datetime import date, datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session, joinedload
+
+from database import get_db
+from models import (
+    Elder, VitalSignRecord, Prescription, PrescriptionLog, 
+    TreatmentDiary, ShiftReport, User, Room, Zone, Facility, AuditLog
+)
+from schemas import (
+    VitalSignCreate, VitalSignResponse, VitalSignUpdate,
+    PrescriptionCreate, PrescriptionResponse, PrescriptionChangeLog,
+    TreatmentDiaryCreate, TreatmentDiaryResponse,
+    ElderHealthSummaryCard, ElderShiftNoteInput,
+    ShiftMedicalReportCreate, ShiftMedicalReportResponse,
+    RoleType, ShiftType
+)
+from core.dependencies import PermissionChecker, get_current_user, require_care_team, require_medical_team
+from core.constants import VITAL_LIMITS
+
+router = APIRouter(prefix="/api/health", tags=["[Y tế/Bác sĩ/Điều phối/NVCS] Quản lý Sức Khỏe & Ca Trực"])
+
+# MA TRẬN PHÂN QUYỀN
+require_care_vital = PermissionChecker([
+    RoleType.Admin, RoleType.Manager, RoleType.Doctor, RoleType.Coordinator, RoleType.Caregiver
+])
+require_coordinator_report = PermissionChecker([
+    RoleType.Admin, RoleType.Manager, RoleType.Coordinator
+])
+require_doctor_only = PermissionChecker([
+    RoleType.Admin, RoleType.Manager, RoleType.Doctor
+])
+
+
+# =========================================================================
+# 1. ĐO & SỬA CHỈ SỐ SINH HIỆU (NVCS & ĐIỀU PHỐI CÓ QUYỀN)
+# =========================================================================
+@router.post("/vitals", response_model=VitalSignResponse, status_code=status.HTTP_201_CREATED)
+def record_vital_signs(
+    payload: VitalSignCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """NVCS / Điều phối đo sinh hiệu (Bắt cờ cảnh báo tự động)"""
+    elder = db.query(Elder).filter(Elder.id == payload.elder_id).first()
+    if not elder:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Cụ!")
+
+    is_abnormal = calculate_abnormal_flag(payload.spo2, payload.bp_systolic, payload.bp_diastolic, payload.temperature, payload.pulse)
+
+    new_record = VitalSignRecord(
+        elder_id=payload.elder_id,
+        measured_by=current_user.id,
+        shift_type=payload.shift_type.value,
+        bp_systolic=payload.bp_systolic,
+        bp_diastolic=payload.bp_diastolic,
+        pulse=payload.pulse,
+        spo2=payload.spo2,
+        temperature=payload.temperature,
+        notes=payload.notes,
+        is_abnormal=is_abnormal
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+    return new_record
+
+
+@router.put("/vitals/{vital_id}", response_model=VitalSignResponse)
+def update_vital_signs(
+    vital_id: int,
+    payload: VitalSignUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """
+    SỬA LẠI CHỈ SỐ KHI NHÂN VIÊN GÕ NHẦM:
+    - Cập nhật chỉ số đúng & Tính toán lại cờ bất thường `is_abnormal`.
+    - Ghi vết AuditLog để đảm bảo tính minh bạch y tế (không mất vết lịch sử).
+    """
+    record = db.query(VitalSignRecord).filter(VitalSignRecord.id == vital_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi sinh hiệu này!")
+
+    old_values = f"BP:{record.bp_systolic}/{record.bp_diastolic}, SPO2:{record.spo2}, Temp:{record.temperature}"
+
+    # Cập nhật các trường mới
+    if payload.bp_systolic is not None: record.bp_systolic = payload.bp_systolic
+    if payload.bp_diastolic is not None: record.bp_diastolic = payload.bp_diastolic
+    if payload.pulse is not None: record.pulse = payload.pulse
+    if payload.spo2 is not None: record.spo2 = payload.spo2
+    if payload.temperature is not None: record.temperature = payload.temperature
+    if payload.notes is not None: record.notes = payload.notes
+
+    # Tính toán lại cờ bất thường
+    record.is_abnormal = calculate_abnormal_flag(record.spo2, record.bp_systolic, record.bp_diastolic, record.temperature, record.pulse)
+
+    # Ghi vết AuditLog bảo vệ nhân viên
+    audit = AuditLog(
+        actor_id=current_user.id,
+        action="UPDATE_VITAL_SIGN",
+        target_id=str(vital_id),
+        ip_address="Internal",
+        payload=f"Sửa sinh hiệu Cụ ID={record.elder_id}. Cũ: [{old_values}] -> Mới: [BP:{record.bp_systolic}/{record.bp_diastolic}, SPO2:{record.spo2}]"
+    )
+    db.add(audit)
+
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.get("/vitals/elder/{elder_id}", response_model=List[VitalSignResponse])
+def get_elder_vital_history(
+    elder_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """Xem toàn bộ lịch sử sinh hiệu qua các ngày của 1 Cụ"""
+    return db.query(VitalSignRecord)\
+        .filter(VitalSignRecord.elder_id == elder_id)\
+        .order_by(VitalSignRecord.measured_at.desc()).all()
+
+
+# =========================================================================
+# 2. BÁO CÁO GIAO CA ĐIỀU PHỐI (CHỈ ĐIỀU PHỐI THỰC HIỆN)
+# =========================================================================
+@router.post("/shift-reports", response_model=ShiftMedicalReportResponse, status_code=status.HTTP_201_CREATED)
+def create_shift_medical_report(
+    payload: ShiftMedicalReportCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_coordinator_report)
+):
+    """
+    ĐIỀU PHỐI TỔNG KẾT CA TRỰC:
+    1. Chọn từng Cụ -> Gõ ghi chú diễn biến trong ca.
+    2. Tự động lưu vào Nhật ký `TreatmentDiary` của Cụ đó để bật cờ chú ý cho Bác sĩ.
+    3. Định dạng chuỗi văn bản giao ca hoàn chỉnh (1. B.Hà..., 2. M.Như...).
+    """
+    formatted_descriptions = []
+
+    for idx, item in enumerate(payload.elder_events, start=1):
+        elder = db.query(Elder).filter(Elder.id == item.elder_id).first()
+        if not elder:
+            continue
+
+        note_text = item.note.strip()
+        formatted_descriptions.append(f"{idx}. {elder.full_name}: {note_text}")
+
+        # Tự động đẩy vào Nhật ký điều trị
+        diary = TreatmentDiary(
+            elder_id=elder.id,
+            event_type="Lưu ý giao ca (ĐP)",
+            content=note_text,
+            created_by=current_user.id
+        )
+        db.add(diary)
+
+    full_text = "\n".join(formatted_descriptions)
+
+    new_report = ShiftReport(
+        facility_id=payload.facility_id,
+        coordinator_id=current_user.id,
+        shift_date=payload.shift_date,
+        shift_type=payload.shift_type.value,
+        highlighted_issues=f"Đã ghi nhận lưu ý cho {len(payload.elder_events)} Cụ.",
+        elder_descriptions=full_text,
+        handover_notes=payload.handover_notes
+    )
+    db.add(new_report)
+    db.commit()
+    db.refresh(new_report)
+
+    facility = db.query(Facility).filter(Facility.id == payload.facility_id).first()
+
+    return ShiftMedicalReportResponse(
+        id=new_report.id,
+        facility_id=new_report.facility_id,
+        facility_name=facility.name if facility else "N/A",
+        reporter_id=current_user.id,
+        reporter_name=current_user.full_name,
+        shift_date=new_report.shift_date,
+        shift_type=ShiftType(new_report.shift_type),
+        formatted_elder_descriptions=full_text,
+        handover_notes=new_report.handover_notes,
+        created_at=new_report.created_at
+    )
+
+
+# =========================================================================
+# 3. 🔥 DASHBOARD CA LIVE CHO TOÀN BỘ NHÂN VIÊN (NVCS/ĐP/BS/MANAGER)
+# =========================================================================
+@router.get("/dashboard-live", response_model=List[ElderHealthSummaryCard])
+def get_live_shift_dashboard_for_all(
+    facility_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """
+    BẢNG DASHBOARD CA LIVE DÀNH CHO TOÀN BỘ NHÂN VIÊN:
+    - Luôn hiển thị thông tin ca trực hiện tại.
+    - NVCS nhìn vào biết phòng nào, Cụ nào có chỉ số bất thường hoặc có ghi chú giao ca cần theo dõi.
+    """
+    return build_health_dashboard_cards(db, current_user, facility_id, is_doctor_view=False)
+
+
+# =========================================================================
+# 4. 🔥 DASHBOARD Y TẾ CHUYÊN SÂU DÀNH RIÊNG CHO BÁC SĨ & MANAGER
+# =========================================================================
+@router.get("/dashboard-doctor", response_model=List[ElderHealthSummaryCard])
+def get_doctor_advanced_dashboard(
+    facility_id: Optional[int] = None,
+    only_attention_needed: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_medical_team)
+):
+    """
+    DASHBOARD CHUYÊN SÂU CHO BÁC SĨ:
+    - Kèm thêm Link Toa Thuốc Active và Lý do chi tiết cần Bác sĩ can thiệp.
+    - Cụ nào có nguy cơ (SPO2 < 95, Sốt > 37.5, HA bất thường, có diễn biến) ĐƯỢC ĐẨY LÊN ĐẦU BẢNG.
+    """
+    cards = build_health_dashboard_cards(db, current_user, facility_id, is_doctor_view=True)
+
+    if only_attention_needed:
+        cards = [c for c in cards if c.has_abnormal_vital]
+
+    return cards
+
+
+# =========================================================================
+# 5. XEM LẠI BÁO CÁO GIAO CA QUÁ KHỨ & NHẬT KÝ
+# =========================================================================
+@router.get("/shift-reports/archive", response_model=List[ShiftMedicalReportResponse])
+def get_archived_shift_reports(
+    facility_id: Optional[int] = None,
+    target_date: Optional[date] = None,
+    shift_type: Optional[ShiftType] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """Xem lại nguyên văn Biên bản báo cáo giao ca trong quá khứ (chuẩn như hình mẫu)"""
+    query = db.query(ShiftReport).options(joinedload(ShiftReport.reporter), joinedload(ShiftReport.facility))
+
+    target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+    if target_f_id is not None:
+        query = query.filter(ShiftReport.facility_id == target_f_id)
+
+    if target_date:
+        query = query.filter(ShiftReport.shift_date == target_date)
+    if shift_type:
+        query = query.filter(ShiftReport.shift_type == shift_type.value)
+
+    reports = query.order_by(ShiftReport.shift_date.desc(), ShiftReport.created_at.desc()).all()
+
+    return [
+        ShiftMedicalReportResponse(
+            id=r.id,
+            facility_id=r.facility_id,
+            facility_name=r.facility.name if r.facility else "N/A",
+            reporter_id=r.coordinator_id,
+            reporter_name=r.reporter.full_name if r.reporter else "N/A",
+            shift_date=r.shift_date,
+            shift_type=ShiftType(r.shift_type),
+            formatted_elder_descriptions=r.elder_descriptions,
+            handover_notes=r.handover_notes,
+            created_at=r.created_at
+        ) for r in reports
+    ]
+
+
+@router.get("/diary/elder/{elder_id}", response_model=List[TreatmentDiaryResponse])
+def get_elder_treatment_diary_history(
+    elder_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """Tra cứu lịch sử diễn biến y tế của 1 Cụ từ trước tới nay"""
+    diaries = db.query(TreatmentDiary).options(joinedload(TreatmentDiary.staff))\
+        .filter(TreatmentDiary.elder_id == elder_id)\
+        .order_by(TreatmentDiary.created_at.desc()).all()
+
+    return [
+        TreatmentDiaryResponse(
+            id=d.id,
+            elder_id=d.elder_id,
+            event_type=d.event_type,
+            content=d.content,
+            image_url=d.image_url,
+            created_by=d.created_by,
+            created_by_name=d.staff.full_name if d.staff else "N/A",
+            created_at=d.created_at
+        ) for d in diaries
+    ]
+
+
+# =========================================================================
+# HÀM HELPER HỖ TRỢ DỰNG CARD DASHBOARD COMPONENT
+# =========================================================================
+def calculate_abnormal_flag(spo2, bp_sys, bp_dia, temp, pulse) -> bool:
+    if spo2 and spo2 < VITAL_LIMITS["SPO2_WARNING"]: return True
+    if bp_sys and (bp_sys > VITAL_LIMITS["BP_SYSTOLIC_HIGH"] or bp_sys < VITAL_LIMITS["BP_SYSTOLIC_LOW"]): return True
+    if bp_dia and (bp_dia > VITAL_LIMITS["BP_DIASTOLIC_HIGH"] or bp_dia < VITAL_LIMITS["BP_DIASTOLIC_LOW"]): return True
+    if temp and temp >= VITAL_LIMITS["TEMP_FEVER"]: return True
+    if pulse and (pulse > VITAL_LIMITS["PULSE_FAST"] or pulse < VITAL_LIMITS["PULSE_SLOW"]): return True
+    return False
+
+
+def build_health_dashboard_cards(db: Session, current_user: User, facility_id: Optional[int], is_doctor_view: bool) -> List[ElderHealthSummaryCard]:
+    query = db.query(Elder).options(joinedload(Elder.room).joinedload(Room.zone))
+    
+    target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+    if target_f_id is not None:
+        query = query.join(Room).join(Zone).filter(Zone.facility_id == target_f_id)
+
+    elders = query.order_by(Elder.room_id).all()
+    cards = []
+    today_start = datetime.combine(date.today(), datetime.min.time())
+
+    for elder in elders:
+        latest_vital = db.query(VitalSignRecord)\
+            .filter(VitalSignRecord.elder_id == elder.id)\
+            .order_by(VitalSignRecord.measured_at.desc()).first()
+
+        active_prescription = db.query(Prescription)\
+            .filter(Prescription.elder_id == elder.id, Prescription.is_active == True).first()
+
+        today_diaries = db.query(TreatmentDiary)\
+            .filter(TreatmentDiary.elder_id == elder.id, TreatmentDiary.created_at >= today_start).all()
+
+        diary_notes = [f"[{d.event_type}] {d.content}" for d in today_diaries]
+
+        attention_reasons = []
+        has_abnormal_vital = False
+
+        if latest_vital and latest_vital.is_abnormal:
+            has_abnormal_vital = True
+            if latest_vital.spo2 and latest_vital.spo2 < VITAL_LIMITS["SPO2_WARNING"]:
+                attention_reasons.append(f"SpO2 thấp ({latest_vital.spo2}%)")
+            if latest_vital.temperature and latest_vital.temperature >= VITAL_LIMITS["TEMP_FEVER"]:
+                attention_reasons.append(f"Sốt ({latest_vital.temperature}°C)")
+            if latest_vital.bp_systolic and latest_vital.bp_systolic > VITAL_LIMITS["BP_SYSTOLIC_HIGH"]:
+                attention_reasons.append(f"Huyết áp cao ({latest_vital.bp_systolic}/{latest_vital.bp_diastolic})")
+
+        if diary_notes:
+            has_abnormal_vital = True
+            attention_reasons.append(f"Có {len(diary_notes)} lưu ý giao ca")
+
+        cards.append(
+            ElderHealthSummaryCard(
+                elder_id=elder.id,
+                elder_name=elder.full_name,
+                room_number=elder.room.room_number if elder.room else "Chưa xếp phòng",
+                latest_vital_signs=latest_vital,
+                has_abnormal_vital=has_abnormal_vital,
+                active_prescription_url=active_prescription.image_url if (is_doctor_view and active_prescription) else None,
+                recent_diary_events=diary_notes,
+                doctor_attention_reasons=attention_reasons
+            )
+        )
+
+    # Ưu tiên các Cụ có cờ báo đỏ/cần chú ý lên đầu danh sách
+    cards.sort(key=lambda x: x.has_abnormal_vital, reverse=True)
+    return cards

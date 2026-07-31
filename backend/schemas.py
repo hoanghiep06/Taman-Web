@@ -217,6 +217,9 @@ class ElderHealthProfileResponse(ElderHealthProfileBase):
     elder_id: int
     model_config = ConfigDict(from_attributes=True)
 
+
+
+
 # Người thân liên kết
 class RelativeElderLinkRequest(BaseModel):
     relative_id: int
@@ -251,6 +254,15 @@ class VitalSignResponse(VitalSignCreate):
     is_abnormal: bool
     model_config = ConfigDict(from_attributes=True)
 
+class VitalSignUpdate(BaseModel):
+    bp_systolic: Optional[int] = None
+    bp_diastolic: Optional[int] = None
+    pulse: Optional[int] = None
+    spo2: Optional[float] = None
+    temperature: Optional[float] = None
+    notes: Optional[str] = None
+
+
 class PrescriptionCreate(BaseModel):
     elder_id: int
     image_url: Optional[str] = None
@@ -278,12 +290,17 @@ class TreatmentDiaryCreate(BaseModel):
     content: str
     image_url: Optional[str] = None
 
-class TreatmentDiaryResponse(TreatmentDiaryCreate):
+class TreatmentDiaryResponse(BaseModel):
     id: int
-    created_by: Optional[int]
+    elder_id: int
+    event_type: str
+    content: str
+    image_url: Optional[str] = None
+    created_by: Optional[int] = None
+    created_by_name: Optional[str] = None
     created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
 
+    model_config = ConfigDict(from_attributes=True)
 
 # ==========================================
 # THEO DÕI CÂN NẶNG HÀNG THÁNG
@@ -309,6 +326,47 @@ class ElderWeightDueResponse(BaseModel):
     last_weight_date: Optional[date] = None
     days_since_last_weight: Optional[int] = None
     is_overdue: bool # True nếu > 30 ngày chưa cân
+
+# ==========================================
+# BÁO CÁO GIAO CA ĐIỀU PHỐI (STRUCTURED SHIFT REPORT)
+# ==========================================
+class ElderShiftNoteInput(BaseModel):
+    elder_id: int
+    note: str                               # VD: "Đi lại rất nhiều, bỏ ăn trưa + chiều"
+
+class ShiftMedicalReportCreate(BaseModel):
+    facility_id: int
+    shift_date: date
+    shift_type: ShiftType                   # Sang / Toi
+    elder_events: List[ElderShiftNoteInput] = [] # Danh sách chọn từng Cụ và nhập ghi chú
+    handover_notes: str                     # Hướng xử lý / Lưu ý chung cho ca sau
+
+class ShiftMedicalReportResponse(BaseModel):
+    id: int
+    facility_id: int
+    facility_name: Optional[str] = None
+    reporter_id: Optional[int] = None
+    reporter_name: Optional[str] = None
+    shift_date: date
+    shift_type: ShiftType
+    formatted_elder_descriptions: str      # Đã tự động Format thành danh sách (1. B.Hà..., 2. M.Như...)
+    handover_notes: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ElderHealthSummaryCard(BaseModel):
+    elder_id: int
+    elder_name: str
+    room_number: str
+    latest_vital_signs: Optional[VitalSignResponse] = None
+    has_abnormal_vital: bool = False                      # Báo đỏ nếu SPO2 < 95, HA cao...
+    active_prescription_url: Optional[str] = None         # Chỉ Bác sĩ/Manager/ĐP/NVCS xem được
+    recent_diary_events: List[str] = []                   # Các ghi chú diễn biến do ĐP/NVCS gõ
+    doctor_attention_reasons: List[str] = []              # Lý do chi tiết cảnh báo Bác sĩ
+
+    
 
 # ==========================================
 # 7. QUẢN LÝ VẬN HÀNH: BÁO CÁO, KHO, BẾP, BẢO VỆ
