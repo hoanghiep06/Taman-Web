@@ -104,9 +104,9 @@ export const SystemSettingsPage = () => {
 
             {/* ĐÃ BỔ SUNG NÚT REFRESH CA TRỰC */}
             <div style={styles.formFooter}>
-              <button 
-                type="button" 
-                style={styles.refreshBtn} 
+              <button
+                type="button"
+                style={styles.refreshBtn}
                 onClick={handleRefreshShift}
                 disabled={isRefreshing}
               >
@@ -141,12 +141,12 @@ const styles = {
   inputGroup: { display: 'flex', flexDirection: 'column', flex: 1 },
   label: { marginBottom: '6px', fontSize: '12px', color: '#475569', fontWeight: '600' },
   timeInput: { padding: '10px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', fontSize: '16px', fontWeight: '600', color: '#0F172A', cursor: 'pointer' },
-  
+
   // Thay đổi layout footer để chứa 2 nút
   formFooter: { display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' },
-  
+
   refreshBtn: { padding: '12px 20px', backgroundColor: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s' },
   saveBtn: { padding: '12px 24px', backgroundColor: '#0F172A', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' },
-  
+
   loading: { padding: '40px', textAlign: 'center', color: '#64748B', fontWeight: '500' }
 };

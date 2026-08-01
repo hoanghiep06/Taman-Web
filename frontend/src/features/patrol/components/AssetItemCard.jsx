@@ -1,6 +1,15 @@
 import React from 'react';
 import { getFinalStatus } from '../utils/patrolHelpers';
-import { theme } from '../utils/theme';
+import { StatusBadge } from '../../../components/StatusBadge';
+import { ActionButton } from '../../../components/table/ActionButton';
+import styles from './AssetItemCard.module.css';
+
+const STATUS_BADGE = {
+  Processing: { variant: 'info', text: '🔄 Đang nén ảnh lên Drive...' },
+  Success: { variant: 'success' },
+  Missing: { variant: 'warning' },
+  Error: { variant: 'danger', text: '❌ Lỗi ảnh, hãy chụp lại' },
+};
 
 export const AssetItemCard = ({ asset, isSelected, uploadStatus, onToggleSelect, onOpenMissing, onOpenPreview }) => {
   const dbStatus = asset.current_status;
@@ -13,90 +22,70 @@ export const AssetItemCard = ({ asset, isSelected, uploadStatus, onToggleSelect,
   const canViewImage = dbStatus === 'Xanh' || dbStatus === 'Success';
 
   const renderStatusBadge = () => {
-    if (isProcessing) return <span style={{...styles.badge, ...styles.badgeProcessing}}>🔄 Đang nén ảnh lên Drive...</span>;
-    if (isSuccess) return <span style={{...styles.badge, ...styles.badgeSuccess}}>✓ Đã nộp ({asset.inspected_at || 'Vừa xong'})</span>;
-    if (isMissing) return <span style={{...styles.badge, ...styles.badgeMissing}}>⚠️ Đã báo mất {asset.inspected_at ? `(${asset.inspected_at})` : ''}</span>;
-    if (isError) return <span style={{...styles.badge, ...styles.badgeError}}>❌ Lỗi ảnh, hãy chụp lại</span>;
-    return <span style={{...styles.badge, ...styles.badgeUnchecked}}>Chưa kiểm kê</span>;
+    if (isProcessing) return <StatusBadge variant="info">{STATUS_BADGE.Processing.text}</StatusBadge>;
+    if (isSuccess) return <StatusBadge variant="success">✓ Đã nộp ({asset.inspected_at || 'Vừa xong'})</StatusBadge>;
+    if (isMissing)
+      return (
+        <StatusBadge variant="warning">
+          ⚠️ Đã báo mất {asset.inspected_at ? `(${asset.inspected_at})` : ''}
+        </StatusBadge>
+      );
+    if (isError) return <StatusBadge variant="danger">{STATUS_BADGE.Error.text}</StatusBadge>;
+    return <StatusBadge variant="neutral">Chưa kiểm kê</StatusBadge>;
   };
 
+  const cardClass = [
+    styles.card,
+    isSelected ? styles.cardSelected : isMissing ? styles.cardMissing : '',
+    isProcessing ? styles.cardProcessing : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div
-      style={{
-        ...styles.assetItemCard,
-        borderColor: isSelected ? theme.color.primary : theme.color.border,
-        backgroundColor: isSelected ? theme.color.primaryTint : isMissing ? theme.color.warningTintSoft : theme.color.surface,
-        opacity: isProcessing ? 0.6 : 1,
-        cursor: isProcessing ? 'not-allowed' : 'pointer',
-      }}
-      onClick={() => !isProcessing && onToggleSelect(asset.asset_id)}
-    >
-      <div style={styles.cardMainInfo}>
-        <div style={{
-          ...styles.checkbox,
-          backgroundColor: isSelected ? theme.color.primary : theme.color.surface,
-          borderColor: isSelected ? theme.color.primary : theme.color.borderStrong,
-        }}>
-          {isSelected && <span style={styles.checkMark}>✓</span>}
+    <div className={cardClass} onClick={() => !isProcessing && onToggleSelect(asset.asset_id)}>
+      <div className={styles.mainInfo}>
+        <div className={`${styles.checkbox} ${isSelected ? styles.checkboxSelected : ''}`}>
+          {isSelected && <span className={styles.checkMark}>✓</span>}
         </div>
 
-        {/* KHỐI CHỮ CHỐNG KHUẤT/MẤT TEXT KHI TÊN DÀI */}
-        <div style={styles.textDetails}>
-          <span style={styles.assetName}>{asset.asset_name}</span>
-          <div style={styles.metaInfoRow}>
-            <span style={styles.idSubtext}>Mã: #{asset.asset_id}</span>
-            {asset.note && <span style={styles.noteSubtext}>• Ghi chú: {asset.note}</span>}
+        <div className={styles.textDetails}>
+          <span className={styles.assetName}>{asset.asset_name}</span>
+          <div className={styles.metaInfoRow}>
+            <span className={styles.idSubtext}>Mã: #{asset.asset_id}</span>
+            {asset.note && <span className={styles.noteSubtext}>• Ghi chú: {asset.note}</span>}
           </div>
-          <div style={{marginTop: '5px'}}>{renderStatusBadge()}</div>
+          <div className={styles.badgeRow}>{renderStatusBadge()}</div>
         </div>
       </div>
 
-      {/* CỐ ĐỊNH CỘT THAO TÁC KHÔNG CHO CO GIẬT HÌNH */}
-      <div style={styles.actionRightBlock}>
+      <div className={styles.actionRightBlock}>
         {canViewImage && asset.log_id && (
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenPreview(asset.log_id, asset.asset_name); }}
-            style={styles.previewBtn}
+          <ActionButton
+            variant="primary"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenPreview(asset.log_id, asset.asset_name);
+            }}
           >
             🖼️ Ảnh
-          </button>
+          </ActionButton>
         )}
 
         {!isProcessing && (
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenMissing(asset.asset_id); }}
-            style={isMissing ? styles.actionBtnUpdate : styles.actionBtn}
+          <ActionButton
+            variant={isMissing ? 'warning' : 'danger'}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenMissing(asset.asset_id);
+            }}
           >
             {isMissing ? 'Sửa mất' : 'Báo mất'}
-          </button>
+          </ActionButton>
         )}
       </div>
     </div>
   );
-};
-
-const styles = {
-  assetItemCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: theme.radius.lg, border: '1.5px solid', boxShadow: theme.shadow.sm, transition: 'all 0.15s ease', position: 'relative', gap: '8px' },
-  
-  cardMainInfo: { display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }, // minWidth: 0 bắt buộc để flex-child co lại dưới kích thước content
-  checkbox: { width: '22px', height: '22px', borderRadius: theme.radius.sm, border: '2px solid', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s ease' },
-  checkMark: { color: '#FFF', fontSize: '13px', fontWeight: 'bold' },
-  
-  textDetails: { display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 },
-  assetName: { fontSize: '15px', fontWeight: '700', color: theme.color.ink, wordBreak: 'break-word', overflowWrap: 'break-word' }, // Ép text tự ngắt dòng
-  
-  metaInfoRow: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' },
-  idSubtext: { fontSize: '11px', color: theme.color.inkMuted, fontWeight: '500' },
-  noteSubtext: { fontSize: '11px', color: theme.color.warningDark, fontWeight: '500', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  badge: { fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: theme.radius.sm, display: 'inline-block' },
-  badgeUnchecked: { backgroundColor: theme.color.surfaceMuted, color: theme.color.inkTertiary },
-  badgeProcessing: { backgroundColor: theme.color.infoTint, color: theme.color.infoDark },
-  badgeSuccess: { backgroundColor: theme.color.successTint, color: theme.color.successDark },
-  badgeMissing: { backgroundColor: theme.color.warningTint, color: theme.color.warningDark },
-  badgeError: { backgroundColor: theme.color.dangerTint, color: theme.color.dangerDark },
-  
-  actionRightBlock: { display: 'flex', gap: '6px', alignItems: 'center', zIndex: 10, flexShrink: 0 },
-  actionBtn: { padding: '6px 10px', backgroundColor: theme.color.surface, color: theme.color.danger, border: `1px solid ${theme.color.dangerTint}`, borderRadius: theme.radius.sm, fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
-  actionBtnUpdate: { padding: '6px 10px', backgroundColor: theme.color.surface, color: theme.color.warningDark, border: '1px solid #FDE68A', borderRadius: theme.radius.sm, fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
-  previewBtn: { padding: '6px 10px', backgroundColor: theme.color.primaryTint, color: theme.color.primaryDark, border: '1px solid #BAE6FD', borderRadius: theme.radius.sm, fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
 };

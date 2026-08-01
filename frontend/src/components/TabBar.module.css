@@ -1,0 +1,60 @@
+.container {
+  display: flex;
+  gap: 2px;
+}
+
+.tab {
+  border: none;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  transition: color 0.2s ease, background-color 0.2s ease;
+  white-space: nowrap;
+}
+
+/* ===== Kiểu underline: tab dính liền phần nội dung bên dưới ===== */
+.underline {
+  background: var(--color-primary-light);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 var(--space-6);
+  overflow-x: auto;
+}
+.underlineActive {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface);
+  color: var(--color-text-heading);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-weight: 700;
+  position: relative;
+  top: 1px;
+}
+.underlineInactive {
+  padding: var(--space-3) var(--space-5);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+/* ===== Kiểu segmented: nút bo tròn trong khung xám ===== */
+.segmented {
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+}
+.segmentedActive {
+  flex: 1;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  box-shadow: var(--shadow-sm);
+}
+.segmentedInactive {
+  flex: 1;
+  padding: var(--space-3);
+  background: transparent;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}

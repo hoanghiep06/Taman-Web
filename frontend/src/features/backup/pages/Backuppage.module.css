@@ -1,0 +1,60 @@
+.container {
+  font-family: var(--sans);
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xl);
+  color: var(--color-text-heading);
+  font-weight: 800;
+}
+.subtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.actionGroup {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.uploadBtn {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-bg);
+  color: var(--color-primary-dark);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  font-weight: bold;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.backupBtn {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-success);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(46, 125, 50, 0.2);
+  white-space: nowrap;
+}
+.backupBtnLoading {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 800;
+  cursor: wait;
+  white-space: nowrap;
+}

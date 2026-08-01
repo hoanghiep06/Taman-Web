@@ -1,0 +1,31 @@
+{
+  "name": "Tâm An - Quản Lý Cơ Sở",
+  "short_name": "Tâm An",
+  "description": "Hệ thống quản lý ca trực, kiểm kê tài sản và hồ sơ lưu trú cho trung tâm chăm sóc người cao tuổi.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F6F9",
+  "theme_color": "#1F6F78",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

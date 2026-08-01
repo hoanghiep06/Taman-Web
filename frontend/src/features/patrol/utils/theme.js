@@ -1,37 +1,42 @@
+// LƯU Ý: Toàn bộ giá trị màu trong file này giờ đồng bộ 1-1 với token
+// trong `src/index.css` (biến --color-*). Đây là bản dịch sang JS object
+// để dùng trong style động (badge trạng thái, chart màu...) — không phải
+// nguồn màu độc lập nữa. Nếu cần đổi màu thương hiệu, sửa `index.css` TRƯỚC,
+// rồi đồng bộ lại giá trị tương ứng ở đây.
 export const theme = {
   color: {
-    bg: '#F8FAFC',
-    surface: '#FFFFFF',
+    bg: '#F4F6F9',           // = --color-bg
+    surface: '#FFFFFF',       // = --color-surface
     surfaceMuted: '#F1F5F9',
-    border: '#E2E8F0',
+    border: '#E2E8F0',        // = --color-border
     borderStrong: '#CBD5E1',
 
-    ink: '#0F172A',
-    inkSecondary: '#475569',
-    inkTertiary: '#64748B',
+    ink: '#0F172A',           // = --color-text-heading
+    inkSecondary: '#334155',  // = --color-text
+    inkTertiary: '#64748B',   // = --color-text-muted
     inkMuted: '#94A3B8',
 
-    primary: '#0284C7',
-    primaryDark: '#075985',
-    primaryTint: '#E0F2FE',
-    primaryRing: 'rgba(2, 132, 199, 0.16)',
+    primary: '#1F6F78',       // = --color-primary (đã đồng bộ, trước đây là #0284C7 lệch tông)
+    primaryDark: '#163F44',   // = --color-primary-dark
+    primaryTint: '#E3F1F0',   // = --color-primary-light
+    primaryRing: 'rgba(31, 111, 120, 0.16)',
 
-    success: '#16A34A',
-    successDark: '#15803D',
-    successTint: '#DCFCE7',
+    success: '#2E7D32',       // = --color-success
+    successDark: '#1B5E20',
+    successTint: '#EAF6EC',   // = --color-success-bg
 
-    warning: '#D97706',
-    warningDark: '#B45309',
-    warningTint: '#FEF3C7',
+    warning: '#B45309',       // = --color-warning
+    warningDark: '#92400E',
+    warningTint: '#FDF3E7',   // = --color-warning-bg
     warningTintSoft: '#FEFCE8',
 
-    danger: '#DC2626',
-    dangerDark: '#B91C1C',
-    dangerTint: '#FEE2E2',
+    danger: '#C0392B',        // = --color-danger
+    dangerDark: '#962D22',
+    dangerTint: '#FDEDEC',    // = --color-danger-bg
 
-    info: '#6366F1',
-    infoDark: '#4338CA',
-    infoTint: '#EEF2FF',
+    info: '#6366F1',          // = --color-info
+    infoDark: '#4338CA',      // = --color-info-dark
+    infoTint: '#EEF2FF',      // = --color-info-bg
   },
   radius: { sm: '8px', md: '12px', lg: '14px', xl: '16px', xxl: '20px', pill: '999px' },
   shadow: {

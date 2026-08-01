@@ -1,0 +1,91 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.searchBox {
+  display: flex;
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-text-muted);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+  flex: 1;
+  min-width: 250px;
+}
+.searchIcon {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-right: var(--space-2);
+}
+.searchInput {
+  padding: var(--space-3) 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: var(--text-sm);
+  color: var(--color-text-heading);
+  width: 100%;
+}
+.addBtn {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-text-heading);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
+}
+.trRowSelected {
+  background: var(--color-success-bg) !important;
+}
+.tdCheckbox {
+  text-align: center;
+  vertical-align: middle;
+  padding: var(--space-4) var(--space-2);
+}
+.checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.tdId {
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  font-family: var(--mono);
+}
+.tdBold {
+  padding: var(--space-4);
+  color: var(--color-text-heading);
+  font-weight: 700;
+  font-size: var(--text-base);
+}
+.tdDesc {
+  padding: var(--space-4);
+  color: var(--color-text);
+  font-style: italic;
+}
+.tdActions {
+  padding: var(--space-4);
+  text-align: right;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.loadingState {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

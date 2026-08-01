@@ -1,0 +1,125 @@
+.sectionBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-surface);
+}
+.sectionDone {
+  border-color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: var(--space-2);
+}
+.headerElder {
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary);
+}
+.headerShared {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+}
+
+.titleBox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  width: 100%;
+}
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.avatarElder {
+  background: var(--color-primary-light);
+}
+.avatarShared {
+  background: var(--color-border);
+}
+.avatarIcon {
+  font-size: var(--text-lg);
+}
+
+.titleTextBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.nameText {
+  font-size: 15.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nameElder {
+  color: var(--color-primary-dark);
+}
+.nameShared {
+  color: var(--color-text);
+}
+
+.miniProgressRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.miniBarBg {
+  width: 60px;
+  height: 5px;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.miniBarFill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.miniBarActive {
+  background: var(--color-primary);
+}
+.miniBarDone {
+  background: var(--color-success);
+}
+.miniProgressText {
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+.miniTextActive {
+  color: var(--color-text-muted);
+}
+.miniTextDone {
+  color: var(--color-success);
+}
+
+.assetList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}

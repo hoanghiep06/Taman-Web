@@ -1,0 +1,18 @@
+.item {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  transition: background-color .15s ease, color .15s ease;
+}
+.item:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* Biến thể cho Sidebar/Rail (desktop) */
+.sidebar { gap: var(--space-3); padding: var(--space-3) var(--space-4); border-left: 4px solid transparent; }
+.sidebar.active { background: rgba(255,255,255,.08); border-left-color: var(--color-accent); color: #fff; }
+
+/* Biến thể cho Bottom Nav (mobile) */
+.bottom { flex-direction: column; gap: 2px; padding: var(--space-2); font-size: var(--text-xs); width: 25%; }
+.bottom.active { color: var(--color-primary); background: var(--color-primary-light); }

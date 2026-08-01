@@ -1,0 +1,96 @@
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+.actionBar {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.inputWrapper,
+.inputWrapperShort,
+.selectWrapper {
+  display: flex;
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+}
+.inputWrapper {
+  flex: 2;
+  min-width: 200px;
+}
+.inputWrapperShort {
+  width: 120px;
+}
+.selectWrapper {
+  flex: 1;
+  min-width: 180px;
+  padding: 0;
+}
+.fieldIcon {
+  font-size: var(--text-sm);
+  margin-right: var(--space-2);
+  color: var(--color-text-muted);
+}
+.inputField {
+  padding: var(--space-3) 0;
+  border: none;
+  font-size: var(--text-sm);
+  outline: none;
+  color: var(--color-text-heading);
+  width: 100%;
+  background: transparent;
+}
+.selectField {
+  padding: var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  outline: none;
+  color: var(--color-text-heading);
+  background: transparent;
+  width: 100%;
+  cursor: pointer;
+}
+.queryBtn {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-text-heading);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tdCenter {
+  padding: var(--space-4);
+  text-align: center;
+}
+.actionTableBtn {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.disabledText {
+  color: var(--color-border);
+}
+.loading {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
