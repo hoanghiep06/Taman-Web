@@ -123,6 +123,75 @@ def get_elder_vital_history(
         .order_by(VitalSignRecord.measured_at.desc()).all()
 
 
+@router.get("/vitals/history", response_model=List[VitalSignResponse])
+def get_vital_signs_history(
+    elder_id: Optional[int] = Query(None, description="ID của Cụ cụ thể (Để trống nếu muốn lấy toàn bộ các Cụ)"),
+    target_date: Optional[date] = Query(None, description="Lọc chính xác theo ngày đo (YYYY-MM-DD)"),
+    limit_days: Optional[int] = Query(None, ge=1, le=90, description="Lấy dữ liệu trong N ngày gần nhất (VD: 3, 7, 30 ngày)"),
+    shift_type: Optional[ShiftType] = Query(None, description="Lọc theo ca trực (Sang / Toi)"),
+    facility_id: Optional[int] = Query(None, description="Lọc theo Cơ sở"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """
+    TRUY VẤN LỊCH SỬ SINH HIỆU ĐA NĂNG:
+    1. Lấy toàn bộ các Cụ HOẶC chỉ 1 Cụ cụ thể (`elder_id`).
+    2. Lọc theo số ngày gần nhất (`limit_days`) HOẶC 1 ngày cụ thể (`target_date`).
+    3. Hỗ trợ lọc theo Ca trực (`shift_type`) và Cơ sở (`facility_id`).
+    4. Tự động áp ngưỡng số ngày tra cứu tối đa theo Vai trò (NVCS/ĐP tối đa 7 ngày, BS/Manager tối đa 90 ngày).
+    """
+
+    query = db.query(VitalSignRecord).join(Elder, VitalSignRecord.elder_id == Elder.id)
+
+    # 1. PHÂN QUYỀN ĐA CƠ SỞ (Multi-facility isolation)
+    target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+    if target_f_id is not None:
+        query = query.join(Room, Elder.room_id == Room.id)\
+                     .join(Zone, Room.zone_id == Zone.id)\
+                     .filter(Zone.facility_id == target_f_id)
+
+    # 2. LỌC THEO CỤ GIÀ CỤ THỂ (NẾU CÓ)
+    if elder_id:
+        query = query.filter(VitalSignRecord.elder_id == elder_id)
+
+    # 3. KHÓA BẢO MẬT SỐ NGÀY THEO VAI TRÒ
+    today = date.today()
+    max_allowed = max_allowed_days_max
+    if current_user.role in [RoleType.Caregiver, RoleType.Coordinator]:
+        max_allowed = max_allowed_days_for_staff
+
+
+    # Tính toán ngày cắt (cutoff_date) nếu dùng limit_days
+    if limit_days:
+        effective_days = min(limit_days, max_allowed)
+        cutoff_date = today - timedelta(days=effective_days)
+        query = query.filter(VitalSignRecord.measured_at >= cutoff_date)
+    elif not target_date:
+        # Nếu không truyền limit_days lẫn target_date -> Mặc định áp ngưỡng max theo vai trò để tránh kéo dữ liệu quá nặng
+        cutoff_date = today - timedelta(days=max_allowed)
+        query = query.filter(VitalSignRecord.measured_at >= cutoff_date)
+
+    # 4. LỌC THEO NGÀY CỤ THỂ (NẾU CÓ)
+    if target_date:
+        cutoff_date = today - timedelta(days=max_allowed)
+        if target_date < cutoff_date:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Tài khoản [{current_user.role}] chỉ được xem lịch sử trong vòng {max_allowed} ngày gần nhất!"
+            )
+        # Lọc trong khoảng từ 00:00:00 đến 23:59:59 của ngày đó
+        start_dt = datetime.combine(target_date, datetime.min.time())
+        end_dt = datetime.combine(target_date, datetime.max.time())
+        query = query.filter(VitalSignRecord.measured_at >= start_dt, VitalSignRecord.measured_at <= end_dt)
+
+    # 5. LỌC THEO CA TRỰC
+    if shift_type:
+        query = query.filter(VitalSignRecord.shift_type == shift_type.value)
+
+    records = query.order_by(VitalSignRecord.measured_at.desc()).all()
+    return records
+
+
 # =========================================================================
 # 2. BÁO CÁO GIAO CA ĐIỀU PHỐI (CHỈ ĐIỀU PHỐI THỰC HIỆN)
 # =========================================================================
