@@ -20,7 +20,7 @@ from schemas import (
     ElderWeightDueResponse, WeightRecordUpdate
 )
 from core.dependencies import PermissionChecker, get_current_user, require_care_team, require_medical_team
-from core.constants import VITAL_LIMITS
+from core.constants import VITAL_LIMITS, max_allowed_days_for_staff, max_allowed_days_max
 
 router = APIRouter(prefix="/api/health", tags=["[Y tế/Bác sĩ/Điều phối/NVCS] Quản lý Sức Khỏe & Ca Trực"])
 
@@ -220,20 +220,53 @@ def get_doctor_advanced_dashboard(
 # =========================================================================
 @router.get("/shift-reports/archive", response_model=List[ShiftMedicalReportResponse])
 def get_archived_shift_reports(
-    facility_id: Optional[int] = None,
-    target_date: Optional[date] = None,
-    shift_type: Optional[ShiftType] = None,
+    facility_id: Optional[int] = Query(None, description="Lọc theo Cơ sở"),
+    target_date: Optional[date] = Query(None, description="Xem ngày cụ thể (YYYY-MM-DD)"),
+    shift_type: Optional[ShiftType] = Query(None, description="Lọc theo Ca Sáng / Ca Tối"),
+    limit_days: Optional[int] = Query(None, ge=1, le=90, description="Giới hạn số ngày gần nhất muốn xem (VD: 3, 7, 30 ngày)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    query = db.query(ShiftReport).options(joinedload(ShiftReport.reporter), joinedload(ShiftReport.facility))
+    """
+    XEM LẠI BÁO CÁO GIAO CA QUÁ KHỨ:
+    - Hỗ trợ lọc theo Ngày, Ca, Cơ sở.
+    - Hỗ trợ giới hạn số ngày tra cứu (`limit_days`).
+    - Tự động áp ngưỡng tối đa theo Vai trò (NVCS/ĐP tối đa 5 ngày, BS/Manager tối đa 15 ngày).
+    """
 
+    query = db.query(ShiftReport).options(
+        joinedload(ShiftReport.reporter), 
+        joinedload(ShiftReport.facility)
+    )
+
+    # 1. PHÂN QUYỀN CƠ SỞ (Multi-facility isolation)
     target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
     if target_f_id is not None:
         query = query.filter(ShiftReport.facility_id == target_f_id)
 
+    # 2. KHÓA GIỚI HẠN SỐ NGÀY THEO VAI TRÒ (ROLE-BASED DAYS RESTRICTION)
+    today = date.today()
+
+    max_allowed_days = max_allowed_days_max
+    if current_user.role in [RoleType.Caregiver, RoleType.Coordinator]:
+        max_allowed_days = max_allowed_days_for_staff
+
+    effective_limit_days = limit_days if limit_days and limit_days <= max_allowed_days else max_allowed_days
+    cutoff_date = today - timedelta(days=effective_limit_days)
+
+    # Ép điều kiện lọc từ ngày cutoff_date đến hôm nay
+    query = query.filter(ShiftReport.shift_date >= cutoff_date)
+
+    # 3. BỔ SUNG LỌC THEO NGÀY CỤ THỂ VÀ CA TRỰC (NẾU CÓ)
     if target_date:
+        # Nếu truyền ngày cụ thể nằm ngoài vùng được phép xem -> Báo lỗi 403
+        if target_date < cutoff_date:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail=f"Tài khoản vai trò [{current_user.role}] chỉ được xem lại báo cáo trong vòng {effective_limit_days} ngày gần nhất!"
+            )
         query = query.filter(ShiftReport.shift_date == target_date)
+
     if shift_type:
         query = query.filter(ShiftReport.shift_type == shift_type.value)
 

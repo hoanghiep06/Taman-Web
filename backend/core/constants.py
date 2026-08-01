@@ -56,3 +56,11 @@ FILE_NAMING_CONVENTIONS = {
 }
 
 
+
+
+# ==========================================
+# 5. Giới hạn số lượng ngày xem lại báo cáo ca trực
+# ==========================================
+max_allowed_days_max = 15
+max_allowed_days_for_staff = 5
+
