@@ -11,8 +11,7 @@ from core.limiter import limiter
 from services.shift_service import check_and_sync_shift_jit
 import logging
 
-
-router = APIRouter(prefix="/api", tags=["Authentication & Profile cá nhân"])
+router = APIRouter(prefix="/api/auth", tags=["1. [Xác thực] Đăng Nhập & Hồ Sơ Cá Nhân"])
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
@@ -29,27 +28,23 @@ def login(
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tài khoản đã bị khóa")
 
-    # 1. KÍCH HOẠT ĐỒNG BỘ JIT DUY NHẤT LÀM NGUỒN CHÂN LÝ DỮ LIỆU
+    # Kích hoạt đồng bộ JIT ca trực
     try:
         check_and_sync_shift_jit(db)
     except Exception as jit_err:
         db.rollback()
         logging.error(f"[JIT SHIFT FATAL_ERROR]: Lỗi tiến trình đồng bộ ca trực lúc đăng nhập: {str(jit_err)}")
 
-    client_ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
-
-    # Ghi nhận logs hệ thống
+    # Ghi nhận log đăng nhập
     log = LoginLog(
         user_id=user.id,
-        ip_address=request.client.ip,
+        ip_address=request.client.host,
         user_agent=request.headers.get("user-agent", "Unknown")
     )
     db.add(log)
     db.commit()
 
-    # Đóng gói JWT
     access_token = create_access_token(data={"sub": user.username, "role": user.role})
-
 
     return {
         "access_token": access_token,
@@ -71,19 +66,17 @@ def change_my_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
     if not verify_password(payload.old_password, current_user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mật khẩu không đúng")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mật khẩu cũ không chính xác")
 
     current_user.password_hash = get_password_hash(payload.new_password)
     current_user.must_change_password = False
     db.commit()
 
-    return {
-        "message": "Đổi mật khẩu thành công"
-    }
+    return {"message": "Đổi mật khẩu thành công"}
 
-@router.get("users/me/history", response_model=list[StaffHistoryResponse])
+
+@router.get("/users/me/history", response_model=list[StaffHistoryResponse])
 def get_my_inspection_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
