@@ -1,0 +1,100 @@
+.card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
+  position: relative;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+.cardSelected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+.cardMissing {
+  background: var(--color-warning-bg);
+}
+.cardProcessing {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mainInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0; /* bắt buộc để flex-child co lại dưới kích thước content */
+}
+.checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.checkboxSelected {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.checkMark {
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: bold;
+}
+
+.textDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.assetName {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.metaInfoRow {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.idSubtext {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+.noteSubtext {
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  font-weight: 500;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.badgeRow {
+  margin-top: var(--space-1);
+}
+
+.actionRightBlock {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  z-index: 10;
+  flex-shrink: 0;
+}

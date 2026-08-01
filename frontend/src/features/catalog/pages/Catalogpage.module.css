@@ -1,0 +1,83 @@
+.container {
+  font-family: var(--sans);
+  padding: var(--space-3);
+}
+
+.headerArea {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.pageTitle {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-heading);
+  font-size: var(--text-2xl);
+  font-weight: 800;
+}
+
+.pageSubtitle {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.headerRight {
+  display: flex;
+  flex-direction: column;
+  /* QUAN TRỌNG: bản cũ dùng align-items:'flex-end' khiến TabBar (flex:1 bên trong)
+     bị co lại theo nội dung thay vì giãn đều 3 tab — đổi sang stretch để TabBar
+     chiếm đủ chiều rộng, các tab chia đều nhau đúng như thiết kế. */
+  align-items: stretch;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .headerRight {
+    width: auto;
+    min-width: 420px;
+  }
+}
+
+.globalImportBtn {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-success);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  align-self: flex-end;
+  /* riêng nút này giữ kích thước theo nội dung, không giãn full */
+  white-space: nowrap;
+}
+
+.contentArea {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  padding: var(--space-6);
+  min-height: 65vh;
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  /* an toàn: nếu bảng bên trong tab rộng hơn, cuộn ở đây thay vì vỡ layout */
+}
+
+@media (max-width: 639px) {
+  .globalImportBtn {
+    align-self: stretch;
+    text-align: center;
+  }
+
+  .contentArea {
+    padding: var(--space-4);
+  }
+}

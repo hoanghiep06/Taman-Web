@@ -2,79 +2,69 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { patrolApi } from '../api/patrolApi';
 import { useBackgroundQueue } from '../hooks/useBackgroundQueue';
+import { fetchAndBuildImageUrl } from '../../../utils/imageUtils';
 
-import { PatrolHeader } from '../components/PatrolHeader';
-import { ElderSection } from '../components/ElderSection';
+import { PatrolHeader }       from '../components/PatrolHeader';
+import { ElderSection }       from '../components/ElderSection';
 import { MissingReportModal } from '../components/MissingReportModal';
-import { ImagePreviewModal } from '../components/ImagePreviewModal';
-import { ProgressSection } from '../components/ProgressSection';
-import { SearchBar } from '../components/SearchBar';
+import { ImagePreviewModal }  from '../components/ImagePreviewModal';
+import { ProgressSection }    from '../components/ProgressSection';
+import { SearchBar }          from '../components/SearchBar';
 import { groupAssetsByElder, getFinalStatus, STATUS_SEARCH_KEYWORDS } from '../utils/patrolHelpers';
 
-import { theme } from '../utils/theme';
-import axiosClient from '../../../api/axiosClient';
+import styles from './PatrolSessionPage.module.css';
 
 export const PatrolSessionPage = () => {
   const { roomNumber } = useParams();
   const navigate = useNavigate();
-  
-  const [assets, setAssets] = useState([]); 
+
+  const [assets, setAssets]               = useState([]);
   const [selectedAssetIds, setSelectedAssetIds] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]             = useState(true);
+  const [rooms, setRooms]                 = useState([]);
 
-  const [missingModal, setMissingModal] = useState({ isOpen: false, assetId: null });
-  const [previewModal, setPreviewModal] = useState({ isOpen: false, imageUrl: '', assetName: '', isLoading: false });
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [rooms, setRooms] = useState([]);
+  const [missingModal, setMissingModal]   = useState({ isOpen: false, assetId: null });
+  const [previewModal, setPreviewModal]   = useState({ isOpen: false, imageUrl: '', assetName: '', isLoading: false });
+  const [searchTerm, setSearchTerm]       = useState('');
+  const [statusFilter, setStatusFilter]   = useState('All');
 
   const { uploadStatus, processUploadInBackground, setUploadStatus } = useBackgroundQueue();
 
   const fetchRoomAssets = async (isSilent = false) => {
     try {
-      const assetsData = await patrolApi.getAssetsByRoom(roomNumber);
-      if (assetsData && assetsData.assets && Array.isArray(assetsData.assets)) {
-        setAssets(assetsData.assets); 
-      } else if (Array.isArray(assetsData)) {
-        setAssets(assetsData); 
-      } else {
-        setAssets([]); 
-      }
+      const data = await patrolApi.getAssetsByRoom(roomNumber);
+      const list = data?.assets ?? (Array.isArray(data) ? data : []);
+      setAssets(list);
     } catch (err) {
       console.error('Lỗi tải dữ liệu phòng:', err);
-      setAssets([]); 
+      setAssets([]);
     } finally {
       if (!isSilent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchRoomAssets(); 
-    const intervalId = setInterval(() => fetchRoomAssets(true), 5000); 
-    return () => clearInterval(intervalId); 
+    fetchRoomAssets();
+    const id = setInterval(() => fetchRoomAssets(true), 5000);
+    return () => clearInterval(id);
   }, [roomNumber]);
 
-  useEffect(() => { 
+  useEffect(() => {
     patrolApi.getRooms()
-      .then(res => {
-        if (Array.isArray(res)) setRooms(res);
-        else if (res && res.rooms) setRooms(res.rooms);
-      })
-      .catch(err => console.error(err));
+      .then((res) => setRooms(Array.isArray(res) ? res : res?.rooms ?? []))
+      .catch(console.error);
   }, []);
-  
+
   const safeAssets = Array.isArray(assets) ? assets : [];
 
-  const completedCount = safeAssets.filter(a => 
-    a.current_status === 'Xanh' || a.current_status === 'Success' || 
-    a.current_status === 'Vang' || a.current_status === 'Vàng' || a.current_status === 'Missing' ||
-    uploadStatus[a.asset_id] === 'success' || uploadStatus[a.asset_id] === 'missing'
+  const completedCount = safeAssets.filter((a) =>
+    ['Xanh', 'Success', 'Vang', 'Vàng', 'Missing'].includes(a.current_status) ||
+    ['success', 'missing'].includes(uploadStatus[a.asset_id])
   ).length;
-  
+
   const isFinished = safeAssets.length === 0 || completedCount === safeAssets.length;
-  
-  const currentRoomIdx = rooms.findIndex(r => String(r.room_number) === String(roomNumber));
+
+  const currentRoomIdx = rooms.findIndex((r) => String(r.room_number) === String(roomNumber));
   const nextRoom = currentRoomIdx !== -1 ? rooms[currentRoomIdx + 1] : undefined;
 
   const statusCounts = safeAssets.reduce((acc, a) => {
@@ -83,19 +73,18 @@ export const PatrolSessionPage = () => {
     return acc;
   }, {});
 
-  const filteredAssets = safeAssets.filter(a => {
+  const filteredAssets = safeAssets.filter((a) => {
     const finalStatus = getFinalStatus(a, uploadStatus);
     if (statusFilter !== 'All' && finalStatus !== statusFilter) return false;
-
     const term = searchTerm.toLowerCase().trim();
     if (!term) return true;
-
-    const matchName = a.asset_name.toLowerCase().includes(term);
-    const matchElder = (a.elder_name || '').toLowerCase().includes(term);
-    const matchStatusKeyword = (STATUS_SEARCH_KEYWORDS[finalStatus] || []).some(k => k.includes(term));
-
-    return matchName || matchElder || matchStatusKeyword;
+    return (
+      a.asset_name.toLowerCase().includes(term) ||
+      (a.elder_name || '').toLowerCase().includes(term) ||
+      (STATUS_SEARCH_KEYWORDS[finalStatus] || []).some((k) => k.includes(term))
+    );
   });
+
   const groupedData = groupAssetsByElder(filteredAssets);
 
   const handleToggleSelect = (assetId) => {
@@ -107,15 +96,12 @@ export const PatrolSessionPage = () => {
   const handleLaunchCamera = async (e) => {
     const file = e.target.files[0];
     if (!file || selectedAssetIds.length === 0) return;
-
     try {
-      const nonceResponse = await patrolApi.requestNonce();
-      const secureNonce = nonceResponse.nonce; 
-      if (!secureNonce) return alert("Lỗi: Không lấy được mã bảo mật bảo vệ ảnh!");
-
-      processUploadInBackground(selectedAssetIds, file, secureNonce);
-      setSelectedAssetIds([]); 
-    } catch (err) {
+      const { nonce } = await patrolApi.requestNonce();
+      if (!nonce) return alert('Lỗi: Không lấy được mã bảo mật!');
+      processUploadInBackground(selectedAssetIds, file, nonce);
+      setSelectedAssetIds([]);
+    } catch {
       alert('Hệ thống kiểm tra an ninh thất bại!');
     }
   };
@@ -123,88 +109,68 @@ export const PatrolSessionPage = () => {
   const handleReportMissingSubmit = async (note) => {
     try {
       await patrolApi.reportMissing(missingModal.assetId, note);
-      setUploadStatus(prev => ({ ...prev, [missingModal.assetId]: 'missing' }));
+      setUploadStatus((prev) => ({ ...prev, [missingModal.assetId]: 'missing' }));
       setMissingModal({ isOpen: false, assetId: null });
-      setSelectedAssetIds(prev => prev.filter(id => id !== missingModal.assetId));
-      fetchRoomAssets(true); 
-    } catch (err) {
+      setSelectedAssetIds((prev) => prev.filter((id) => id !== missingModal.assetId));
+      fetchRoomAssets(true);
+    } catch {
       alert('Lỗi gửi báo cáo mất!');
     }
   };
 
   const handleFetchAndShowImage = async (logId, assetName) => {
-    setPreviewModal({ isOpen: true, imageUrl: '', assetName: assetName, isLoading: true });
+    setPreviewModal({ isOpen: true, imageUrl: '', assetName, isLoading: true });
     try {
-      const response = await patrolApi.getInspectionImage(logId);
-      if (response.shareable_url) {
-        const token = response.shareable_url.split('/').pop();
-        const configuredBaseUrl = axiosClient.defaults.baseURL || '';
-        let absoluteBaseUrl = configuredBaseUrl;
-        if (!absoluteBaseUrl.startsWith('http')) {
-          absoluteBaseUrl = window.location.origin + (configuredBaseUrl.startsWith('/') ? '' : '/') + configuredBaseUrl;
-        }
-        const correctImageUrl = `${absoluteBaseUrl.replace(/\/$/, "")}/inspections/public-view/${token}`;
-        setPreviewModal({ isOpen: true, imageUrl: correctImageUrl, assetName: assetName, isLoading: false });
-      } else {
-        throw new Error("Không nhận được dữ liệu ảnh từ Server.");
-      }
+      const url = await fetchAndBuildImageUrl(patrolApi.getInspectionImage, logId);
+      setPreviewModal({ isOpen: true, imageUrl: url, assetName, isLoading: false });
     } catch (err) {
-      alert(`⚠️ Không thể xem ảnh: ${err.response?.data?.detail || "Hình ảnh đang được xử lý."}`);
+      alert(`⚠️ Không thể xem ảnh: ${err.response?.data?.detail || 'Hình ảnh đang được xử lý.'}`);
       setPreviewModal({ isOpen: false, imageUrl: '', assetName: '', isLoading: false });
     }
   };
 
   const handleCopyLink = (url) => {
-    if (!url) return alert("Không có liên kết ảnh để sao chép!");
+    if (!url) { alert('Không có liên kết ảnh để sao chép!'); return; }
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(url)
-        .then(() => alert('Đã sao chép liên kết ảnh bảo mật công khai!'))
-        .catch(() => alert('Trình duyệt chặn sao chép. Vui lòng thử lại!'));
+        .then(() => alert('Đã sao chép liên kết ảnh!'))
+        .catch(() => alert('Trình duyệt chặn sao chép.'));
     } else {
-      try {
-        const textArea = document.createElement("textarea");
-        textArea.value = url;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-9999px";
-        textArea.style.top = "0";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        const successful = document.execCommand('copy');
-        if (successful) alert('Đã sao chép liên kết ảnh bảo mật công khai!');
-        else alert('Trình duyệt điện thoại không hỗ trợ.');
-        document.body.removeChild(textArea);
-      } catch (err) {
-        alert('Lỗi quyền sao chép trên điện thoại.');
-      }
+      const el = document.createElement('textarea');
+      el.value = url;
+      Object.assign(el.style, { position: 'fixed', left: '-9999px', top: '0' });
+      document.body.appendChild(el);
+      el.focus(); el.select();
+      document.execCommand('copy') ? alert('Đã sao chép!') : alert('Trình duyệt không hỗ trợ.');
+      document.body.removeChild(el);
     }
   };
 
-  if (loading) return <div style={styles.loadingScreen}>Đang đồng bộ dữ liệu phòng...</div>;
+  if (loading) return <div className={styles.wrapper}><div className={styles.loadingScreen}>Đang đồng bộ dữ liệu phòng...</div></div>;
 
   return (
-    <div style={styles.wrapperContainer}>
-      {/* KHU VỰC ĐẦU TRANG CỐ ĐỊNH PHẦN TRĂM */}
-      <div style={styles.stickyTopArea}>
+    <div className={styles.wrapper}>
+      {/* Khu vực cố định đầu trang */}
+      <div className={styles.stickyTop}>
         <PatrolHeader roomNumber={roomNumber} onBack={() => navigate('/rooms')} />
-        <ProgressSection 
-          completedCount={completedCount} 
-          totalCount={safeAssets.length} 
+        <ProgressSection
+          completedCount={completedCount}
+          totalCount={safeAssets.length}
           isFinished={isFinished}
           nextRoomName={nextRoom?.room_number}
-          onNextRoom={() => nextRoom ? navigate(`/patrol/${nextRoom.room_number}`) : navigate('/rooms')}
+          onNextRoom={() => (nextRoom ? navigate(`/patrol/${nextRoom.room_number}`) : navigate('/rooms'))}
         />
         <SearchBar
           searchTerm={searchTerm}
           onSearch={setSearchTerm}
           statusFilter={statusFilter}
-          onStatusFilterChange={onStatusFilterChange => setStatusFilter(onStatusFilterChange)}
+          onStatusFilterChange={setStatusFilter}
           statusCounts={statusCounts}
         />
       </div>
-      
-      {/* KHU VỰC CUỘN DANH SÁCH ĐỒ ĐẠC TỰ LỌC THEO KHUNG CÒN LẠI */}
-      <div style={styles.scrollListArea}>
+
+      {/* Danh sách tài sản cuộn */}
+      <div className={styles.scrollArea}>
         {groupedData.length > 0 ? (
           groupedData.map((group, index) => (
             <ElderSection
@@ -214,22 +180,28 @@ export const PatrolSessionPage = () => {
               uploadStatus={uploadStatus}
               onToggleSelect={handleToggleSelect}
               onOpenMissing={(assetId) => setMissingModal({ isOpen: true, assetId })}
-              onOpenPreview={handleFetchAndShowImage} 
+              onOpenPreview={handleFetchAndShowImage}
             />
           ))
         ) : (
-          <div style={styles.emptyState}>Phòng trống hoặc chưa có đồ đạc nào phù hợp bộ lọc.</div>
+          <div className={styles.emptyState}>Phòng trống hoặc không có tài sản khớp bộ lọc.</div>
         )}
       </div>
 
-      {/* THANH THAO TÁC NỔI CHỮA BIÊN AN TOÀN CALC DÀNH RIÊNG CHO IPHONE */}
+      {/* Thanh thao tác nổi */}
       {selectedAssetIds.length > 0 && (
-        <div style={styles.stickyFooterContainer}>
-          <div style={styles.stickyFooter}>
-            <span style={styles.footerInfo}>Đang chọn: <b>{selectedAssetIds.length}</b> mục</span>
-            <label style={styles.cameraTrigger}>
+        <div className={styles.footerContainer}>
+          <div className={styles.footerBar}>
+            <span className={styles.footerInfo}>Đang chọn: <b>{selectedAssetIds.length}</b> mục</span>
+            <label className={styles.cameraTrigger}>
               📸 Chụp ảnh ngay
-              <input type="file" accept="image/*" capture="environment" onChange={handleLaunchCamera} style={{ display: 'none' }} />
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleLaunchCamera}
+                className={styles.cameraInput}
+              />
             </label>
           </div>
         </div>
@@ -240,7 +212,6 @@ export const PatrolSessionPage = () => {
         onClose={() => setMissingModal({ isOpen: false, assetId: null })}
         onSubmit={handleReportMissingSubmit}
       />
-
       <ImagePreviewModal
         isOpen={previewModal.isOpen}
         imageUrl={previewModal.imageUrl}
@@ -251,29 +222,4 @@ export const PatrolSessionPage = () => {
       />
     </div>
   );
-};
-
-const styles = {
-  wrapperContainer: { display: 'flex', flexDirection: 'column', height: '100%', width: '100%', boxSizing: 'border-box' },
-  stickyTopArea: { padding: '4px 12px 0 12px', flexShrink: 0, backgroundColor: theme.color.bg, zIndex: 10 },
-  
-  // 🔴 SỬA CHÍ MẠNG: Độc lập vùng cuộn danh sách, chừa khế ước đáy 100px để không bao giờ bị thanh chụp đè nghẹt chữ
-  scrollListArea: { flex: 1, overflowY: 'auto', padding: '4px 12px 100px 12px', WebkitOverflowScrolling: 'touch' },
-  
-  loadingScreen: { textAlign: 'center', marginTop: '80px', color: theme.color.inkTertiary, fontSize: '14px' },
-  emptyState: { textAlign: 'center', padding: '40px 0', color: theme.color.inkMuted, fontSize: '13px' },
-  
-  // 🔴 ĐỊNH VỊ PHAO NỔI THÔNG MINH CHỐNG CHU KỲ SAFARI TÀI THỎ
-  stickyFooterContainer: { 
-    position: 'fixed', 
-    bottom: 'calc(60px + 12px + env(safe-area-inset-bottom))', // Neo chuẩn xác lơ lửng phía trên BottomNav 12px
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: 'calc(100% - 24px)',
-    maxWidth: '456px',
-    zIndex: 999 
-  },
-  stickyFooter: { backgroundColor: theme.color.ink, padding: '12px 16px', borderRadius: theme.radius.xl, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 8px 24px rgba(15,23,42,0.25)' },
-  footerInfo: { color: '#E2E8F0', fontSize: '13px' },
-  cameraTrigger: { backgroundColor: theme.color.primary, color: '#FFF', padding: '10px 18px', borderRadius: theme.radius.md, fontSize: '13px', fontWeight: '700', cursor: 'pointer' },
 };

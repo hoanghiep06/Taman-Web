@@ -1,0 +1,25 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.title {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--color-text-heading);
+  font-weight: 700;
+}
+.sizeText {
+  color: var(--color-success);
+  font-weight: 700;
+}
+.tdActions {
+  padding: var(--space-4);
+  text-align: right;
+}
+.loading {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
