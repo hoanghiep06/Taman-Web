@@ -20,7 +20,7 @@ from schemas import (
     ElderWeightDueResponse, WeightRecordUpdate
 )
 from core.dependencies import PermissionChecker, get_current_user, require_care_team, require_medical_team
-from core.constants import VITAL_LIMITS
+from core.constants import VITAL_LIMITS, max_allowed_days_for_staff, max_allowed_days_max
 
 router = APIRouter(prefix="/api/health", tags=["[Y tế/Bác sĩ/Điều phối/NVCS] Quản lý Sức Khỏe & Ca Trực"])
 
@@ -123,6 +123,75 @@ def get_elder_vital_history(
         .order_by(VitalSignRecord.measured_at.desc()).all()
 
 
+@router.get("/vitals/history", response_model=List[VitalSignResponse])
+def get_vital_signs_history(
+    elder_id: Optional[int] = Query(None, description="ID của Cụ cụ thể (Để trống nếu muốn lấy toàn bộ các Cụ)"),
+    target_date: Optional[date] = Query(None, description="Lọc chính xác theo ngày đo (YYYY-MM-DD)"),
+    limit_days: Optional[int] = Query(None, ge=1, le=90, description="Lấy dữ liệu trong N ngày gần nhất (VD: 3, 7, 30 ngày)"),
+    shift_type: Optional[ShiftType] = Query(None, description="Lọc theo ca trực (Sang / Toi)"),
+    facility_id: Optional[int] = Query(None, description="Lọc theo Cơ sở"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """
+    TRUY VẤN LỊCH SỬ SINH HIỆU ĐA NĂNG:
+    1. Lấy toàn bộ các Cụ HOẶC chỉ 1 Cụ cụ thể (`elder_id`).
+    2. Lọc theo số ngày gần nhất (`limit_days`) HOẶC 1 ngày cụ thể (`target_date`).
+    3. Hỗ trợ lọc theo Ca trực (`shift_type`) và Cơ sở (`facility_id`).
+    4. Tự động áp ngưỡng số ngày tra cứu tối đa theo Vai trò (NVCS/ĐP tối đa 7 ngày, BS/Manager tối đa 90 ngày).
+    """
+
+    query = db.query(VitalSignRecord).join(Elder, VitalSignRecord.elder_id == Elder.id)
+
+    # 1. PHÂN QUYỀN ĐA CƠ SỞ (Multi-facility isolation)
+    target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+    if target_f_id is not None:
+        query = query.join(Room, Elder.room_id == Room.id)\
+                     .join(Zone, Room.zone_id == Zone.id)\
+                     .filter(Zone.facility_id == target_f_id)
+
+    # 2. LỌC THEO CỤ GIÀ CỤ THỂ (NẾU CÓ)
+    if elder_id:
+        query = query.filter(VitalSignRecord.elder_id == elder_id)
+
+    # 3. KHÓA BẢO MẬT SỐ NGÀY THEO VAI TRÒ
+    today = date.today()
+    max_allowed = max_allowed_days_max
+    if current_user.role in [RoleType.Caregiver, RoleType.Coordinator]:
+        max_allowed = max_allowed_days_for_staff
+
+
+    # Tính toán ngày cắt (cutoff_date) nếu dùng limit_days
+    if limit_days:
+        effective_days = min(limit_days, max_allowed)
+        cutoff_date = today - timedelta(days=effective_days)
+        query = query.filter(VitalSignRecord.measured_at >= cutoff_date)
+    elif not target_date:
+        # Nếu không truyền limit_days lẫn target_date -> Mặc định áp ngưỡng max theo vai trò để tránh kéo dữ liệu quá nặng
+        cutoff_date = today - timedelta(days=max_allowed)
+        query = query.filter(VitalSignRecord.measured_at >= cutoff_date)
+
+    # 4. LỌC THEO NGÀY CỤ THỂ (NẾU CÓ)
+    if target_date:
+        cutoff_date = today - timedelta(days=max_allowed)
+        if target_date < cutoff_date:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Tài khoản [{current_user.role}] chỉ được xem lịch sử trong vòng {max_allowed} ngày gần nhất!"
+            )
+        # Lọc trong khoảng từ 00:00:00 đến 23:59:59 của ngày đó
+        start_dt = datetime.combine(target_date, datetime.min.time())
+        end_dt = datetime.combine(target_date, datetime.max.time())
+        query = query.filter(VitalSignRecord.measured_at >= start_dt, VitalSignRecord.measured_at <= end_dt)
+
+    # 5. LỌC THEO CA TRỰC
+    if shift_type:
+        query = query.filter(VitalSignRecord.shift_type == shift_type.value)
+
+    records = query.order_by(VitalSignRecord.measured_at.desc()).all()
+    return records
+
+
 # =========================================================================
 # 2. BÁO CÁO GIAO CA ĐIỀU PHỐI (CHỈ ĐIỀU PHỐI THỰC HIỆN)
 # =========================================================================
@@ -220,20 +289,53 @@ def get_doctor_advanced_dashboard(
 # =========================================================================
 @router.get("/shift-reports/archive", response_model=List[ShiftMedicalReportResponse])
 def get_archived_shift_reports(
-    facility_id: Optional[int] = None,
-    target_date: Optional[date] = None,
-    shift_type: Optional[ShiftType] = None,
+    facility_id: Optional[int] = Query(None, description="Lọc theo Cơ sở"),
+    target_date: Optional[date] = Query(None, description="Xem ngày cụ thể (YYYY-MM-DD)"),
+    shift_type: Optional[ShiftType] = Query(None, description="Lọc theo Ca Sáng / Ca Tối"),
+    limit_days: Optional[int] = Query(None, ge=1, le=90, description="Giới hạn số ngày gần nhất muốn xem (VD: 3, 7, 30 ngày)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    query = db.query(ShiftReport).options(joinedload(ShiftReport.reporter), joinedload(ShiftReport.facility))
+    """
+    XEM LẠI BÁO CÁO GIAO CA QUÁ KHỨ:
+    - Hỗ trợ lọc theo Ngày, Ca, Cơ sở.
+    - Hỗ trợ giới hạn số ngày tra cứu (`limit_days`).
+    - Tự động áp ngưỡng tối đa theo Vai trò (NVCS/ĐP tối đa 5 ngày, BS/Manager tối đa 15 ngày).
+    """
 
+    query = db.query(ShiftReport).options(
+        joinedload(ShiftReport.reporter), 
+        joinedload(ShiftReport.facility)
+    )
+
+    # 1. PHÂN QUYỀN CƠ SỞ (Multi-facility isolation)
     target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
     if target_f_id is not None:
         query = query.filter(ShiftReport.facility_id == target_f_id)
 
+    # 2. KHÓA GIỚI HẠN SỐ NGÀY THEO VAI TRÒ (ROLE-BASED DAYS RESTRICTION)
+    today = date.today()
+
+    max_allowed_days = max_allowed_days_max
+    if current_user.role in [RoleType.Caregiver, RoleType.Coordinator]:
+        max_allowed_days = max_allowed_days_for_staff
+
+    effective_limit_days = limit_days if limit_days and limit_days <= max_allowed_days else max_allowed_days
+    cutoff_date = today - timedelta(days=effective_limit_days)
+
+    # Ép điều kiện lọc từ ngày cutoff_date đến hôm nay
+    query = query.filter(ShiftReport.shift_date >= cutoff_date)
+
+    # 3. BỔ SUNG LỌC THEO NGÀY CỤ THỂ VÀ CA TRỰC (NẾU CÓ)
     if target_date:
+        # Nếu truyền ngày cụ thể nằm ngoài vùng được phép xem -> Báo lỗi 403
+        if target_date < cutoff_date:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail=f"Tài khoản vai trò [{current_user.role}] chỉ được xem lại báo cáo trong vòng {effective_limit_days} ngày gần nhất!"
+            )
         query = query.filter(ShiftReport.shift_date == target_date)
+
     if shift_type:
         query = query.filter(ShiftReport.shift_type == shift_type.value)
 
@@ -389,19 +491,27 @@ def get_elder_weight_history(
     return records
 
 
+# =========================================================================
+# 4. GET: DANH SÁCH CÁC CỤ CẦN CÂN (ĐÃ QUÁ HẠN HOẶC SẮP ĐẾN HẠN CÂN - TỪ NGÀY 25)
+# =========================================================================
 @router.get("/weight/due-list", response_model=List[ElderWeightDueResponse])
 def get_elders_due_for_weight(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
     """
-    API Nhắc Lịch Cân:
-    - Tìm ra các Cụ đã quá 30 ngày chưa được cân (hoặc mới vào viện chưa có ngày cân).
-    - Trả về danh sách xếp ưu tiên.
+    API Nhắc Lịch Cân Thông Minh:
+    - Nhắc nhở sớm từ ngày thứ 25 (cho 5 ngày chuẩn bị trước mốc 30 ngày).
+    - Tính toán `days_remaining`: Số ngày còn lại trước khi trễ hạn.
+    - Phân loại `status_flag`:
+        + 'OVERDUE' : Đã quá hạn (>= 30 ngày hoặc chưa từng cân) -> Cần cân gấp!
+        + 'WARNING' : Sắp đến hạn (25 - 29 ngày) -> Chuẩn bị cân trong các ca tới.
     """
+
     query = db.query(Elder).options(joinedload(Elder.room))
     if current_user.facility_id is not None:
         query = query.join(Room).join(Zone).filter(Zone.facility_id == current_user.facility_id)
+
 
     elders = query.all()
     today = date.today()
@@ -409,16 +519,30 @@ def get_elders_due_for_weight(
 
     for elder in elders:
         days_since = None
+        days_remaining = 0
         is_overdue = False
+        status_flag = "NORMAL"
 
         if elder.last_weight_date:
             days_since = (today - elder.last_weight_date).days
+            days_remaining = 30 - days_since  # Tính số ngày còn lại (Có thể âm nếu quá hạn)
+
             if days_since >= 30:
                 is_overdue = True
+                status_flag = "OVERDUE"
+            elif days_since >= 25:
+                status_flag = "WARNING"  # Đã qua 25 ngày -> Đưa vào danh sách chuẩn bị
+            else:
+                status_flag = "NORMAL"
         else:
+            # Chưa từng cân lần nào -> Báo cờ Đỏ quá hạn cần cân ngay
+            days_since = None
+            days_remaining = 0
             is_overdue = True
+            status_flag = "OVERDUE"
 
-        if is_overdue:
+        # Chỉ đưa vào danh sách trả về nếu Cụ đã quá hạn (OVERDUE) hoặc nằm trong vùng cảnh báo (WARNING)
+        if status_flag in ["OVERDUE", "WARNING"]:
             due_list.append(
                 ElderWeightDueResponse(
                     elder_id=elder.id,
@@ -426,11 +550,22 @@ def get_elders_due_for_weight(
                     room_number=elder.room.room_number if elder.room else "Chưa xếp phòng",
                     last_weight_date=elder.last_weight_date,
                     days_since_last_weight=days_since,
+                    days_remaining=days_remaining,
+                    status_flag=status_flag,
                     is_overdue=is_overdue
                 )
             )
 
-    due_list.sort(key=lambda x: (x.days_since_last_weight or 9999), reverse=True)
+    # Ưu tiên sắp xếp:
+    # 1. Đưa các Cụ 'OVERDUE' lên trước 'WARNING'
+    # 2. Trong cùng nhóm 'OVERDUE', cụ nào trễ nhiều ngày nhất đứng đầu
+    due_list.sort(
+        key=lambda x: (
+            0 if x.status_flag == "OVERDUE" else 1,
+            x.days_remaining  # Số ngày còn lại càng nhỏ (hoặc càng âm) đứng càng cao
+        )
+    )
+
     return due_list
 
 

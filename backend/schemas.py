@@ -295,8 +295,10 @@ class ElderWeightDueResponse(BaseModel):
     elder_name: str = Field(..., example="Nguyễn Văn A")
     room_number: Optional[str] = Field(None, example="Phòng 101")
     last_weight_date: Optional[date] = Field(None, example="2026-07-01", description="Ngày cân gần đây nhất")
-    days_since_last_weight: Optional[int] = Field(None, example=31, description="Số ngày đã trôi qua kể từ lần cân gần nhất")
-    is_overdue: bool = Field(True, description="True nếu đã >= 30 ngày chưa được cân (Cần ưu tiên cân hôm nay)")
+    days_since_last_weight: Optional[int] = Field(None, example=27, description="Số ngày đã trôi qua kể từ lần cân gần nhất")
+    days_remaining: int = Field(..., example=3, description="Số ngày còn lại trước khi quá hạn (Âm nếu đã trễ)")
+    status_flag: str = Field(..., example="WARNING", description="'OVERDUE' (Quá hạn >=30 ngày), 'WARNING' (Sắp đến hạn 25-29 ngày), 'NORMAL'")
+    is_overdue: bool = Field(..., description="True nếu đã >= 30 ngày")
 
     model_config = ConfigDict(from_attributes=True)
 
