@@ -27,8 +27,8 @@ class Zone(Base):
     facility_id = Column(Integer, ForeignKey("facilities.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(50), nullable=False)  # Vdu: Khu A, Khu B
 
-    facility = relationship("Facility", back_populates="zone")
-    rooms = relationship("Room", back_populates="zones", cascade="all, delete-orphan")
+    facility = relationship("Facility", back_populates="zones")
+    rooms = relationship("Room", back_populates="zone", cascade="all, delete-orphan")
     description = Column(Text) 
 
 class Room(Base):

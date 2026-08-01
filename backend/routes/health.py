@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models import (
     Elder, VitalSignRecord, Prescription, PrescriptionLog, 
-    TreatmentDiary, ShiftReport, User, Room, Zone, Facility, AuditLog
+    TreatmentDiary, ShiftReport, User, Room, Zone, Facility, AuditLog,
+    WeightRecord  
 )
 from schemas import (
     VitalSignCreate, VitalSignResponse, VitalSignUpdate,
@@ -15,7 +16,8 @@ from schemas import (
     TreatmentDiaryCreate, TreatmentDiaryResponse,
     ElderHealthSummaryCard, ElderShiftNoteInput,
     ShiftMedicalReportCreate, ShiftMedicalReportResponse,
-    RoleType, ShiftType
+    RoleType, ShiftType, WeightRecordCreate, WeightRecordResponse, 
+    ElderWeightDueResponse, WeightRecordUpdate
 )
 from core.dependencies import PermissionChecker, get_current_user, require_care_team, require_medical_team
 from core.constants import VITAL_LIMITS
@@ -86,7 +88,6 @@ def update_vital_signs(
 
     old_values = f"BP:{record.bp_systolic}/{record.bp_diastolic}, SPO2:{record.spo2}, Temp:{record.temperature}"
 
-    # Cập nhật các trường mới
     if payload.bp_systolic is not None: record.bp_systolic = payload.bp_systolic
     if payload.bp_diastolic is not None: record.bp_diastolic = payload.bp_diastolic
     if payload.pulse is not None: record.pulse = payload.pulse
@@ -94,10 +95,8 @@ def update_vital_signs(
     if payload.temperature is not None: record.temperature = payload.temperature
     if payload.notes is not None: record.notes = payload.notes
 
-    # Tính toán lại cờ bất thường
     record.is_abnormal = calculate_abnormal_flag(record.spo2, record.bp_systolic, record.bp_diastolic, record.temperature, record.pulse)
 
-    # Ghi vết AuditLog bảo vệ nhân viên
     audit = AuditLog(
         actor_id=current_user.id,
         action="UPDATE_VITAL_SIGN",
@@ -137,7 +136,7 @@ def create_shift_medical_report(
     ĐIỀU PHỐI TỔNG KẾT CA TRỰC:
     1. Chọn từng Cụ -> Gõ ghi chú diễn biến trong ca.
     2. Tự động lưu vào Nhật ký `TreatmentDiary` của Cụ đó để bật cờ chú ý cho Bác sĩ.
-    3. Định dạng chuỗi văn bản giao ca hoàn chỉnh (1. B.Hà..., 2. M.Như...).
+    3. Định dạng chuỗi văn bản giao ca hoàn chỉnh.
     """
     formatted_descriptions = []
 
@@ -149,7 +148,6 @@ def create_shift_medical_report(
         note_text = item.note.strip()
         formatted_descriptions.append(f"{idx}. {elder.full_name}: {note_text}")
 
-        # Tự động đẩy vào Nhật ký điều trị
         diary = TreatmentDiary(
             elder_id=elder.id,
             event_type="Lưu ý giao ca (ĐP)",
@@ -190,7 +188,7 @@ def create_shift_medical_report(
 
 
 # =========================================================================
-# 3. 🔥 DASHBOARD CA LIVE CHO TOÀN BỘ NHÂN VIÊN (NVCS/ĐP/BS/MANAGER)
+# 3. DASHBOARD CA LIVE CHO TOÀN BỘ NHÂN VIÊN
 # =========================================================================
 @router.get("/dashboard-live", response_model=List[ElderHealthSummaryCard])
 def get_live_shift_dashboard_for_all(
@@ -198,16 +196,11 @@ def get_live_shift_dashboard_for_all(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    """
-    BẢNG DASHBOARD CA LIVE DÀNH CHO TOÀN BỘ NHÂN VIÊN:
-    - Luôn hiển thị thông tin ca trực hiện tại.
-    - NVCS nhìn vào biết phòng nào, Cụ nào có chỉ số bất thường hoặc có ghi chú giao ca cần theo dõi.
-    """
     return build_health_dashboard_cards(db, current_user, facility_id, is_doctor_view=False)
 
 
 # =========================================================================
-# 4. 🔥 DASHBOARD Y TẾ CHUYÊN SÂU DÀNH RIÊNG CHO BÁC SĨ & MANAGER
+# 4. DASHBOARD Y TẾ CHUYÊN SÂU DÀNH RIÊNG CHO BÁC SĨ & MANAGER
 # =========================================================================
 @router.get("/dashboard-doctor", response_model=List[ElderHealthSummaryCard])
 def get_doctor_advanced_dashboard(
@@ -216,16 +209,9 @@ def get_doctor_advanced_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_medical_team)
 ):
-    """
-    DASHBOARD CHUYÊN SÂU CHO BÁC SĨ:
-    - Kèm thêm Link Toa Thuốc Active và Lý do chi tiết cần Bác sĩ can thiệp.
-    - Cụ nào có nguy cơ (SPO2 < 95, Sốt > 37.5, HA bất thường, có diễn biến) ĐƯỢC ĐẨY LÊN ĐẦU BẢNG.
-    """
     cards = build_health_dashboard_cards(db, current_user, facility_id, is_doctor_view=True)
-
     if only_attention_needed:
         cards = [c for c in cards if c.has_abnormal_vital]
-
     return cards
 
 
@@ -240,7 +226,6 @@ def get_archived_shift_reports(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    """Xem lại nguyên văn Biên bản báo cáo giao ca trong quá khứ (chuẩn như hình mẫu)"""
     query = db.query(ShiftReport).options(joinedload(ShiftReport.reporter), joinedload(ShiftReport.facility))
 
     target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
@@ -276,7 +261,6 @@ def get_elder_treatment_diary_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    """Tra cứu lịch sử diễn biến y tế của 1 Cụ từ trước tới nay"""
     diaries = db.query(TreatmentDiary).options(joinedload(TreatmentDiary.staff))\
         .filter(TreatmentDiary.elder_id == elder_id)\
         .order_by(TreatmentDiary.created_at.desc()).all()
@@ -293,6 +277,161 @@ def get_elder_treatment_diary_history(
             created_at=d.created_at
         ) for d in diaries
     ]
+
+
+# =========================================================================
+# 6. QUẢN LÝ CÂN NẶNG HÀNG THÁNG (POST / PUT / GET)
+# =========================================================================
+@router.post("/weight", response_model=WeightRecordResponse, status_code=status.HTTP_201_CREATED)
+def record_elder_weight(
+    payload: WeightRecordCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """
+    Nhập chỉ số cân nặng định kỳ cho Cụ (Thường đo 30 ngày/lần):
+    - Tự động lưu bản ghi vào `weight_records` với tháng YYYY-MM hiện tại.
+    - Tự động cập nhật `last_weight_date` trong hồ sơ của Cụ để reset bộ đếm 30 ngày.
+    """
+    elder = db.query(Elder).filter(Elder.id == payload.elder_id).first()
+    if not elder:
+        raise HTTPException(status_code=404, detail="Không tìm thấy thông tin Cụ!")
+
+    today_date = date.today()
+    current_month_str = today_date.strftime("%Y-%m")
+
+    existing_record = db.query(WeightRecord)\
+        .options(joinedload(WeightRecord.staff))\
+        .filter(
+            WeightRecord.elder_id == payload.elder_id,
+            WeightRecord.measured_month == current_month_str
+        ).first()
+
+    if existing_record:
+        existing_record.weight = payload.weight
+        existing_record.notes = payload.notes
+        existing_record.measured_by = current_user.id
+        existing_record.measured_at = datetime.now()
+        
+        elder.last_weight_date = today_date
+        db.commit()
+        db.refresh(existing_record)
+        return existing_record
+
+    new_record = WeightRecord(
+        elder_id=payload.elder_id,
+        measured_by=current_user.id,
+        weight=payload.weight,
+        measured_month=current_month_str,
+        notes=payload.notes
+    )
+    
+    elder.last_weight_date = today_date
+
+    db.add(new_record)
+    db.commit()
+
+    record = db.query(WeightRecord)\
+        .options(joinedload(WeightRecord.staff))\
+        .filter(WeightRecord.id == new_record.id).first()
+
+    return record
+
+
+@router.put("/weight/{weight_id}", response_model=WeightRecordResponse)
+def update_elder_weight(
+    weight_id: int,
+    payload: WeightRecordUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """Sửa lại chỉ số cân nặng khi nhân viên nhập nhầm số kg"""
+    record = db.query(WeightRecord)\
+        .options(joinedload(WeightRecord.staff))\
+        .filter(WeightRecord.id == weight_id).first()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi cân nặng này!")
+
+    old_weight = record.weight
+    record.weight = payload.weight
+    if payload.notes is not None:
+        record.notes = payload.notes
+    record.measured_by = current_user.id
+
+    audit = AuditLog(
+        actor_id=current_user.id,
+        action="UPDATE_WEIGHT_RECORD",
+        target_id=str(weight_id),
+        ip_address="Internal",
+        payload=f"Sửa cân nặng Cụ ID={record.elder_id}. Cũ: {old_weight}kg -> Mới: {payload.weight}kg"
+    )
+    db.add(audit)
+
+    db.commit()
+    db.refresh(record)
+
+    return record
+
+
+@router.get("/weight/elder/{elder_id}", response_model=List[WeightRecordResponse])
+def get_elder_weight_history(
+    elder_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """Lấy danh sách lịch sử cân nặng qua các tháng của 1 Cụ"""
+    records = db.query(WeightRecord)\
+        .options(joinedload(WeightRecord.staff))\
+        .filter(WeightRecord.elder_id == elder_id)\
+        .order_by(WeightRecord.measured_month.desc()).all()
+
+    return records
+
+
+@router.get("/weight/due-list", response_model=List[ElderWeightDueResponse])
+def get_elders_due_for_weight(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """
+    API Nhắc Lịch Cân:
+    - Tìm ra các Cụ đã quá 30 ngày chưa được cân (hoặc mới vào viện chưa có ngày cân).
+    - Trả về danh sách xếp ưu tiên.
+    """
+    query = db.query(Elder).options(joinedload(Elder.room))
+    if current_user.facility_id is not None:
+        query = query.join(Room).join(Zone).filter(Zone.facility_id == current_user.facility_id)
+
+    elders = query.all()
+    today = date.today()
+    due_list = []
+
+    for elder in elders:
+        days_since = None
+        is_overdue = False
+
+        if elder.last_weight_date:
+            days_since = (today - elder.last_weight_date).days
+            if days_since >= 30:
+                is_overdue = True
+        else:
+            is_overdue = True
+
+        if is_overdue:
+            due_list.append(
+                ElderWeightDueResponse(
+                    elder_id=elder.id,
+                    elder_name=elder.full_name,
+                    room_number=elder.room.room_number if elder.room else "Chưa xếp phòng",
+                    last_weight_date=elder.last_weight_date,
+                    days_since_last_weight=days_since,
+                    is_overdue=is_overdue
+                )
+            )
+
+    due_list.sort(key=lambda x: (x.days_since_last_weight or 9999), reverse=True)
+    return due_list
 
 
 # =========================================================================
@@ -360,6 +499,5 @@ def build_health_dashboard_cards(db: Session, current_user: User, facility_id: O
             )
         )
 
-    # Ưu tiên các Cụ có cờ báo đỏ/cần chú ý lên đầu danh sách
     cards.sort(key=lambda x: x.has_abnormal_vital, reverse=True)
     return cards

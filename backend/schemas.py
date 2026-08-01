@@ -53,7 +53,6 @@ class UserBase(BaseModel):
     phone_number: Optional[str] = None
     is_active: bool = True
 
-
 class UserCreate(UserBase):
     password: str
 
@@ -61,20 +60,14 @@ class UserResponse(UserBase):
     id: int
     created_at: datetime
     
-    # Cấu hình cho Pydantic v2 để đọc dữ liệu từ SQLAlchemy Models
     model_config = ConfigDict(from_attributes=True)
 
 
-# ==========================================
-# LOGIN Password
-# ==========================================
 class PasswordChange(BaseModel):
     old_password: str
     new_password: str
 
-# ==========================================
-# Theo dõi đăng nhập
-# ==========================================
+
 class LoginLogResponse(BaseModel):
     id: int
     user_id: int
@@ -82,6 +75,7 @@ class LoginLogResponse(BaseModel):
     ip_address: str
     user_agent: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
 
 # ==========================================
 # HỆ THỐNG CƠ SỞ & PHÂN KHU (FACILITY & ZONE)
@@ -139,40 +133,9 @@ class RoomResponse(RoomBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-# ==========================================
-# THỰC THỂ: CỤ GIÀ (ELDER)
-# ==========================================
-class ElderBase(BaseModel):
-    full_name: str
-    room_id: Optional[int] = None
-
-class ElderCreate(ElderBase):
-    pass
-
-class ElderResponse(ElderBase):
-    id: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 # ==========================================
-# THỰC THỂ: PHÒNG
-# ==========================================
-class RoomBase(BaseModel):
-    zone_id: int
-    room_number: str
-    description: Optional[str] = None
-
-class RoomCreate(RoomBase):
-    pass
-
-class RoomResponse(RoomBase):
-    id: int
-    created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
-
-# ==========================================
-# 5. NGƯỜI CAO TUỔI (ELDER) & HỒ SƠ Y TẾ
+# NGƯỜI CAO TUỔI (ELDER) & HỒ SƠ Y TẾ
 # ==========================================
 class ElderBase(BaseModel):
     full_name: str
@@ -191,6 +154,7 @@ class ElderResponse(ElderBase):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 # Hồ sơ sức khỏe
 class ElderHealthProfileBase(BaseModel):
     has_surgery: bool = False
@@ -208,7 +172,6 @@ class ElderHealthProfileBase(BaseModel):
     food_allergies: List[str] = []
     chronic_diseases: List[str] = []
 
-
 class ElderHealthProfileUpdate(ElderHealthProfileBase):
     pass
 
@@ -216,8 +179,6 @@ class ElderHealthProfileResponse(ElderHealthProfileBase):
     id: int
     elder_id: int
     model_config = ConfigDict(from_attributes=True)
-
-
 
 
 # Người thân liên kết
@@ -233,6 +194,7 @@ class RelativeElderResponse(BaseModel):
     relationship_type: str
     is_approved: bool
     model_config = ConfigDict(from_attributes=True)
+
 
 # ==========================================
 # THỰC THỂ: NGHIỆP VỤ Y TẾ (DẤU SINH HIỆU, THUỐC)
@@ -302,31 +264,43 @@ class TreatmentDiaryResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-# ==========================================
-# THEO DÕI CÂN NẶNG HÀNG THÁNG
-# ==========================================
-class WeightRecordCreate(BaseModel):
-    elder_id: int
-    weight: float = Field(..., gt=0, description="Cân nặng tính bằng kg (VD: 54.5)")
-    notes: Optional[str] = None
 
-class WeightRecordResponse(WeightRecordCreate):
+# ==========================================
+# QUẢN LÝ CÂN NẶNG HÀNG THÁNG (WEIGHT RECORDS)
+# ==========================================
+class WeightRecordBase(BaseModel):
+    elder_id: int = Field(..., example=1, description="ID của Cụ già")
+    weight: float = Field(..., gt=0, example=54.5, description="Cân nặng tính bằng kg (VD: 54.5)")
+    notes: Optional[str] = Field(None, example="Cụ ăn uống tốt, thể trạng ổn định", description="Ghi chú thêm nếu có")
+
+class WeightRecordCreate(WeightRecordBase):
+    pass
+
+class WeightRecordUpdate(BaseModel):
+    weight: float = Field(..., gt=0, example=55.0, description="Cân nặng cập nhật (kg)")
+    notes: Optional[str] = Field(None, description="Ghi chú điều chỉnh")
+
+class WeightRecordResponse(WeightRecordBase):
     id: int
-    measured_month: str
-    measured_by: Optional[int] = None
-    staff_name: Optional[str] = None
-    measured_at: datetime
+    measured_month: str = Field(..., example="2026-08", description="Tháng đo theo định dạng YYYY-MM")
+    measured_by: Optional[int] = Field(None, description="ID nhân viên thực hiện đo")
+    staff_name: Optional[str] = Field(None, example="Lê Anh Thư", description="Họ tên nhân viên/Y tế thực hiện")
+    measured_at: datetime = Field(..., description="Thời gian bấm máy lưu bản ghi")
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class ElderWeightDueResponse(BaseModel):
     elder_id: int
-    elder_name: str
-    room_number: Optional[str] = None
-    last_weight_date: Optional[date] = None
-    days_since_last_weight: Optional[int] = None
-    is_overdue: bool # True nếu > 30 ngày chưa cân
+    elder_name: str = Field(..., example="Nguyễn Văn A")
+    room_number: Optional[str] = Field(None, example="Phòng 101")
+    last_weight_date: Optional[date] = Field(None, example="2026-07-01", description="Ngày cân gần đây nhất")
+    days_since_last_weight: Optional[int] = Field(None, example=31, description="Số ngày đã trôi qua kể từ lần cân gần nhất")
+    is_overdue: bool = Field(True, description="True nếu đã >= 30 ngày chưa được cân (Cần ưu tiên cân hôm nay)")
 
+    model_config = ConfigDict(from_attributes=True)
+
+    
 # ==========================================
 # BÁO CÁO GIAO CA ĐIỀU PHỐI (STRUCTURED SHIFT REPORT)
 # ==========================================
@@ -366,12 +340,10 @@ class ElderHealthSummaryCard(BaseModel):
     recent_diary_events: List[str] = []                   # Các ghi chú diễn biến do ĐP/NVCS gõ
     doctor_attention_reasons: List[str] = []              # Lý do chi tiết cảnh báo Bác sĩ
 
-    
 
 # ==========================================
-# 7. QUẢN LÝ VẬN HÀNH: BÁO CÁO, KHO, BẾP, BẢO VỆ
+# QUẢN LÝ VẬN HÀNH: BÁO CÁO, KHO, BẾP, BẢO VỆ
 # ==========================================
-# --- Báo cáo ca trực của Điều Phối ---
 class ShiftReportCreate(BaseModel):
     facility_id: int
     shift_date: date
@@ -386,7 +358,6 @@ class ShiftReportResponse(ShiftReportCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# Nhập / Xuất Kho
 class InventoryItemCreate(BaseModel):
     facility_id: int
     name: str
@@ -404,7 +375,6 @@ class InventoryTransactionResponse(InventoryItemCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# Báo cáo cho Bếp & Bảo vệ
 class DailyMenuCreate(BaseModel):
     facility_id: int
     menu_date: date
@@ -422,8 +392,9 @@ class VisitorLogResponse(VisitorLogCreate):
     check_in_time: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 # ==========================================
-# 8. QUẢN LÝ HỢP ĐỒNG (AUTOMATION)
+# QUẢN LÝ HỢP ĐỒNG (AUTOMATION)
 # ==========================================
 class ContractCreate(BaseModel):
     facility_id: int
@@ -439,7 +410,6 @@ class ContractResponse(ContractCreate):
     status: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
-
 
 
 # ==========================================
@@ -464,6 +434,7 @@ class AssetResponse(AssetBase):
     facility_name: Optional[str] = Field(None, example="Cơ sở 1 - TP.HCM", description="Tên Cơ sở")
 
     model_config = ConfigDict(from_attributes=True)
+
 
 # ==========================================
 # NGHIỆP VỤ KIỂM KÊ (SHIFTS & LOGS)
@@ -493,18 +464,22 @@ class InspectionLogResponse(InspectionLogCreate):
 
     model_config = ConfigDict(from_attributes=True)
 
-# ===================================
-# Luồng báo mất
-# ===================================
+class RoomPatrolProgressResponse(BaseModel):
+    room_id: int
+    room_number: str
+    description: Optional[str] = None
+    zone_name: str
+    facility_name: str
+    total_assets: int
+    inspected_count: int
+    is_completed: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
 class AssetMissingRequest(BaseModel):
     asset_id: int
     note: str # Bắt buộc phải có chuỗi ghi chú lý do giải trình
 
-
-
-# =====================================
-# Lịch sử từng nhân viên 
-# =====================================
 
 class StaffHistoryResponse(BaseModel):
     id: int
@@ -515,11 +490,11 @@ class StaffHistoryResponse(BaseModel):
     shift_date: Optional[str] = None 
     shift_type: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
-    
-# ===================================
-# Luồng DASHBOARD
-# ===================================
 
+
+# ===================================
+# DASHBOARD TỔNG QUAN
+# ===================================
 class AssetIncidentDetail(BaseModel):
     asset_id: int
     asset_name: str
@@ -538,7 +513,6 @@ class ShiftSummaryDetail(BaseModel):
     lost_assets_details: List[AssetIncidentDetail] = []
     created_at: datetime
 
-
 class DashboardCurrentShift(BaseModel):
     status: str
     shift_type: Optional[str] = None
@@ -548,7 +522,6 @@ class DashboardCurrentShift(BaseModel):
     missing_items_count: int = 0
     lost_items_count: int = 0
 
-
 class DashboardResponse(BaseModel):
     current_shift: DashboardCurrentShift
     recent_incidents: List[ShiftSummaryDetail]
@@ -557,14 +530,11 @@ class DashboardResponse(BaseModel):
 # ===================================
 # CẤU HÌNH THỜI GIAN CA TRỰC
 # ===================================
-
-# Chỉnh đổi phần ca làm
 class ShiftSettingUpdate(BaseModel):
-    morning_start: str    # Yêu cầu "HH:MM" VD: "04:30"
-    morning_end: str
-    evening_start: str
-    evening_end: str
-
+    morning_start: str    # Yêu cầu "HH:MM" VD: "08:00"
+    morning_end: str      # VD: "19:00"
+    evening_start: str    # VD: "20:00"
+    evening_end: str      # VD: "07:00"
 
 class ShiftSettingResponse(ShiftSettingUpdate):
     id: int
