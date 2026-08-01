@@ -446,27 +446,23 @@ class ContractResponse(ContractCreate):
 # THỰC THỂ: TÀI SẢN (ASSET)
 # ==========================================
 class AssetBase(BaseModel):
-    asset_name: str
-    room_id: int
-    elder_id: Optional[int] = None
-    contract_id: Optional[int] = None
-
-    requires_inspection: bool = True
-
-    status: Optional[str] = 'Active'
+    asset_name: str = Field(..., example="Xe lăn điện", description="Tên món tư trang/tài sản")
+    room_id: int = Field(..., example=101, description="ID của Phòng lưu giữ tài sản")
+    elder_id: Optional[int] = Field(None, example=5, description="ID Cụ già sở hữu (Để None nếu là tài sản chung của phòng)")
+    contract_id: Optional[int] = Field(None, example=12, description="ID Hợp đồng nhập viện đi kèm (nếu có)")
+    requires_inspection: bool = Field(True, description="True: Cần NVCS đi tuần kiểm kê & chụp ảnh hàng ngày. False: Đồ dùng lặt vặt chỉ lưu danh mục")
+    status: Optional[str] = Field("Active", example="Active", description="Trạng thái: 'Active' (Đang dùng) hoặc 'Archived' (Lưu kho/Đã mang về)")
 
 class AssetCreate(AssetBase):
     pass
 
-class AssetResponse(BaseModel):
+class AssetResponse(AssetBase):
     id: int
-    asset_name: str
-    room_id: int
-    elder_id: Optional[int] = None
-    status: str
     created_at: datetime
+    elder_name: Optional[str] = Field(None, example="Nguyễn Văn A", description="Họ tên Cụ sở hữu")
+    room_number: Optional[str] = Field(None, example="Phòng 101", description="Số phòng")
+    facility_name: Optional[str] = Field(None, example="Cơ sở 1 - TP.HCM", description="Tên Cơ sở")
 
-    # Pydantic v2 configuration to read attributes from SQLAlchemy models
     model_config = ConfigDict(from_attributes=True)
 
 # ==========================================
