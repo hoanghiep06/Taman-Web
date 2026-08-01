@@ -422,19 +422,27 @@ def get_elder_weight_history(
     return records
 
 
+# =========================================================================
+# 4. GET: DANH SÁCH CÁC CỤ CẦN CÂN (ĐÃ QUÁ HẠN HOẶC SẮP ĐẾN HẠN CÂN - TỪ NGÀY 25)
+# =========================================================================
 @router.get("/weight/due-list", response_model=List[ElderWeightDueResponse])
 def get_elders_due_for_weight(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
     """
-    API Nhắc Lịch Cân:
-    - Tìm ra các Cụ đã quá 30 ngày chưa được cân (hoặc mới vào viện chưa có ngày cân).
-    - Trả về danh sách xếp ưu tiên.
+    API Nhắc Lịch Cân Thông Minh:
+    - Nhắc nhở sớm từ ngày thứ 25 (cho 5 ngày chuẩn bị trước mốc 30 ngày).
+    - Tính toán `days_remaining`: Số ngày còn lại trước khi trễ hạn.
+    - Phân loại `status_flag`:
+        + 'OVERDUE' : Đã quá hạn (>= 30 ngày hoặc chưa từng cân) -> Cần cân gấp!
+        + 'WARNING' : Sắp đến hạn (25 - 29 ngày) -> Chuẩn bị cân trong các ca tới.
     """
+
     query = db.query(Elder).options(joinedload(Elder.room))
     if current_user.facility_id is not None:
         query = query.join(Room).join(Zone).filter(Zone.facility_id == current_user.facility_id)
+
 
     elders = query.all()
     today = date.today()
@@ -442,16 +450,30 @@ def get_elders_due_for_weight(
 
     for elder in elders:
         days_since = None
+        days_remaining = 0
         is_overdue = False
+        status_flag = "NORMAL"
 
         if elder.last_weight_date:
             days_since = (today - elder.last_weight_date).days
+            days_remaining = 30 - days_since  # Tính số ngày còn lại (Có thể âm nếu quá hạn)
+
             if days_since >= 30:
                 is_overdue = True
+                status_flag = "OVERDUE"
+            elif days_since >= 25:
+                status_flag = "WARNING"  # Đã qua 25 ngày -> Đưa vào danh sách chuẩn bị
+            else:
+                status_flag = "NORMAL"
         else:
+            # Chưa từng cân lần nào -> Báo cờ Đỏ quá hạn cần cân ngay
+            days_since = None
+            days_remaining = 0
             is_overdue = True
+            status_flag = "OVERDUE"
 
-        if is_overdue:
+        # Chỉ đưa vào danh sách trả về nếu Cụ đã quá hạn (OVERDUE) hoặc nằm trong vùng cảnh báo (WARNING)
+        if status_flag in ["OVERDUE", "WARNING"]:
             due_list.append(
                 ElderWeightDueResponse(
                     elder_id=elder.id,
@@ -459,11 +481,22 @@ def get_elders_due_for_weight(
                     room_number=elder.room.room_number if elder.room else "Chưa xếp phòng",
                     last_weight_date=elder.last_weight_date,
                     days_since_last_weight=days_since,
+                    days_remaining=days_remaining,
+                    status_flag=status_flag,
                     is_overdue=is_overdue
                 )
             )
 
-    due_list.sort(key=lambda x: (x.days_since_last_weight or 9999), reverse=True)
+    # Ưu tiên sắp xếp:
+    # 1. Đưa các Cụ 'OVERDUE' lên trước 'WARNING'
+    # 2. Trong cùng nhóm 'OVERDUE', cụ nào trễ nhiều ngày nhất đứng đầu
+    due_list.sort(
+        key=lambda x: (
+            0 if x.status_flag == "OVERDUE" else 1,
+            x.days_remaining  # Số ngày còn lại càng nhỏ (hoặc càng âm) đứng càng cao
+        )
+    )
+
     return due_list
 
 
