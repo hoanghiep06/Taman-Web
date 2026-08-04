@@ -1,91 +1,273 @@
-// App.jsx
-import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import axiosClient from './api/axiosClient';
+import React, { Suspense, lazy, useEffect } from "react";
+import {
+    BrowserRouter,
+    Routes,
+    Route,
+    Navigate,
+} from "react-router-dom";
 
-import { AuthProvider } from './contexts/AuthContext';
-import { ProtectedRoute } from './routes/ProtectedRoute';
-import { ROLES } from './utils/constants';
+import axiosClient from "./api/axiosClient";
 
-import { LoginPage } from './features/auth/pages/LoginPage';
-import { AdminLayout } from './layouts/AdminLayout';
-import { StaffLayout } from './layouts/StaffLayout';
+import { AuthProvider } from "./contexts/AuthContext";
+import { ProtectedRoute } from "./routes/ProtectedRoute";
 
-// ──── LAZY LOAD: chỉ tải code của từng trang khi người dùng thực sự vào trang đó ────
-// LoginPage + Layout giữ import thường vì luôn cần ngay khi mở app (tránh nháy màn hình trắng khi chờ tải).
-const ResetPasswordPage = lazy(() => import('./features/auth/pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
-const DashboardPage = lazy(() => import('./features/dashboard/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
-const UserManagementPage = lazy(() => import('./features/users/pages/UserManagementPage').then((m) => ({ default: m.UserManagementPage })));
-const CatalogPage = lazy(() => import('./features/catalog/pages/CatalogPage').then((m) => ({ default: m.CatalogPage })));
-const RoomListPage = lazy(() => import('./features/patrol/pages/RoomListPage').then((m) => ({ default: m.RoomListPage })));
-const PatrolSessionPage = lazy(() => import('./features/patrol/pages/PatrolSessionPage').then((m) => ({ default: m.PatrolSessionPage })));
-const PatrolHistoryPage = lazy(() => import('./features/patrol/pages/PatrolHistoryPage').then((m) => ({ default: m.PatrolHistoryPage })));
-const SystemSettingsPage = lazy(() => import('./features/settings/pages/SystemSettingsPage').then((m) => ({ default: m.SystemSettingsPage })));
-const BackupPage = lazy(() => import('./features/backup/pages/BackupPage').then((m) => ({ default: m.BackupPage })));
+import { LoginPage } from "./features/auth/pages/LoginPage";
+import { ResetPasswordPage } from "./features/auth/pages/ResetPasswordPage";
 
-// Màn hình chờ tối giản khi 1 trang lazy đang tải — không dùng spinner nặng, giữ đúng tinh thần "vào thẳng App ngay"
-const RouteFallback = () => (
-  <div style={{ padding: 40, textAlign: 'center', color: '#64748B', fontSize: 14 }}>Đang tải...</div>
+import { MainLayout } from "./layouts/MainLayout";
+
+import { ROLES } from "./utils/constants";
+
+/* =========================
+   DASHBOARD
+========================= */
+
+const AdminDashboard = lazy(() =>
+    import("./features/dashboard/pages/AdminDashboard").then((m) => ({
+        default: m.AdminDashboard,
+    }))
+);
+
+const ManagerDashboard = lazy(() =>
+    import("./features/dashboard/pages/ManagerDashboard").then((m) => ({
+        default: m.ManagerDashboard,
+    }))
+);
+
+const DoctorDashboard = lazy(() =>
+    import("./features/dashboard/pages/DoctorDashboard").then((m) => ({
+        default: m.DoctorDashboard,
+    }))
+);
+
+const CoordinatorDashboard = lazy(() =>
+    import("./features/dashboard/pages/CoordinatorDashboard").then((m) => ({
+        default: m.CoordinatorDashboard,
+    }))
+);
+
+const CareStaffDashboard = lazy(() =>
+    import("./features/dashboard/pages/CareStaffDashboard").then((m) => ({
+        default: m.CareStaffDashboard,
+    }))
+);
+
+/* =========================
+   PLACEHOLDER PAGES
+========================= */
+
+const UserManagementPage = lazy(() =>
+    import("./features/users/pages/UserManagementPage").then((m) => ({
+        default: m.UserManagementPage,
+    }))
+);
+
+const ElderListPage = lazy(() =>
+    import("./features/elders/pages/ElderListPage").then((m) => ({
+        default: m.ElderListPage,
+    }))
+);
+
+const StaffListPage = lazy(() =>
+    import("./features/staffs/pages/StaffListPage").then((m) => ({
+        default: m.StaffListPage,
+    }))
+);
+
+const ShiftPage = lazy(() =>
+    import("./features/shifts/pages/ShiftPage").then((m) => ({
+        default: m.ShiftPage,
+    }))
+);
+
+const AssignmentPage = lazy(() =>
+    import("./features/assignments/pages/AssignmentPage").then((m) => ({
+        default: m.AssignmentPage,
+    }))
+);
+
+const HealthDashboardPage = lazy(() =>
+    import("./features/health/pages/HealthDashboardPage").then((m) => ({
+        default: m.HealthDashboardPage,
+    }))
+);
+
+const HealthCheckPage = lazy(() =>
+    import("./features/medical/pages/HealthCheckPage").then((m) => ({
+        default: m.HealthCheckPage,
+    }))
+);
+
+const MedicalRecordPage = lazy(() =>
+    import("./features/medical/pages/MedicalRecordPage").then((m) => ({
+        default: m.MedicalRecordPage,
+    }))
+);
+
+const PrescriptionPage = lazy(() =>
+    import("./features/medical/pages/PrescriptionPage").then((m) => ({
+        default: m.PrescriptionPage,
+    }))
+);
+
+const MedicinePage = lazy(() =>
+    import("./features/medicines/pages/MedicinePage").then((m) => ({
+        default: m.MedicinePage,
+    }))
+);
+
+const DiseasePage = lazy(() =>
+    import("./features/diseases/pages/DiseasePage").then((m) => ({
+        default: m.DiseasePage,
+    }))
+);
+
+const ReportPage = lazy(() =>
+    import("./features/reports/pages/ReportPage").then((m) => ({
+        default: m.ReportPage,
+    }))
+);
+
+const VitalPage = lazy(() =>
+    import("./features/vitals/pages/VitalPage").then((m) => ({
+        default: m.VitalPage,
+    }))
+);
+
+const CarePage = lazy(() =>
+    import("./features/care/pages/CarePage").then((m) => ({
+        default: m.CarePage,
+    }))
+);
+
+const IncidentPage = lazy(() =>
+    import("./features/incidents/pages/IncidentPage").then((m) => ({
+        default: m.IncidentPage,
+    }))
+);
+
+const BackupPage = lazy(() =>
+    import("./features/backup/pages/BackupPage").then((m) => ({
+        default: m.BackupPage,
+    }))
+);
+
+const SystemSettingsPage = lazy(() =>
+    import("./features/settings/pages/SystemSettingsPage").then((m) => ({
+        default: m.SystemSettingsPage,
+    }))
+);
+
+/* ========================= */
+
+const Loading = () => (
+    <div
+        style={{
+            padding: 50,
+            textAlign: "center",
+        }}
+    >
+        Đang tải...
+    </div>
 );
 
 function App() {
-  useEffect(() => {
-    const awakeBackendSystem = () => {
-      const NOW = Date.now();
-      const LAST_AWAKE = localStorage.getItem('taman_last_awake_time');
-      const TEN_MINUTES = 10 * 60 * 1000;
+    useEffect(() => {
+        axiosClient.get("/health").catch(() => {});
+    }, []);
 
-      if (LAST_AWAKE && (NOW - parseInt(LAST_AWAKE, 10) < TEN_MINUTES)) {
-        console.log('⚡ [AWAKE CONTROL]: Trong vòng 10 phút qua đã có tương tác. Bỏ qua lượt gõ cửa Cloud.');
-        return;
-      }
+    return (
+        <AuthProvider>
+            <BrowserRouter>
+                <Suspense fallback={<Loading />}>
+                    <Routes>
 
-      console.log('⏳ [AWAKE CONTROL]: Đang âm thầm bắn tín hiệu kích hoạt container Render dưới nền...');
-      localStorage.setItem('taman_last_awake_time', String(NOW));
+                        <Route path="/login" element={<LoginPage />} />
 
-      axiosClient
-        .get('/health')
-        .then(() => {
-          console.log('🟢 [AWAKE CONTROL]: Máy chủ đám mây đã thông suốt và sẵn sàng!');
-        })
-        .catch((err) => {
-          console.warn('🟡 [AWAKE CONTROL]: Máy chủ đang trong tiến trình nạp lại container dậy...', err.message);
-        });
-    };
+                        <Route
+                            path="/force-reset"
+                            element={
+                                <ProtectedRoute>
+                                    <ResetPasswordPage />
+                                </ProtectedRoute>
+                            }
+                        />
 
-    awakeBackendSystem();
-  }, []);
+                        <Route
+                            element={
+                                <ProtectedRoute
+                                    allowedRoles={[
+                                        ROLES.ADMIN,
+                                        ROLES.MANAGER,
+                                        ROLES.DOCTOR,
+                                        ROLES.COORDINATOR,
+                                        ROLES.CARESTAFF,
+                                    ]}
+                                >
+                                    <MainLayout />
+                                </ProtectedRoute>
+                            }
+                        >
 
-  return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/force-reset" element={<ProtectedRoute><ResetPasswordPage /></ProtectedRoute>} />
+                            {/* Dashboard */}
 
-            {/* PHÂN HỆ 1: WEB PORTAL (ADMIN / MANAGER) */}
-            <Route element={<ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANAGER]}><AdminLayout /></ProtectedRoute>}>
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/users" element={<UserManagementPage />} />
-              <Route path="/catalog" element={<CatalogPage />} />
-              <Route path="/settings" element={<SystemSettingsPage />} />
-              <Route path="/backup" element={<BackupPage />} />
-            </Route>
+                            <Route
+                                path="/dashboard"
+                                element={<AdminDashboard />}
+                            />
 
-            {/* PHÂN HỆ 2: MOBILE APP (STAFF) */}
-            <Route element={<ProtectedRoute allowedRoles={[ROLES.STAFF]}><StaffLayout /></ProtectedRoute>}>
-              <Route path="/rooms" element={<RoomListPage />} />
-              <Route path="/patrol/:roomNumber" element={<PatrolSessionPage />} />
-              <Route path="/patrol/history" element={<PatrolHistoryPage />} />
-            </Route>
+                            <Route
+                                path="/manager"
+                                element={<ManagerDashboard />}
+                            />
 
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-    </AuthProvider>
-  );
+                            <Route
+                                path="/doctor"
+                                element={<DoctorDashboard />}
+                            />
+
+                            <Route
+                                path="/coordinator"
+                                element={<CoordinatorDashboard />}
+                            />
+
+                            <Route
+                                path="/care-staff"
+                                element={<CareStaffDashboard />}
+                            />
+
+                            {/* Modules */}
+
+                            <Route path="/users" element={<UserManagementPage />} />
+                            <Route path="/elders" element={<ElderListPage />} />
+                            <Route path="/staffs" element={<StaffListPage />} />
+                            <Route path="/shifts" element={<ShiftPage />} />
+                            <Route path="/assignments" element={<AssignmentPage />} />
+                            <Route path="/health" element={<HealthDashboardPage />} />
+                            <Route path="/health-check" element={<HealthCheckPage />} />
+                            <Route path="/medical-record" element={<MedicalRecordPage />} />
+                            <Route path="/prescriptions" element={<PrescriptionPage />} />
+                            <Route path="/medicines" element={<MedicinePage />} />
+                            <Route path="/diseases" element={<DiseasePage />} />
+                            <Route path="/reports" element={<ReportPage />} />
+                            <Route path="/vitals" element={<VitalPage />} />
+                            <Route path="/care" element={<CarePage />} />
+                            <Route path="/incident" element={<IncidentPage />} />
+                            <Route path="/backup" element={<BackupPage />} />
+                            <Route path="/settings" element={<SystemSettingsPage />} />
+
+                        </Route>
+
+                        <Route
+                            path="*"
+                            element={<Navigate to="/login" replace />}
+                        />
+
+                    </Routes>
+                </Suspense>
+            </BrowserRouter>
+        </AuthProvider>
+    );
 }
 
 export default App;
