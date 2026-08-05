@@ -15,9 +15,13 @@ export const StatisticCard = ({
             }}
         >
 
+        <div className={styles.header}>
             <h3>{title}</h3>
+        </div>
 
-            <h1>{value}</h1>
+        <div className={styles.value}>
+            {value}
+        </div>
 
         </div>
 

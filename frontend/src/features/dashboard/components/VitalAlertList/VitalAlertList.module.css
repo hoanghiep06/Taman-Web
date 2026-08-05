@@ -1,25 +1,37 @@
-.card{
+.card {
 
-    background:white;
+    background: white;
 
-    padding:24px;
+    padding: var(--card-padding);
 
-    border-radius:16px;
+    border-radius: var(--card-radius);
 
-    box-shadow:0 2px 8px rgba(0,0,0,.08);
-
-}
-
-.item{
-
-    padding:14px;
-
-    border-bottom:1px solid #eee;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
 
 }
 
-.item:last-child{
+.item {
 
-    border-bottom:none;
+    padding: var(--space-md);
+
+    border-bottom: 1px solid #eee;
+
+}
+
+.item:last-child {
+
+    border-bottom: none;
+
+}
+
+@media (max-width:768px){
+
+    .card{
+
+        max-height:280px;
+
+        overflow-y:auto;
+
+    }
 
 }

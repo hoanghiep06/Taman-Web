@@ -156,3 +156,42 @@ textarea {
   white-space: nowrap;
   border-width: 0;
 }
+
+:root {
+
+    /* Card */
+
+    --card-padding: 24px;
+    --card-radius: 16px;
+
+    /* Font */
+
+    --font-title: 15px;
+    --font-value: 42px;
+    --font-body: 14px;
+
+    /* Space */
+
+    --space-sm: 10px;
+    --space-md: 16px;
+    --space-lg: 24px;
+}
+
+@media (max-width:768px){
+
+    :root{
+
+        --card-padding:16px;
+        --card-radius:12px;
+
+        --font-title:13px;
+        --font-value:28px;
+        --font-body:13px;
+
+        --space-sm:8px;
+        --space-md:12px;
+        --space-lg:16px;
+
+    }
+
+}

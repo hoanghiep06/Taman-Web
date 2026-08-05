@@ -2,34 +2,40 @@
 
     background:white;
 
-    padding:24px;
+    padding:var(--card-padding);
 
-    border-radius:16px;
+    border-radius:var(--card-radius);
 
     box-shadow:0 2px 8px rgba(0,0,0,.08);
 
 }
 
-.progress{
+.card h2{
 
-    width:100%;
+    margin:0;
 
-    height:10px;
-
-    background:#e5e7eb;
-
-    border-radius:20px;
-
-    margin:18px 0;
+    font-size:var(--font-title);
 
 }
 
-.bar{
+.card h1{
 
-    height:100%;
+    margin:8px 0;
 
-    border-radius:20px;
+    font-size:var(--font-value);
 
-    background:#22c55e;
+}
+
+.card p{
+
+    font-size:var(--font-body);
+
+}
+
+.progress{
+
+    margin:var(--space-md) 0;
+
+    height:8px;
 
 }

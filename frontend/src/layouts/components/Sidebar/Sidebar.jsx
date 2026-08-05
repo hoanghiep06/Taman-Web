@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import { useContext } from "react";
 
 import { AuthContext } from "../../../contexts/AuthContext";
-import { SIDEBAR_MENU } from "../../../config/sidebarMenu";
+import { SIDEBAR_MENU } from "../../../config/navigation";
 
 import styles from "./Sidebar.module.css";
 
