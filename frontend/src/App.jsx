@@ -14,7 +14,7 @@ import { ProtectedRoute } from "./routes/ProtectedRoute";
 import { LoginPage } from "./features/auth/pages/LoginPage";
 import { ResetPasswordPage } from "./features/auth/pages/ResetPasswordPage";
 
-import { MainLayout } from "./layouts/MainLayout";
+import { ResponsiveLayout } from "./layouts/ResponsiveLayout";
 
 import { ROLES } from "./utils/constants";
 
@@ -204,7 +204,7 @@ function App() {
                                         ROLES.CARESTAFF,
                                     ]}
                                 >
-                                    <MainLayout />
+                                    <ResponsiveLayout />
                                 </ProtectedRoute>
                             }
                         >

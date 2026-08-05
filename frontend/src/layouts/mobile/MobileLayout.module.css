@@ -1,0 +1,13 @@
+.layout {
+
+    min-height: 100vh;
+
+    background: #f5f6fa;
+}
+
+.main {
+
+    padding: 16px;
+
+    padding-bottom: 80px;
+}
