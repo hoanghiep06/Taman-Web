@@ -16,7 +16,7 @@ export const authApi = {
 
   // Đổi mật khẩu bắt buộc cho người dùng hiện tại (Dữ liệu JSON đúng theo Schema)
   changePassword: (oldPassword, newPassword) => {
-    return axiosClient.put('/users/me/password', {
+    return axiosClient.put('/auth/users/me/password', {
       old_password: oldPassword,
       new_password: newPassword,
     });

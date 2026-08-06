@@ -1,0 +1,23 @@
+.card{
+
+    background:white;
+
+    border-radius:16px;
+
+    padding:20px;
+
+    box-shadow:0 2px 8px rgba(0,0,0,.08);
+
+}
+
+.grid{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
+
+    gap:var(--space-sm);
+
+    margin-top:var(--space-md);
+
+}

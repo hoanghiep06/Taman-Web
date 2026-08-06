@@ -1,0 +1,41 @@
+.card{
+
+    background:white;
+
+    padding:var(--card-padding);
+
+    border-radius:var(--card-radius);
+
+    box-shadow:0 2px 8px rgba(0,0,0,.08);
+
+}
+
+.card h2{
+
+    margin:0;
+
+    font-size:var(--font-title);
+
+}
+
+.card h1{
+
+    margin:8px 0;
+
+    font-size:var(--font-value);
+
+}
+
+.card p{
+
+    font-size:var(--font-body);
+
+}
+
+.progress{
+
+    margin:var(--space-md) 0;
+
+    height:8px;
+
+}

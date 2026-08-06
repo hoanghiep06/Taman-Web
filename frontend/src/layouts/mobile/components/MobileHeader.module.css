@@ -1,0 +1,41 @@
+.header {
+    height: 56px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding: 0 16px;
+
+    background: white;
+
+    border-bottom: 1px solid #e5e7eb;
+
+    position: sticky;
+
+    top: 0;
+
+    z-index: 100;
+}
+
+.title {
+
+    font-size: 18px;
+
+    font-weight: 700;
+
+    color: #0f766e;
+}
+
+.iconButton {
+
+    border: none;
+
+    background: transparent;
+
+    font-size: 22px;
+
+    cursor: pointer;
+}

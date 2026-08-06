@@ -1,0 +1,328 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.mainCard {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.titleBox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.headerIcon {
+  font-size: var(--text-xl);
+}
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+.shiftHighlight {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-base);
+}
+
+.headerRightActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.auditTriggerBtn {
+  background: var(--color-text-heading);
+  color: #fff;
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.livePulse {
+  font-size: var(--text-xs);
+  font-weight: 800;
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-full);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.progressSection {
+  background: var(--color-bg);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+.progressInfo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+.progressLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  font-weight: 600;
+}
+.progressValue {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+.barBg {
+  width: 100%;
+  height: 10px;
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.barFill {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.barActive {
+  background: var(--color-primary);
+}
+.barDone {
+  background: var(--color-success);
+}
+.emptyState {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: var(--space-8);
+  font-size: var(--text-sm);
+}
+
+.filterConsoleCard {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+.consoleTitle {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.filterInputsRow {
+  display: flex;
+  gap: var(--space-3);
+  width: 100%;
+  flex-wrap: wrap;
+}
+.searchCol {
+  flex: 2;
+  min-width: 200px;
+}
+.selectWrapper {
+  display: flex;
+  align-items: center;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  flex: 1;
+  min-width: 160px;
+}
+.selectInput {
+  padding: var(--space-3);
+  border: none;
+  font-size: var(--text-sm);
+  outline: none;
+  color: var(--color-text-heading);
+  background: transparent;
+  width: 100%;
+  cursor: pointer;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-5);
+  width: 100%;
+}
+@media (max-width: 900px) {
+  .detailGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.detailCard {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  height: 460px;
+}
+.detailCardHeader {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-4);
+  flex-shrink: 0;
+}
+.boxTitleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.titleMissing {
+  color: var(--color-warning);
+  font-size: var(--text-base);
+  font-weight: 800;
+}
+.titleUnchecked {
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: 800;
+}
+.countTagWarning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.countTagNeutral {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.listScrollBox {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-right: var(--space-1);
+}
+.anomalyCardWarning,
+.anomalyCardNeutral {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+}
+.anomalyCardWarning {
+  border-left-color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+.anomalyCardNeutral {
+  border-left-color: var(--color-text-muted);
+  background: var(--color-bg);
+}
+.anomalyLine1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+.assetNameText {
+  font-size: var(--text-sm);
+  color: var(--color-text-heading);
+  font-weight: 700;
+}
+.roomBadgeWarning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.roomBadgeNeutral {
+  background: var(--color-border);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.anomalyLine2 {
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: 2px;
+}
+.noteReportText {
+  margin: 2px 0 0;
+  font-style: italic;
+  color: var(--color-warning);
+  background: rgba(255, 255, 255, 0.7);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  border: 1px dashed var(--color-warning);
+}
+.subTextOwner {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-text-heading);
+  font-weight: 500;
+}
+.ownerHighlightWarning {
+  color: var(--color-warning);
+}
+.ownerHighlightNeutral {
+  color: var(--color-text);
+}
+.emptySearchBox {
+  text-align: center;
+  padding: var(--space-6) var(--space-2);
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-size: 12.5px;
+}

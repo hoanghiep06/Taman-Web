@@ -1,0 +1,37 @@
+.card {
+
+    background: white;
+
+    padding: var(--card-padding);
+
+    border-radius: var(--card-radius);
+
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+
+}
+
+.item {
+
+    padding: var(--space-md);
+
+    border-bottom: 1px solid #eee;
+
+}
+
+.item:last-child {
+
+    border-bottom: none;
+
+}
+
+@media (max-width:768px){
+
+    .card{
+
+        max-height:280px;
+
+        overflow-y:auto;
+
+    }
+
+}

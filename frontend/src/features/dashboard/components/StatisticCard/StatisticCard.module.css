@@ -1,0 +1,31 @@
+.card{
+
+    background:white;
+
+    padding:var(--card-padding);
+
+    border-radius:var(--card-radius);
+
+    box-shadow:0 2px 8px rgba(0,0,0,.08);
+
+}
+
+.card h3{
+
+    margin:0;
+
+    color:#64748b;
+
+    font-size:var(--font-title);
+
+}
+
+.card h1{
+
+    margin-top:var(--space-md);
+
+    font-size:var(--font-value);
+
+    line-height:1.1;
+
+}
