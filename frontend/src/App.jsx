@@ -53,8 +53,14 @@ const CareStaffDashboard = lazy(() =>
 );
 
 /* =========================
-   PLACEHOLDER PAGES
+   MODULE PAGES
 ========================= */
+
+const CareDutyPage = lazy(() =>
+    import("./features/care-duty/pages/CareDutyPage").then((m) => ({
+        default: m.CareDutyPage,
+    }))
+);
 
 const UserManagementPage = lazy(() =>
     import("./features/users/pages/UserManagementPage").then((m) => ({
@@ -71,12 +77,6 @@ const ElderListPage = lazy(() =>
 const StaffListPage = lazy(() =>
     import("./features/staffs/pages/StaffListPage").then((m) => ({
         default: m.StaffListPage,
-    }))
-);
-
-const ShiftPage = lazy(() =>
-    import("./features/shifts/pages/ShiftPage").then((m) => ({
-        default: m.ShiftPage,
     }))
 );
 
@@ -134,11 +134,7 @@ const VitalPage = lazy(() =>
     }))
 );
 
-const CarePage = lazy(() =>
-    import("./features/care/pages/CarePage").then((m) => ({
-        default: m.CarePage,
-    }))
-);
+
 
 const IncidentPage = lazy(() =>
     import("./features/incidents/pages/IncidentPage").then((m) => ({
@@ -161,19 +157,14 @@ const SystemSettingsPage = lazy(() =>
 /* ========================= */
 
 const Loading = () => (
-    <div
-        style={{
-            padding: 50,
-            textAlign: "center",
-        }}
-    >
+    <div style={{ padding: 50, textAlign: "center" }}>
         Đang tải...
     </div>
 );
 
 function App() {
     useEffect(() => {
-        axiosClient.get("/health").catch(() => {});
+        axiosClient.get("/health/dashboard-live").catch(() => {});
     }, []);
 
     return (
@@ -181,7 +172,6 @@ function App() {
             <BrowserRouter>
                 <Suspense fallback={<Loading />}>
                     <Routes>
-
                         <Route path="/login" element={<LoginPage />} />
 
                         <Route
@@ -208,40 +198,20 @@ function App() {
                                 </ProtectedRoute>
                             }
                         >
-
                             {/* Dashboard */}
-
-                            <Route
-                                path="/dashboard"
-                                element={<AdminDashboard />}
-                            />
-
-                            <Route
-                                path="/manager"
-                                element={<ManagerDashboard />}
-                            />
-
-                            <Route
-                                path="/doctor"
-                                element={<DoctorDashboard />}
-                            />
-
-                            <Route
-                                path="/coordinator"
-                                element={<CoordinatorDashboard />}
-                            />
-
-                            <Route
-                                path="/care-staff"
-                                element={<CareStaffDashboard />}
-                            />
+                            <Route path="/dashboard" element={<AdminDashboard />} />
+                            <Route path="/manager" element={<ManagerDashboard />} />
+                            <Route path="/doctor" element={<DoctorDashboard />} />
+                            <Route path="/coordinator" element={<CoordinatorDashboard />} />
+                            <Route path="/care-staff" element={<CareStaffDashboard />} />
 
                             {/* Modules */}
-
+                            <Route path="/care-duty" element={<CareDutyPage />} />
+                            <Route path="/shifts" element={<CareDutyPage />} />
+                            
                             <Route path="/users" element={<UserManagementPage />} />
                             <Route path="/elders" element={<ElderListPage />} />
                             <Route path="/staffs" element={<StaffListPage />} />
-                            <Route path="/shifts" element={<ShiftPage />} />
                             <Route path="/assignments" element={<AssignmentPage />} />
                             <Route path="/health" element={<HealthDashboardPage />} />
                             <Route path="/health-check" element={<HealthCheckPage />} />
@@ -251,18 +221,12 @@ function App() {
                             <Route path="/diseases" element={<DiseasePage />} />
                             <Route path="/reports" element={<ReportPage />} />
                             <Route path="/vitals" element={<VitalPage />} />
-                            <Route path="/care" element={<CarePage />} />
                             <Route path="/incident" element={<IncidentPage />} />
                             <Route path="/backup" element={<BackupPage />} />
                             <Route path="/settings" element={<SystemSettingsPage />} />
-
                         </Route>
 
-                        <Route
-                            path="*"
-                            element={<Navigate to="/login" replace />}
-                        />
-
+                        <Route path="*" element={<Navigate to="/login" replace />} />
                     </Routes>
                 </Suspense>
             </BrowserRouter>

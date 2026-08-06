@@ -1,0 +1,125 @@
+.container {
+  margin-bottom: 24px;
+}
+
+/* Thanh chú thích mã màu trạng thái sắc nét */
+.legendBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  background-color: #f1f5f9;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  margin-bottom: 14px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.colorDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* Danh sách Thẻ Lưới */
+.gridList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  max-height: 320px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding: 4px;
+}
+
+.cardItem {
+  padding: 12px;
+  border-radius: 14px;
+  text-align: left;
+  border: 2px solid #cbd5e1;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 95px;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.cardItem:active {
+  transform: scale(0.97);
+}
+
+/* MÃ MÀU CHUẨN TƯƠNG PHẢN CAO - CHỮ NỔI BẬT */
+.statusWhite { 
+  background-color: #ffffff; 
+  border-color: #cbd5e1; 
+  color: #0f172a; 
+}
+.statusGreen { 
+  background-color: #bbf7d0; 
+  border-color: #22c55e; 
+  color: #14532d; 
+}
+.statusRed { 
+  background-color: #fca5a5; 
+  border-color: #ef4444; 
+  color: #7f1d1d; 
+}
+.statusYellow { 
+  background-color: #fef08a; 
+  border-color: #eab308; 
+  color: #713f12; 
+}
+.statusOrange { 
+  background-color: #fed7aa; 
+  border-color: #f97316; 
+  color: #7c2d12; 
+}
+
+/* Icon Đèn đỏ cảnh báo nhấp nháy góc phải trên */
+.alertLight {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 16px;
+  animation: pulseLight 1.2s infinite;
+}
+
+@keyframes pulseLight {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.roomNo {
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0.8;
+  text-transform: uppercase;
+}
+
+.elderName {
+  font-size: 14px;
+  font-weight: 900;
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+.actionTag {
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 8px;
+  display: inline-block;
+}
