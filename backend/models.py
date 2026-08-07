@@ -265,6 +265,7 @@ class ShiftReport(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     coordinator = relationship("User", back_populates="shift_reports")
+    facility = relationship("Facility")
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"

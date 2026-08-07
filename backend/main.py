@@ -130,7 +130,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # ==========================================
 # API PING / HEALTH CHECK
 # ==========================================
-@app.get("/health", tags=["0. System Health"])
+@app.get("/api/health", tags=["0. System Health"])
 def system_health_check():
     return {
         "status": "online",
