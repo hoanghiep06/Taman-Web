@@ -1,0 +1,41 @@
+.statistics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-lg);
+}
+
+.statistics > * {
+    flex: 1;
+    min-width: 200px;
+}
+
+.middle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+}
+
+.roleWidgets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+}
+
+.elderSection h2 {
+    font-size: var(--text-xl);
+    color: var(--color-text-heading);
+    margin-bottom: var(--space-md);
+}
+
+.elderGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--space-lg);
+}
+
+@media (max-width: 768px) {
+    .middle,
+    .roleWidgets {
+        grid-template-columns: 1fr;
+    }
+}

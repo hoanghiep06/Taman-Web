@@ -22,36 +22,11 @@ import { ROLES } from "./utils/constants";
    DASHBOARD
 ========================= */
 
-const AdminDashboard = lazy(() =>
-    import("./features/dashboard/pages/AdminDashboard").then((m) => ({
-        default: m.AdminDashboard,
+const DashboardPage = lazy(() =>
+    import("./features/dashboard/pages/DashboardPage").then((m) => ({
+        default: m.DashboardPage,
     }))
 );
-
-const ManagerDashboard = lazy(() =>
-    import("./features/dashboard/pages/ManagerDashboard").then((m) => ({
-        default: m.ManagerDashboard,
-    }))
-);
-
-const DoctorDashboard = lazy(() =>
-    import("./features/dashboard/pages/DoctorDashboard").then((m) => ({
-        default: m.DoctorDashboard,
-    }))
-);
-
-const CoordinatorDashboard = lazy(() =>
-    import("./features/dashboard/pages/CoordinatorDashboard").then((m) => ({
-        default: m.CoordinatorDashboard,
-    }))
-);
-
-const CareStaffDashboard = lazy(() =>
-    import("./features/dashboard/pages/CareStaffDashboard").then((m) => ({
-        default: m.CareStaffDashboard,
-    }))
-);
-
 /* =========================
    MODULE PAGES
 ========================= */
@@ -198,11 +173,16 @@ function App() {
                             }
                         >
                             {/* Dashboard */}
+<<<<<<< HEAD
                             <Route path="/dashboard" element={<AdminDashboard />} />
                             <Route path="/manager" element={<ManagerDashboard />} />
                             <Route path="/doctor" element={<DoctorDashboard />} />
                             <Route path="/coordinator" element={<CoordinatorDashboard />} />
                             <Route path="/care-staff" element={<CareStaffDashboard />} />
+=======
+
+                            <Route path="/dashboard" element={<DashboardPage />} />
+>>>>>>> dc910b6 (feat(FE): thêm code cho phần dashboard và sửa code dashboard của App.jsx)
 
                             {/* Modules */}
                             <Route path="/care-duty" element={<CareDutyPage />} />

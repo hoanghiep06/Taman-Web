@@ -1,0 +1,41 @@
+.card {
+    background: var(--color-surface);
+    border-radius: var(--card-radius);
+    padding: var(--card-padding);
+    box-shadow: var(--shadow-sm);
+}
+
+.title {
+    font-size: var(--font-title);
+    color: var(--color-text-heading);
+    margin-bottom: var(--space-md);
+}
+
+.chart {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-sm);
+    height: 160px;
+}
+
+.barWrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+}
+
+.bar {
+    width: 100%;
+    background: var(--color-primary);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    transition: height var(--transition-base);
+}
+
+.barLabel {
+    margin-top: var(--space-sm);
+    font-size: var(--font-body);
+    color: var(--color-text-muted);
+}

@@ -1,0 +1,47 @@
+.card {
+    background: var(--color-surface);
+    border-radius: var(--card-radius);
+    padding: var(--card-padding);
+    box-shadow: var(--shadow-sm);
+}
+
+.title {
+    font-size: var(--font-title);
+    color: var(--color-text-heading);
+    margin-bottom: var(--space-md);
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    list-style: none;
+}
+
+.item {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: var(--space-sm);
+    padding: var(--space-sm) 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--font-body);
+}
+
+.item:last-child {
+    border-bottom: none;
+}
+
+.elder {
+    font-weight: 600;
+    color: var(--color-text-heading);
+}
+
+.medicine {
+    color: var(--color-text);
+}
+
+.date {
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    text-align: right;
+}
