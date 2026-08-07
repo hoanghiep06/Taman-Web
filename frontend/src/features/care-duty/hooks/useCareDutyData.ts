@@ -11,55 +11,59 @@ export const useCareDutyData = (facilityId = null) => {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      const todayStr = new Date().toISOString().split('T')[0];
 
-      // 1. Gọi API lấy thông tin dashboard ca trực live
+      // 1. Gọi API lấy dashboard live
       const dashboardRes = await careDutyApi.getLiveShiftDashboard(facilityId);
       const dashboardData = dashboardRes?.data || dashboardRes || [];
 
       if (Array.isArray(dashboardData)) {
-        const mappedElders = dashboardData.map((item) => ({
-          id: item.elder_id,
-          fullName: item.elder_name,
-          roomNumber: item.room_number,
-          hasAbnormal: item.has_abnormal_vital,
-          isMeasured: item.is_measured,
-          isEdited: item.is_edited,
-          isWeightDue: item.is_weight_due || false,
-          vitalData: item.vital_data ? {
-            id: item.vital_data.id,
-            bp_systolic: item.vital_data.bp_systolic,
-            bp_diastolic: item.vital_data.bp_diastolic,
-            pulse: item.vital_data.pulse,
-            spo2: item.vital_data.spo2,
-            temperature: item.vital_data.temperature,
-            notes: item.vital_data.notes
-          } : null,
-          weightData: item.weight_data ? {
-            id: item.weight_data.id,
-            weight: item.weight_data.weight,
-            recorded_at: item.weight_data.recorded_at,
-            notes: item.weight_data.notes
-          } : null,
-          handoverNote: item.handover_note || ''
-        }));
+        const mappedElders = dashboardData.map((item) => {
+          const vital = item.latest_vital_signs;
+          
+          // Kiểm tra xem chỉ số có được đo trong ngày hôm nay hay không
+          let isMeasuredToday = false;
+          if (vital && vital.measured_at) {
+            const measuredDateStr = new Date(vital.measured_at).toISOString().split('T')[0];
+            isMeasuredToday = (measuredDateStr === todayStr);
+          }
+
+          return {
+            id: item.elder_id,
+            fullName: item.elder_name,
+            roomNumber: item.room_number,
+            // Chỉ bật cờ bất thường nếu bản ghi đo thuộc NGÀY HÔM NAY
+            hasAbnormal: isMeasuredToday && item.has_abnormal_vital,
+            isMeasured: isMeasuredToday,
+            isEdited: vital?.is_edited || false,
+            isWeightDue: false,
+            vitalData: isMeasuredToday ? vital : null,
+            weightData: item.weight_data ? {
+              id: item.weight_data.id,
+              weight: item.weight_data.weight,
+              recorded_at: item.weight_data.recorded_at,
+              notes: item.weight_data.notes
+            } : null,
+            handoverNote: Array.isArray(item.recent_diary_events) ? item.recent_diary_events.join(' | ') : ''
+          };
+        });
+
         setEldersList(mappedElders);
 
-        // Lọc danh sách Cảnh báo đỏ
-        const abnormalAlerts = dashboardData
-          .filter((item) => item.has_abnormal_vital)
-          .map((item) => ({
-            roomNumber: item.room_number,
-            elderName: item.elder_name,
-            issueDetail: Array.isArray(item.doctor_attention_reasons) 
-              ? item.doctor_attention_reasons.join(', ') 
-              : 'Dấu hiệu sinh hiệu bất thường'
+        // Lọc danh sách cảnh báo (Chỉ cảnh báo các Cụ có sinh hiệu bất thường TRONG NGÀY)
+        const abnormalAlerts = mappedElders
+          .filter((e) => e.hasAbnormal)
+          .map((e) => ({
+            roomNumber: e.roomNumber,
+            elderName: e.fullName,
+            issueDetail: 'Sinh hiệu bất thường trong ca hôm nay'
           }));
+
         setAlerts(abnormalAlerts);
       }
 
-      // 2. Gọi API kiểm tra Báo cáo giao ca trong ngày
+      // 2. Lấy Báo cáo giao ca quá khứ/ngày hôm nay
       try {
-        const todayStr = new Date().toISOString().split('T')[0];
         const archivedRes = await careDutyApi.getArchivedShiftReports({
           facility_id: facilityId,
           target_date: todayStr
@@ -78,7 +82,7 @@ export const useCareDutyData = (facilityId = null) => {
       }
 
     } catch (error) {
-      console.error('Lỗi khi tải dữ liệu ca trực:', error);
+      console.error('Lỗi tải dữ liệu ca trực:', error);
     } finally {
       setLoading(false);
     }
@@ -93,6 +97,7 @@ export const useCareDutyData = (facilityId = null) => {
     alerts,
     reportData,
     isReportSubmitted,
+    setIsReportSubmitted,
     refreshData: fetchData,
     loading
   };
