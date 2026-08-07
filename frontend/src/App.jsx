@@ -27,6 +27,7 @@ const DashboardPage = lazy(() =>
         default: m.DashboardPage,
     }))
 );
+
 /* =========================
    MODULE PAGES
 ========================= */
@@ -138,7 +139,7 @@ const Loading = () => (
 
 function App() {
     useEffect(() => {
-        axiosClient.get("/health/dashboard-live").catch(() => {});
+        axiosClient.get("/health").catch(() => {});
     }, []);
 
     return (
@@ -173,16 +174,7 @@ function App() {
                             }
                         >
                             {/* Dashboard */}
-<<<<<<< HEAD
-                            <Route path="/dashboard" element={<AdminDashboard />} />
-                            <Route path="/manager" element={<ManagerDashboard />} />
-                            <Route path="/doctor" element={<DoctorDashboard />} />
-                            <Route path="/coordinator" element={<CoordinatorDashboard />} />
-                            <Route path="/care-staff" element={<CareStaffDashboard />} />
-=======
-
                             <Route path="/dashboard" element={<DashboardPage />} />
->>>>>>> dc910b6 (feat(FE): thêm code cho phần dashboard và sửa code dashboard của App.jsx)
 
                             {/* Modules */}
                             <Route path="/care-duty" element={<CareDutyPage />} />
