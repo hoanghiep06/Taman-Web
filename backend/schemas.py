@@ -317,6 +317,10 @@ class ShiftMedicalReportCreate(BaseModel):
     elder_events: List[ElderShiftNoteInput] = [] # Danh sách chọn từng Cụ và nhập ghi chú
     handover_notes: str                     # Hướng xử lý / Lưu ý chung cho ca sau
 
+class ShiftMedicalReportUpdate(BaseModel):
+    elder_events: Optional[List[ElderShiftNoteInput]] = None  # Danh sách diễn biến của từng Cụ (nếu có bổ sung/sửa)
+    handover_notes: Optional[str] = None                       # Hướng xử lý / Lưu ý chung cho ca sau
+
 class ShiftMedicalReportResponse(BaseModel):
     id: int
     facility_id: int
@@ -342,6 +346,21 @@ class ElderHealthSummaryCard(BaseModel):
     recent_diary_events: List[str] = []                   # Các ghi chú diễn biến do ĐP/NVCS gõ
     doctor_attention_reasons: List[str] = []              # Lý do chi tiết cảnh báo Bác sĩ
 
+
+class ShiftReportAuditResponse(BaseModel):
+    id: int
+    actor_id: Optional[int] = None
+    actor_name: Optional[str] = "N/A"
+    action: str
+    ip_address: str
+    created_at: datetime
+    payload: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ShiftMedicalReportDetailResponse(ShiftMedicalReportResponse):
+    edit_history: List[ShiftReportAuditResponse] = []  # Chỉ Admin/Manager thấy nếu truyền include_history=True
 
 # ==========================================
 # QUẢN LÝ VẬN HÀNH: BÁO CÁO, KHO, BẾP, BẢO VỆ

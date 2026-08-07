@@ -17,7 +17,7 @@ from schemas import (
     ElderHealthSummaryCard, ElderShiftNoteInput,
     ShiftMedicalReportCreate, ShiftMedicalReportResponse,
     RoleType, ShiftType, WeightRecordCreate, WeightRecordResponse, 
-    ElderWeightDueResponse, WeightRecordUpdate
+    ElderWeightDueResponse, WeightRecordUpdate, ShiftMedicalReportDetailResponse, ShiftReportAuditResponse, ShiftMedicalReportUpdate
 )
 from core.dependencies import PermissionChecker, get_current_user, require_care_team, require_medical_team
 from core.constants import VITAL_LIMITS, max_allowed_days_for_staff, max_allowed_days_max
@@ -279,27 +279,27 @@ def get_doctor_advanced_dashboard(
 # =========================================================================
 # 5. XEM LẠI BÁO CÁO GIAO CA QUÁ KHỨ & NHẬT KÝ
 # =========================================================================
-@router.get("/shift-reports/archive", response_model=List[ShiftMedicalReportResponse])
+@router.get("/shift-reports/archive", response_model=List[ShiftMedicalReportDetailResponse])
 def get_archived_shift_reports(
     facility_id: Optional[int] = Query(None, description="Lọc theo Cơ sở"),
     target_date: Optional[date] = Query(None, description="Xem ngày cụ thể (YYYY-MM-DD)"),
     shift_type: Optional[ShiftType] = Query(None, description="Lọc theo Ca Sáng / Ca Tối"),
     limit_days: Optional[int] = Query(None, ge=1, le=90, description="Giới hạn số ngày gần nhất muốn xem (VD: 3, 7, 30 ngày)"),
+    include_history: bool = Query(False, description="Chỉ Admin/Manager mới có quyền xem lịch sử các vết chỉnh sửa"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
     """
     XEM LẠI BÁO CÁO GIAO CA QUÁ KHỨ:
-    - Hỗ trợ lọc theo Ngày, Ca, Cơ sở.
-    - Hỗ trợ giới hạn số ngày tra cứu (`limit_days`).
-    - Tự động áp ngưỡng tối đa theo Vai trò.
+    - NVCS, Điều phối, Bác sĩ: Chỉ xem được BẢN BÁO CÁO HOÀN CHỈNH CUỐI CÙNG trong giới hạn ngày cho phép.
+    - Admin, Manager: Khi truyền `include_history=True` sẽ xem được thêm danh sách Nhật ký lịch sử các lần hiệu chỉnh (Audit History).
     """
     query = db.query(ShiftReport).options(
         joinedload(ShiftReport.coordinator), 
         joinedload(ShiftReport.facility)
     )
 
-    # 1. PHÂN QUYỀN CƠ SỞ (Multi-facility isolation)
+    # 1. PHÂN QUYỀN ĐA CƠ SỞ (Multi-facility isolation)
     target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
     if target_f_id is not None:
         query = query.filter(ShiftReport.facility_id == target_f_id)
@@ -329,20 +329,135 @@ def get_archived_shift_reports(
 
     reports = query.order_by(ShiftReport.shift_date.desc(), ShiftReport.created_at.desc()).all()
 
-    return [
-        ShiftMedicalReportResponse(
-            id=r.id,
-            facility_id=r.facility_id,
-            facility_name=r.facility.name if r.facility else "N/A",
-            reporter_id=r.coordinator_id,
-            reporter_name=r.coordinator.full_name if r.coordinator else "N/A",
-            shift_date=r.shift_date,
-            shift_type=ShiftType(r.shift_type),
-            formatted_elder_descriptions=r.elder_descriptions,
-            handover_notes=r.handover_notes,
-            created_at=r.created_at
-        ) for r in reports
-    ]
+    # 4. BẢO MẬT & TRUY XUẤT VẾT LỊCH SỬ CHỈNH SỬA (CHO ADMIN / MANAGER)
+    is_admin_or_manager = current_user.role in [RoleType.Admin, RoleType.Manager]
+    results = []
+
+    for r in reports:
+        history_list = []
+        
+        # Chỉ truy vấn vết AuditLog khi là Admin/Manager VÀ có bật cờ include_history
+        if include_history and is_admin_or_manager:
+            audit_logs = db.query(AuditLog)\
+                .filter(
+                    AuditLog.action == "UPDATE_SHIFT_REPORT",
+                    AuditLog.target_id == str(r.id)
+                )\
+                .order_by(AuditLog.created_at.desc()).all()
+
+            for log in audit_logs:
+                actor = db.query(User).filter(User.id == log.actor_id).first() if log.actor_id else None
+                history_list.append(
+                    ShiftReportAuditResponse(
+                        id=log.id,
+                        actor_id=log.actor_id,
+                        actor_name=actor.full_name if actor else "Hệ thống",
+                        action=log.action,
+                        ip_address=log.ip_address,
+                        created_at=log.created_at,
+                        payload=log.payload
+                    )
+                )
+
+        results.append(
+            ShiftMedicalReportDetailResponse(
+                id=r.id,
+                facility_id=r.facility_id,
+                facility_name=r.facility.name if r.facility else "N/A",
+                reporter_id=r.coordinator_id,
+                reporter_name=r.coordinator.full_name if r.coordinator else "N/A",
+                shift_date=r.shift_date,
+                shift_type=ShiftType(r.shift_type),
+                formatted_elder_descriptions=r.elder_descriptions,  # Bản báo cáo đã cập nhật mới nhất
+                handover_notes=r.handover_notes,
+                created_at=r.created_at,
+                edit_history=history_list  # Mảng vết sửa (Rỗng đối với Doctor / Caregiver / Coordinator)
+            )
+        )
+
+    return results
+
+
+@router.put("/shift-reports/{report_id}", response_model=ShiftMedicalReportResponse)
+def update_shift_medical_report(
+    report_id: int,
+    payload: ShiftMedicalReportUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_coordinator_report)
+):
+    """
+    SỬA BÁO CÁO GIAO CA (CHỈ ĐIỀU PHỐI / MANAGER / ADMIN):
+    - Cập nhật ghi chú diễn biến của các Cụ hoặc ghi chú dặn dò ca sau.
+    - Nếu sửa danh sách `elder_events`, hệ thống tự động cập nhật lại chuỗi văn bản giao ca 
+      và đẩy thêm vết mới vào Nhật ký `TreatmentDiary`.
+    - Ghi log vết sửa AuditLog công khai.
+    """
+    report = db.query(ShiftReport)\
+        .options(joinedload(ShiftReport.coordinator), joinedload(ShiftReport.facility))\
+        .filter(ShiftReport.id == report_id).first()
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Không tìm thấy báo cáo giao ca này!")
+
+    # Ràng buộc phân quyền Cơ sở (Nếu không phải Admin/Manager toàn viện thì chỉ được sửa báo cáo của cơ sở mình)
+    if current_user.facility_id is not None and report.facility_id != current_user.facility_id:
+        raise HTTPException(status_code=403, detail="Bạn không có quyền chỉnh sửa báo cáo của Cơ sở khác!")
+
+    old_notes = report.handover_notes
+
+    # 1. Cập nhật lại diễn biến của các Cụ (nếu Frontend có truyền lên mảng mới)
+    if payload.elder_events is not None:
+        formatted_descriptions = []
+        for idx, item in enumerate(payload.elder_events, start=1):
+            elder = db.query(Elder).filter(Elder.id == item.elder_id).first()
+            if not elder:
+                continue
+
+            note_text = item.note.strip()
+            formatted_descriptions.append(f"{idx}. {elder.full_name}: {note_text}")
+
+            # Đẩy cập nhật bổ sung vào Nhật ký điều trị của Cụ
+            diary = TreatmentDiary(
+                elder_id=elder.id,
+                event_type="Cập nhật báo cáo ca (ĐP)",
+                content=f"[Hiệu chỉnh ca] {note_text}",
+                created_by=current_user.id
+            )
+            db.add(diary)
+
+        report.elder_descriptions = "\n".join(formatted_descriptions)
+        report.highlighted_issues = f"Đã cập nhật lưu ý cho {len(payload.elder_events)} Cụ."
+
+    # 2. Cập nhật lại ghi chú dặn dò ca sau
+    if payload.handover_notes is not None:
+        report.handover_notes = payload.handover_notes
+
+    # 3. Ghi vết AuditLog bảo vệ tính minh bạch
+    audit = AuditLog(
+        actor_id=current_user.id,
+        action="UPDATE_SHIFT_REPORT",
+        target_id=str(report_id),
+        ip_address="Internal",
+        payload=f"ĐIỀU PHỐI [{current_user.full_name}] đã chỉnh sửa Báo cáo giao ca ID={report_id} ngày {report.shift_date}"
+    )
+    db.add(audit)
+
+    db.commit()
+    db.refresh(report)
+
+    return ShiftMedicalReportResponse(
+        id=report.id,
+        facility_id=report.facility_id,
+        facility_name=report.facility.name if report.facility else "N/A",
+        reporter_id=report.coordinator_id,
+        reporter_name=report.coordinator.full_name if report.coordinator else "N/A",
+        shift_date=report.shift_date,
+        shift_type=ShiftType(report.shift_type),
+        formatted_elder_descriptions=report.elder_descriptions,
+        handover_notes=report.handover_notes,
+        created_at=report.created_at
+    )
+
 
 @router.get("/diary/elder/{elder_id}", response_model=List[TreatmentDiaryResponse])
 def get_elder_treatment_diary_history(
