@@ -139,6 +139,30 @@ export const SIDEBAR_MENU = {
         },
 
         {
+            title: "Theo dõi sức khỏe",
+            icon: "❤️",
+            path: "/health"
+        },
+
+        {
+            title: "Lịch sử khám",
+            icon: "🔍",
+            path: "/health-check"
+        },
+
+        {
+            title: "Hồ sơ bệnh án",
+            icon: "📋",
+            path: "/medical-record"
+        },
+
+        {
+            title: "Đơn thuốc",
+            icon: "💊",
+            path: "/prescriptions"
+        },
+
+        {
             title: "Thuốc",
             icon: "💊",
             path: "/medicines"
@@ -174,7 +198,7 @@ export const SIDEBAR_MENU = {
 
     ],
 
-    [ROLES.CARESTAFF]: [
+    [ROLES.CARE_STAFF]: [
 
         {
             title: "Dashboard",
