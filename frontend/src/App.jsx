@@ -135,7 +135,6 @@ const VitalPage = lazy(() =>
 );
 
 
-
 const IncidentPage = lazy(() =>
     import("./features/incidents/pages/IncidentPage").then((m) => ({
         default: m.IncidentPage,
