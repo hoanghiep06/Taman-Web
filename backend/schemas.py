@@ -214,6 +214,9 @@ class VitalSignResponse(VitalSignCreate):
     measured_by: Optional[int]
     measured_at: datetime
     is_abnormal: bool
+    is_edited: bool = False
+    edited_at: Optional[datetime] = None
+    
     model_config = ConfigDict(from_attributes=True)
 
 class VitalSignUpdate(BaseModel):

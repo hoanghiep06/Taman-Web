@@ -77,17 +77,12 @@ def update_vital_signs(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    """
-    SỬA LẠI CHỈ SỐ KHI NHÂN VIÊN GÕ NHẦM:
-    - Cập nhật chỉ số đúng & Tính toán lại cờ bất thường `is_abnormal`.
-    - Ghi vết AuditLog để đảm bảo tính minh bạch y tế (không mất vết lịch sử).
-    """
     record = db.query(VitalSignRecord).filter(VitalSignRecord.id == vital_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi sinh hiệu này!")
 
     old_values = f"BP:{record.bp_systolic}/{record.bp_diastolic}, SPO2:{record.spo2}, Temp:{record.temperature}"
-
+    # Cập nhật các trường chỉ số
     if payload.bp_systolic is not None: record.bp_systolic = payload.bp_systolic
     if payload.bp_diastolic is not None: record.bp_diastolic = payload.bp_diastolic
     if payload.pulse is not None: record.pulse = payload.pulse
@@ -95,8 +90,12 @@ def update_vital_signs(
     if payload.temperature is not None: record.temperature = payload.temperature
     if payload.notes is not None: record.notes = payload.notes
 
+    # Bật cờ đánh dấu đã chỉnh sửa và tính lại cờ bất thường
+    record.is_edited = True
+    record.edited_at = datetime.now()
     record.is_abnormal = calculate_abnormal_flag(record.spo2, record.bp_systolic, record.bp_diastolic, record.temperature, record.pulse)
 
+    # Ghi log minh bạch
     audit = AuditLog(
         actor_id=current_user.id,
         action="UPDATE_VITAL_SIGN",
@@ -275,6 +274,58 @@ def get_doctor_advanced_dashboard(
         cards = [c for c in cards if c.has_abnormal_vital]
     return cards
 
+@router.get("/vitals/audit-check", response_model=List[dict])
+def check_elder_vital_edits_in_shift(
+    elder_id: int = Query(..., description="ID của Cụ cần kiểm tra"),
+    target_date: date = Query(..., description="Ngày cần kiểm tra (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_only) # Chỉ Admin, Manager, Doctor mới được check vết sửa
+):
+    """
+    KIỂM TRA LỊCH SỬ CHỈNH SỬA SINH HIỆU CỦA 1 CỤ TRONG 1 NGÀY:
+    - Thống kê xem trong ngày đó, các bản ghi sinh hiệu của Cụ đã bị NVCS/ĐP sửa đổi mấy lần.
+    - Trả về danh sách AuditLog chi tiết (Ai sửa, sửa lúc mấy giờ, nội dung cũ -> mới).
+    - Phân quyền: Chỉ Admin, Manager, Bác sĩ mới có quyền gọi.
+    """
+    # 1. Tìm tất cả các bản ghi sinh hiệu của Cụ trong ngày target_date
+    start_dt = datetime.combine(target_date, datetime.min.time())
+    end_dt = datetime.combine(target_date, datetime.max.time())
+
+    vitals_in_day = db.query(VitalSignRecord).filter(
+        VitalSignRecord.elder_id == elder_id,
+        VitalSignRecord.measured_at >= start_dt,
+        VitalSignRecord.measured_at <= end_dt
+    ).all()
+
+    if not vitals_in_day:
+        return []
+
+    vital_ids = [v.id for v in vitals_in_day]
+
+    # 2. Truy vấn bảng AuditLog xem các bản ghi này đã từng bị UPDATE chưa
+    # target_id trong AuditLog của vital lưu dưới dạng string của vital_id
+    vital_id_strs = [str(vid) for vid in vital_ids]
+    
+    audit_logs = db.query(AuditLog).filter(
+        AuditLog.action == "UPDATE_VITAL_SIGN",
+        AuditLog.target_id.in_(vital_id_strs)
+    ).order_by(AuditLog.created_at.desc()).all()
+
+    result = []
+    for log in audit_logs:
+        actor = db.query(User).filter(User.id == log.actor_id).first() if log.actor_id else None
+        result.append({
+            "audit_id": log.id,
+            "vital_record_id": int(log.target_id),
+            "actor_id": log.actor_id,
+            "actor_name": actor.full_name if actor else "N/A",
+            "action": log.action,
+            "details": log.payload,  # Nội dung [Cũ -> Mới]
+            "modified_at": log.created_at,
+            "ip_address": log.ip_address
+        })
+
+    return result
 
 # =========================================================================
 # 5. XEM LẠI BÁO CÁO GIAO CA QUÁ KHỨ & NHẬT KÝ
@@ -377,6 +428,54 @@ def get_archived_shift_reports(
 
     return results
 
+@router.get("/shift-reports/{report_id}/audit-history", response_model=List[ShiftReportAuditResponse])
+def get_shift_report_audit_history(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    """
+    TRUY VẤN VẾT LỊCH SỬ CHỈNH SỬA CỦA 1 BÁO CÁO GIAO CA CHUYÊN BỆT:
+    - Bắt buộc phân quyền: Chỉ Admin và Manager mới xem được chi tiết.
+    - Ép kiểu target_id chuẩn xác để loại bỏ hoàn toàn lỗi trả về 0 lần sửa.
+    """
+    # Khóa bảo mật: Chỉ Admin & Manager được xem
+    if current_user.role not in [RoleType.Admin, RoleType.Manager]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Chỉ Quản Lý (Manager) và Quản Trị Viên (Admin) mới có quyền xem vết chỉnh sửa báo cáo!"
+        )
+
+    report = db.query(ShiftReport).filter(ShiftReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Không tìm thấy báo cáo giao ca này!")
+
+    # 🌟 ÉP KIỂU SẠCH SẼ CHỐNG LỖI QUERY MATCHING
+    target_str = str(report_id).strip()
+
+    audit_logs = db.query(AuditLog)\
+        .filter(
+            AuditLog.action == "UPDATE_SHIFT_REPORT",
+            AuditLog.target_id == target_str
+        )\
+        .order_by(AuditLog.created_at.desc()).all()
+
+    history = []
+    for log in audit_logs:
+        actor = db.query(User).filter(User.id == log.actor_id).first() if log.actor_id else None
+        history.append(
+            ShiftReportAuditResponse(
+                id=log.id,
+                actor_id=log.actor_id,
+                actor_name=actor.full_name if actor else "N/A",
+                action=log.action,
+                ip_address=log.ip_address,
+                created_at=log.created_at,
+                payload=log.payload
+            )
+        )
+
+    return history
 
 @router.put("/shift-reports/{report_id}", response_model=ShiftMedicalReportResponse)
 def update_shift_medical_report(
@@ -385,13 +484,6 @@ def update_shift_medical_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_coordinator_report)
 ):
-    """
-    SỬA BÁO CÁO GIAO CA (CHỈ ĐIỀU PHỐI / MANAGER / ADMIN):
-    - Cập nhật ghi chú diễn biến của các Cụ hoặc ghi chú dặn dò ca sau.
-    - Nếu sửa danh sách `elder_events`, hệ thống tự động cập nhật lại chuỗi văn bản giao ca 
-      và đẩy thêm vết mới vào Nhật ký `TreatmentDiary`.
-    - Ghi log vết sửa AuditLog công khai.
-    """
     report = db.query(ShiftReport)\
         .options(joinedload(ShiftReport.coordinator), joinedload(ShiftReport.facility))\
         .filter(ShiftReport.id == report_id).first()
@@ -399,13 +491,11 @@ def update_shift_medical_report(
     if not report:
         raise HTTPException(status_code=404, detail="Không tìm thấy báo cáo giao ca này!")
 
-    # Ràng buộc phân quyền Cơ sở (Nếu không phải Admin/Manager toàn viện thì chỉ được sửa báo cáo của cơ sở mình)
     if current_user.facility_id is not None and report.facility_id != current_user.facility_id:
         raise HTTPException(status_code=403, detail="Bạn không có quyền chỉnh sửa báo cáo của Cơ sở khác!")
 
-    old_notes = report.handover_notes
+    old_notes = report.handover_notes or ""
 
-    # 1. Cập nhật lại diễn biến của các Cụ (nếu Frontend có truyền lên mảng mới)
     if payload.elder_events is not None:
         formatted_descriptions = []
         for idx, item in enumerate(payload.elder_events, start=1):
@@ -416,7 +506,6 @@ def update_shift_medical_report(
             note_text = item.note.strip()
             formatted_descriptions.append(f"{idx}. {elder.full_name}: {note_text}")
 
-            # Đẩy cập nhật bổ sung vào Nhật ký điều trị của Cụ
             diary = TreatmentDiary(
                 elder_id=elder.id,
                 event_type="Cập nhật báo cáo ca (ĐP)",
@@ -428,20 +517,20 @@ def update_shift_medical_report(
         report.elder_descriptions = "\n".join(formatted_descriptions)
         report.highlighted_issues = f"Đã cập nhật lưu ý cho {len(payload.elder_events)} Cụ."
 
-    # 2. Cập nhật lại ghi chú dặn dò ca sau
     if payload.handover_notes is not None:
         report.handover_notes = payload.handover_notes
 
-    # 3. Ghi vết AuditLog bảo vệ tính minh bạch
+    # 🌟 GHI LOG CHUẨN XÁC VỚI TARGET_ID ĐƯỢC CHUẨN HÓA STR
     audit = AuditLog(
         actor_id=current_user.id,
         action="UPDATE_SHIFT_REPORT",
-        target_id=str(report_id),
+        target_id=str(report.id).strip(),
         ip_address="Internal",
-        payload=f"ĐIỀU PHỐI [{current_user.full_name}] đã chỉnh sửa Báo cáo giao ca ID={report_id} ngày {report.shift_date}"
+        payload=f"Ghi chú cũ: [{old_notes}] -> Ghi chú mới: [{report.handover_notes}]"
     )
     db.add(audit)
 
+    # Commit toàn bộ để đảm bảo AuditLog chắc chắn lưu thành công
     db.commit()
     db.refresh(report)
 
@@ -457,30 +546,6 @@ def update_shift_medical_report(
         handover_notes=report.handover_notes,
         created_at=report.created_at
     )
-
-
-@router.get("/diary/elder/{elder_id}", response_model=List[TreatmentDiaryResponse])
-def get_elder_treatment_diary_history(
-    elder_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_care_vital)
-):
-    diaries = db.query(TreatmentDiary).options(joinedload(TreatmentDiary.staff))\
-        .filter(TreatmentDiary.elder_id == elder_id)\
-        .order_by(TreatmentDiary.created_at.desc()).all()
-
-    return [
-        TreatmentDiaryResponse(
-            id=d.id,
-            elder_id=d.elder_id,
-            event_type=d.event_type,
-            content=d.content,
-            image_url=d.image_url,
-            created_by=d.created_by,
-            created_by_name=d.staff.full_name if d.staff else "N/A",
-            created_at=d.created_at
-        ) for d in diaries
-    ]
 
 
 # =========================================================================

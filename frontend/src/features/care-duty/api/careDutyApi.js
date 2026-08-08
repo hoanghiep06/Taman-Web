@@ -28,6 +28,16 @@ export const careDutyApi = {
         return await axiosClient.post('/health/shift-reports', payload);
     },
 
+    // 5b. BỔ SUNG: Cập nhật Báo cáo giao ca đã chốt
+    updateShiftReport: async (reportId, payload) => {
+        return await axiosClient.put(`/health/shift-reports/${reportId}`, payload);
+    },
+
+    // 5c. Lấy riêng vết lịch sử sửa báo cáo
+    getShiftReportAuditHistory: async (reportId) => {
+        return await axiosClient.get(`/api/health/shift-reports/${reportId}/audit-history`);
+    },
+
     // 6. Xem lại báo cáo giao ca quá khứ (Fix đúng route /api/health/shift-reports/archive)
     getArchivedShiftReports: async (params = {}) => {
         return await axiosClient.get('/health/shift-reports/archive', { params });

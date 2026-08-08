@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './HandoverReportForm.module.css';
 
-// Component Con: Dòng chọn Cụ có tích hợp ô gõ tìm kiếm bên trong Dropdown
 const SearchableElderSelect = ({ eldersList, selectedElderId, onSelect }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,10 +58,40 @@ const SearchableElderSelect = ({ eldersList, selectedElderId, onSelect }) => {
   );
 };
 
-export const HandoverReportForm = ({ facilityId, eldersList = [], onSubmitReport }) => {
+export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport = null, onSubmitReport, onCancelEdit }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [elderEvents, setElderEvents] = useState([{ elder_id: '', note: '' }]);
   const [handoverNotes, setHandoverNotes] = useState('');
+
+  // Hàm Parse văn bản giao ca cũ về dạng { elder_id, note }
+  useEffect(() => {
+    if (existingReport) {
+      setHandoverNotes(existingReport.handover_notes || '');
+      
+      if (existingReport.formatted_elder_descriptions) {
+        const lines = existingReport.formatted_elder_descriptions.split('\n');
+        const parsed = lines.map((line) => {
+          // Chuỗi dạng: "1. Cụ Lê Thị Mai: đau bụng" -> Tách Tên Cụ và Nội dung
+          const match = line.match(/^\d+\.\s*(.*?):\s*(.*)$/);
+          if (match) {
+            const rawName = match[1].trim();
+            const noteText = match[2].trim();
+            // Khai báo dictionary map tên sang id
+            const matchedElder = eldersList.find(
+              (e) => e.fullName.toLowerCase() === rawName.toLowerCase() || rawName.includes(e.fullName)
+            );
+            return {
+              elder_id: matchedElder ? matchedElder.id : '',
+              note: noteText
+            };
+          }
+          return { elder_id: '', note: line };
+        });
+
+        if (parsed.length > 0) setElderEvents(parsed);
+      }
+    }
+  }, [existingReport, eldersList]);
 
   const handleAddEvent = () => {
     setElderEvents([...elderEvents, { elder_id: '', note: '' }]);
@@ -80,10 +109,10 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], onSubmitReport
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const validEvents = elderEvents.filter((item) => item.elder_id && item.note.trim());
+    const validEvents = elderEvents.filter((item) => item.note.trim());
     
     if (validEvents.length === 0) {
-      return alert('Vui lòng chọn ít nhất 1 Cụ và điền diễn biến!');
+      return alert('Vui lòng nhập nội dung diễn biến!');
     }
 
     onSubmitReport({
@@ -92,13 +121,15 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], onSubmitReport
       shift_type: "Sang",
       elder_events: validEvents,
       handover_notes: handoverNotes,
-    });
+    }, existingReport?.id);
   };
 
   return (
-    <div className={styles.box}>
+    <div className={styles.box} style={{ border: existingReport ? '2px solid #d97706' : '2px solid #10b981' }}>
       <div className={styles.headerToggle} onClick={() => setIsCollapsed(!isCollapsed)}>
-        <h2 className={styles.title}>📋 BÁO CÁO GIAO CA (ĐIỀU PHỐI)</h2>
+        <h2 className={styles.title} style={{ color: existingReport ? '#b45309' : '#065f46' }}>
+          {existingReport ? '✏️ HIỆU CHỈNH BÁO CÁO GIAO CA' : '📋 BÁO CÁO GIAO CA (ĐIỀU PHỐI)'}
+        </h2>
         <button type="button" style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: 'bold' }}>
           {isCollapsed ? '➕ Mở rộng' : '➖ Thu gọn'}
         </button>
@@ -112,7 +143,6 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], onSubmitReport
 
           {elderEvents.map((item, idx) => (
             <div key={idx} className={styles.eventRow}>
-              {/* Nút Xóa bên TRÁI */}
               {elderEvents.length > 1 && (
                 <button
                   type="button"
@@ -123,14 +153,12 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], onSubmitReport
                 </button>
               )}
 
-              {/* Khối Custom Search-Select Đã Gộp Liền Khối */}
               <SearchableElderSelect
                 eldersList={eldersList}
                 selectedElderId={item.elder_id}
                 onSelect={(id) => handleEventChange(idx, 'elder_id', id)}
               />
 
-              {/* Ô Nhập diễn biến */}
               <input
                 type="text"
                 placeholder="Mô tả diễn biến trong ca..."
@@ -162,12 +190,23 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], onSubmitReport
             />
           </div>
 
-          <button
-            type="submit"
-            style={{ width: '100%', backgroundColor: '#047857', color: 'white', fontWeight: 'bold', padding: '12px', borderRadius: '10px', border: 'none', marginTop: '12px', cursor: 'pointer' }}
-          >
-            🔒 CHỐT & GỬI BÁO CÁO GIAO CA
-          </button>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+            {existingReport && (
+              <button
+                type="button"
+                onClick={onCancelEdit}
+                style={{ flex: 1, backgroundColor: '#f1f5f9', color: '#334155', fontWeight: 'bold', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', cursor: 'pointer' }}
+              >
+                Hủy sửa
+              </button>
+            )}
+            <button
+              type="submit"
+              style={{ flex: 2, backgroundColor: existingReport ? '#d97706' : '#047857', color: 'white', fontWeight: 'bold', padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer' }}
+            >
+              {existingReport ? '💾 CẬP NHẬT CHỈNH SỬA' : '🔒 CHỐT & GỬI BÁO CÁO GIAO CA'}
+            </button>
+          </div>
         </form>
       )}
     </div>

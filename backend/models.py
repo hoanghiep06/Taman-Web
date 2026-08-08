@@ -196,6 +196,9 @@ class VitalSignRecord(Base):
     notes = Column(Text)
     is_abnormal = Column(Boolean, default=False)
 
+    is_edited = Column(Boolean, default=False)
+    edited_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
 class Prescription(Base):
     __tablename__ = "prescriptions"
     id = Column(Integer, primary_key=True, index=True)

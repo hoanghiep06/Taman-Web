@@ -107,6 +107,18 @@ export const VitalModal = ({
     setShowHistory(!showHistory);
   };
 
+  // xử lý hiển thị trong VitalModal.jsx
+const getCleanHandoverNote = (rawHandover) => {
+  if (!rawHandover) return '';
+  // Nếu là mảng hoặc chuỗi gồm nhiều vết nối nhau bởi '|'
+  const parts = rawHandover.split('|').map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return '';
+  
+  // Lấy vết cuối cùng (mới nhất) và loại bỏ các tag tiền tố như [Lưu ý giao ca (ĐP)], [Cập nhật báo cáo...]
+  const lastNote = parts[parts.length - 1];
+  return lastNote.replace(/^\[.*?\]\s*/, '');
+};
+
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
@@ -182,7 +194,7 @@ export const VitalModal = ({
                       )}
                       {elder.handoverNote && (
                         <div style={{ color: '#047857' }}>
-                          <b>📋 Diễn biến giao ca:</b> {elder.handoverNote}
+                          <b>📋 Diễn biến giao ca mới nhất:</b> {getCleanHandoverNote(elder.handoverNote)}
                         </div>
                       )}
                     </div>
