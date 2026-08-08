@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { careDutyApi } from '../api/careDutyApi';
 
-// BẢNG HẰNG SỐ CHUẨN ĐỐI CHIẾU SINH HIỆU BẤT THƯỜNG
 const VITAL_LIMITS = {
   SPO2_WARNING: 95.0,
   BP_SYSTOLIC_HIGH: 150,
@@ -14,37 +13,23 @@ const VITAL_LIMITS = {
   PULSE_SLOW: 60,
 };
 
-// Hàm phân tích chi tiết lý do bất thường
-const getVitalWarningReasons = (vital) => {
-  if (!vital) return [];
-  const reasons = [];
+// Chuẩn hóa ghép Khu + Phòng (VD: Khu A + Phòng 101 -> A101)
+const formatRoomSyntax = (zoneName, roomNumber) => {
+  if (!roomNumber) return 'Chưa xếp phòng';
+  
+  const cleanZone = String(zoneName || '')
+    .replace(/^(Khu|Zone|\s)+/i, '')
+    .trim();
+    
+  const cleanRoom = String(roomNumber)
+    .replace(/^(Phòng|P\.?|\s)+/i, '')
+    .trim();
 
-  if (vital.spo2 && vital.spo2 < VITAL_LIMITS.SPO2_WARNING) {
-    reasons.push(`SpO2 thấp (${vital.spo2}%)`);
+  if (!cleanZone) return cleanRoom || String(roomNumber);
+  if (cleanRoom.toUpperCase().startsWith(cleanZone.toUpperCase())) {
+    return cleanRoom;
   }
-  if (vital.temperature) {
-    if (vital.temperature >= VITAL_LIMITS.TEMP_ALARM) {
-      reasons.push(`Sốt cao khẩn cấp (${vital.temperature}°C)`);
-    } else if (vital.temperature >= VITAL_LIMITS.TEMP_FEVER) {
-      reasons.push(`Sốt nhẹ (${vital.temperature}°C)`);
-    }
-  }
-  if (vital.bp_systolic || vital.bp_diastolic) {
-    if (vital.bp_systolic > VITAL_LIMITS.BP_SYSTOLIC_HIGH || vital.bp_diastolic > VITAL_LIMITS.BP_DIASTOLIC_HIGH) {
-      reasons.push(`Huyết áp cao (${vital.bp_systolic}/${vital.bp_diastolic})`);
-    } else if (vital.bp_systolic < VITAL_LIMITS.BP_SYSTOLIC_LOW || vital.bp_diastolic < VITAL_LIMITS.BP_DIASTOLIC_LOW) {
-      reasons.push(`Huyết áp thấp (${vital.bp_systolic}/${vital.bp_diastolic})`);
-    }
-  }
-  if (vital.pulse) {
-    if (vital.pulse > VITAL_LIMITS.PULSE_FAST) {
-      reasons.push(`Mạch nhanh (${vital.pulse} bpm)`);
-    } else if (vital.pulse < VITAL_LIMITS.PULSE_SLOW) {
-      reasons.push(`Mạch chậm (${vital.pulse} bpm)`);
-    }
-  }
-
-  return reasons;
+  return `${cleanZone}${cleanRoom}`;
 };
 
 export const useCareDutyData = (facilityId = null) => {
@@ -52,6 +37,7 @@ export const useCareDutyData = (facilityId = null) => {
   const [alerts, setAlerts] = useState([]);
   const [reportData, setReportData] = useState(null);
   const [isReportSubmitted, setIsReportSubmitted] = useState(false);
+  const [weightDueCount, setWeightDueCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -59,67 +45,109 @@ export const useCareDutyData = (facilityId = null) => {
       setLoading(true);
       const todayStr = new Date().toISOString().split('T')[0];
 
-      const dashboardRes = await careDutyApi.getLiveShiftDashboard(facilityId);
+      const [dashboardRes, weightDueRes] = await Promise.all([
+        careDutyApi.getLiveShiftDashboard(facilityId),
+        careDutyApi.getEldersDueForWeight().catch(() => null)
+      ]);
+
       const dashboardData = dashboardRes?.data || dashboardRes || [];
+      const weightDueData = weightDueRes?.data || weightDueRes || [];
+
+      const dueElderIds = new Set((Array.isArray(weightDueData) ? weightDueData : []).map(item => item.elder_id));
+      setWeightDueCount(dueElderIds.size);
 
       if (Array.isArray(dashboardData)) {
+        const mappedElders = [];
         const abnormalAlertsList = [];
 
-        const mappedElders = dashboardData.map((item) => {
-          const vital = item.latest_vital_signs;
-          
-          let isMeasuredToday = false;
-          if (vital && vital.measured_at) {
-            const measuredDateStr = new Date(vital.measured_at).toISOString().split('T')[0];
-            isMeasuredToday = (measuredDateStr === todayStr);
-          }
+        // BÓC TÁCH CẤU TRÚC LỒNG 3 CẤP TỪ BACKEND NEW SCHEMA
+        dashboardData.forEach((facility) => {
+          const facName = facility.facility_name || `Cơ sở ${facility.facility_id}`;
+          const facId = facility.facility_id;
 
-          // Phân tích chi tiết cảnh báo theo hằng số y tế
-          const detailedReasons = isMeasuredToday ? getVitalWarningReasons(vital) : [];
-          const hasAbnormal = detailedReasons.length > 0;
+          (facility.zones || []).forEach((zone) => {
+            const zoneName = zone.zone_name || '';
 
-          if (hasAbnormal) {
-            abnormalAlertsList.push({
-              roomNumber: item.room_number,
-              elderName: item.elder_name,
-              issueDetail: detailedReasons.join(' • ')
+            (zone.rooms || []).forEach((room) => {
+              const rawRoomNumber = room.room_number || '';
+              const formattedRoom = formatRoomSyntax(zoneName, rawRoomNumber);
+
+              (room.elders || []).forEach((elder) => {
+                const isMeasured = elder.status_tag !== 'NOT_MEASURED';
+                const hasAbnormal = Boolean(elder.is_abnormal);
+                const vital = elder.latest_vital;
+
+                // Tách chỉ số Huyết áp nếu có
+                let bpSys = null;
+                let bpDia = null;
+                if (vital && vital.bp) {
+                  const parts = vital.bp.split('/');
+                  bpSys = Number(parts[0]) || null;
+                  bpDia = Number(parts[1]) || null;
+                }
+
+                const elderObj = {
+                  id: elder.elder_id,
+                  fullName: elder.full_name || 'Chưa cập nhật tên',
+                  roomNumber: formattedRoom,
+                  facilityId: facId,
+                  facilityName: facName,
+                  hasAbnormal: hasAbnormal,
+                  isMeasured: isMeasured,
+                  isEdited: Boolean(elder.is_edited),
+                  isWeightDue: dueElderIds.has(elder.elder_id),
+                  vitalData: isMeasured && vital ? {
+                    id: vital.vital_id,
+                    bp_systolic: bpSys,
+                    bp_diastolic: bpDia,
+                    spo2: vital.spo2,
+                    temperature: vital.temperature,
+                    measured_at: vital.measured_at
+                  } : null,
+                  weightData: null
+                };
+
+                mappedElders.push(elderObj);
+
+                if (hasAbnormal) {
+                  const issueText = [];
+                  if (vital?.spo2 && vital.spo2 < VITAL_LIMITS.SPO2_WARNING) issueText.push(`SpO2 thấp (${vital.spo2}%)`);
+                  if (vital?.temperature && vital.temperature >= VITAL_LIMITS.TEMP_FEVER) issueText.push(`Sốt (${vital.temperature}°C)`);
+                  if (bpSys && bpSys > VITAL_LIMITS.BP_SYSTOLIC_HIGH) issueText.push(`Huyết áp cao (${vital.bp})`);
+
+                  abnormalAlertsList.push({
+                    id: elder.elder_id,
+                    roomNumber: formattedRoom,
+                    elderName: elder.full_name,
+                    facilityName: facName,
+                    issueDetail: issueText.join(' • ') || 'Chỉ số bất thường',
+                    elder: elderObj
+                  });
+                }
+              });
             });
-          }
-
-          return {
-            id: item.elder_id,
-            fullName: item.elder_name,
-            roomNumber: item.room_number,
-            hasAbnormal: hasAbnormal,
-            isMeasured: isMeasuredToday,
-            isEdited: vital?.is_edited || false,
-            isWeightDue: item.is_weight_due || false,
-            vitalData: isMeasuredToday ? vital : null,
-            // Map chuẩn chỉ số cân nặng gần nhất
-            weightData: item.weight_data || item.latest_weight_record ? {
-              id: (item.weight_data || item.latest_weight_record).id,
-              weight: (item.weight_data || item.latest_weight_record).weight,
-              recorded_at: (item.weight_data || item.latest_weight_record).recorded_at || (item.weight_data || item.latest_weight_record).created_at,
-              notes: (item.weight_data || item.latest_weight_record).notes
-            } : null,
-            handoverNote: Array.isArray(item.recent_diary_events) ? item.recent_diary_events.join(' | ') : ''
-          };
+          });
         });
 
         setEldersList(mappedElders);
         setAlerts(abnormalAlertsList);
       }
 
+      // Lấy báo cáo giao ca
       try {
         const archivedRes = await careDutyApi.getArchivedShiftReports({
           facility_id: facilityId,
           target_date: todayStr
         });
         const reports = archivedRes?.data || archivedRes;
-
+        
         if (Array.isArray(reports) && reports.length > 0) {
-          setReportData(reports[0]);
-          setIsReportSubmitted(true);
+          const matchedReport = facilityId 
+            ? reports.find(r => Number(r.facility_id) === Number(facilityId))
+            : reports[0];
+
+          setReportData(matchedReport || null);
+          setIsReportSubmitted(Boolean(matchedReport));
         } else {
           setReportData(null);
           setIsReportSubmitted(false);
@@ -127,7 +155,6 @@ export const useCareDutyData = (facilityId = null) => {
       } catch (err) {
         setIsReportSubmitted(false);
       }
-
     } catch (error) {
       console.error('Lỗi tải dữ liệu ca trực:', error);
     } finally {
@@ -144,6 +171,7 @@ export const useCareDutyData = (facilityId = null) => {
     alerts,
     reportData,
     isReportSubmitted,
+    weightDueCount,
     setIsReportSubmitted,
     refreshData: fetchData,
     loading

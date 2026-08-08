@@ -35,7 +35,7 @@ export const careDutyApi = {
 
     // 5c. Lấy riêng vết lịch sử sửa báo cáo
     getShiftReportAuditHistory: async (reportId) => {
-        return await axiosClient.get(`/api/health/shift-reports/${reportId}/audit-history`);
+        return await axiosClient.get(`/health/shift-reports/${reportId}/audit-history`);
     },
 
     // 6. Xem lại báo cáo giao ca quá khứ (Fix đúng route /api/health/shift-reports/archive)

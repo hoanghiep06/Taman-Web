@@ -20,6 +20,7 @@
   margin: 0;
 }
 
+/* Dòng Sự cố: Responsive Stacked Layout trên Mobile */
 .eventRow {
   display: flex;
   gap: 8px;
@@ -29,6 +30,13 @@
   border-radius: 12px;
   border: 1px solid #e2e8f0;
   margin-bottom: 10px;
+}
+
+@media (max-width: 640px) {
+  .eventRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .btnRemoveLeft {
@@ -43,11 +51,16 @@
   flex-shrink: 0;
 }
 
-/* KHỐI CUSTOM SEARCH SELECT DÍNH LIỀN */
 .customSelectContainer {
   position: relative;
-  width: 160px;
+  width: 170px;
   flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .customSelectContainer {
+    width: 100%;
+  }
 }
 
 .selectTrigger {
@@ -119,4 +132,5 @@
   font-size: 13px;
   box-sizing: border-box;
   min-width: 0;
+  width: 100%;
 }

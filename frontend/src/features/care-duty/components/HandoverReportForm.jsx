@@ -6,7 +6,6 @@ const SearchableElderSelect = ({ eldersList, selectedElderId, onSelect }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const selectedElder = eldersList.find((e) => e.id === selectedElderId);
-
   const filteredElders = eldersList.filter((e) => {
     const kw = searchTerm.toLowerCase().trim();
     return e.fullName.toLowerCase().includes(kw) || e.roomNumber.toString().includes(kw);
@@ -19,20 +18,18 @@ const SearchableElderSelect = ({ eldersList, selectedElderId, onSelect }) => {
         className={styles.selectTrigger}
         onClick={() => setIsOpen(!isOpen)}
       >
-        {selectedElder ? `P.${selectedElder.roomNumber} - ${selectedElder.fullName}` : '🔍 Chọn Cụ...'}
+        {selectedElder ? `${selectedElder.roomNumber} - ${selectedElder.fullName}` : 'Chọn Cụ...'}
       </button>
-
       {isOpen && (
         <div className={styles.dropdownMenu}>
           <input
             type="text"
-            placeholder="Gõ tên/phòng..."
+            placeholder="Tên/phòng..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className={styles.searchInputInside}
             autoFocus
           />
-
           <div className={styles.optionsList}>
             {filteredElders.length === 0 ? (
               <div style={{ padding: '6px', fontSize: '11px', color: '#94a3b8' }}>Không thấy</div>
@@ -47,7 +44,7 @@ const SearchableElderSelect = ({ eldersList, selectedElderId, onSelect }) => {
                     setSearchTerm('');
                   }}
                 >
-                  P.{elder.roomNumber} - {elder.fullName}
+                  {elder.roomNumber} - {elder.fullName}
                 </div>
               ))
             )}
@@ -63,7 +60,6 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
   const [elderEvents, setElderEvents] = useState([{ elder_id: '', note: '' }]);
   const [handoverNotes, setHandoverNotes] = useState('');
 
-  // Hàm Parse văn bản giao ca cũ về dạng { elder_id, note }
   useEffect(() => {
     if (existingReport) {
       setHandoverNotes(existingReport.handover_notes || '');
@@ -71,12 +67,10 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
       if (existingReport.formatted_elder_descriptions) {
         const lines = existingReport.formatted_elder_descriptions.split('\n');
         const parsed = lines.map((line) => {
-          // Chuỗi dạng: "1. Cụ Lê Thị Mai: đau bụng" -> Tách Tên Cụ và Nội dung
           const match = line.match(/^\d+\.\s*(.*?):\s*(.*)$/);
           if (match) {
             const rawName = match[1].trim();
             const noteText = match[2].trim();
-            // Khai báo dictionary map tên sang id
             const matchedElder = eldersList.find(
               (e) => e.fullName.toLowerCase() === rawName.toLowerCase() || rawName.includes(e.fullName)
             );
@@ -87,7 +81,6 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
           }
           return { elder_id: '', note: line };
         });
-
         if (parsed.length > 0) setElderEvents(parsed);
       }
     }
@@ -128,19 +121,18 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
     <div className={styles.box} style={{ border: existingReport ? '2px solid #d97706' : '2px solid #10b981' }}>
       <div className={styles.headerToggle} onClick={() => setIsCollapsed(!isCollapsed)}>
         <h2 className={styles.title} style={{ color: existingReport ? '#b45309' : '#065f46' }}>
-          {existingReport ? '✏️ HIỆU CHỈNH BÁO CÁO GIAO CA' : '📋 BÁO CÁO GIAO CA (ĐIỀU PHỐI)'}
+          {existingReport ? '✏️ HIỆU CHỈNH BÁO CÁO GIAO CA' : '📝 BÁO CÁO GIAO CA (ĐIỀU PHỐI)'}
         </h2>
         <button type="button" style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: 'bold' }}>
-          {isCollapsed ? '➕ Mở rộng' : '➖ Thu gọn'}
+          {isCollapsed ? 'Mở' : 'Thu gọn'}
         </button>
       </div>
 
       {!isCollapsed && (
         <form onSubmit={handleSubmit} style={{ marginTop: '14px' }}>
           <label style={{ display: 'block', fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
-            1. Các diễn biến/sự cố của từng Cụ trong ca:
+            1. Các diễn biến trong ca:
           </label>
-
           {elderEvents.map((item, idx) => (
             <div key={idx} className={styles.eventRow}>
               {elderEvents.length > 1 && (
@@ -152,16 +144,14 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
                   ✕
                 </button>
               )}
-
               <SearchableElderSelect
                 eldersList={eldersList}
                 selectedElderId={item.elder_id}
                 onSelect={(id) => handleEventChange(idx, 'elder_id', id)}
               />
-
               <input
                 type="text"
-                placeholder="Mô tả diễn biến trong ca..."
+                placeholder="Diễn biến trong ca..."
                 value={item.note}
                 onChange={(e) => handleEventChange(idx, 'note', e.target.value)}
                 className={styles.inputNote}
@@ -174,7 +164,7 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
             onClick={handleAddEvent}
             style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#047857', fontWeight: 'bold', fontSize: '12px', marginTop: '4px', cursor: 'pointer' }}
           >
-            + Thêm dòng ghi chú Cụ tiếp theo
+            + Thêm ghi chú Cụ tiếp
           </button>
 
           <div style={{ marginTop: '14px' }}>
@@ -197,14 +187,14 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
                 onClick={onCancelEdit}
                 style={{ flex: 1, backgroundColor: '#f1f5f9', color: '#334155', fontWeight: 'bold', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', cursor: 'pointer' }}
               >
-                Hủy sửa
+                Hủy
               </button>
             )}
             <button
               type="submit"
               style={{ flex: 2, backgroundColor: existingReport ? '#d97706' : '#047857', color: 'white', fontWeight: 'bold', padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer' }}
             >
-              {existingReport ? '💾 CẬP NHẬT CHỈNH SỬA' : '🔒 CHỐT & GỬI BÁO CÁO GIAO CA'}
+              {existingReport ? 'CẬP NHẬT CHỈNH SỬA' : 'HOÀN TẤT & GIAO CA'}
             </button>
           </div>
         </form>

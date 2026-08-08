@@ -250,14 +250,19 @@ def create_shift_medical_report(
 # =========================================================================
 # 3. DASHBOARD CA LIVE CHO TOÀN BỘ NHÂN VIÊN
 # =========================================================================
-@router.get("/dashboard-live", response_model=List[ElderHealthSummaryCard])
+@router.get("/dashboard-live", response_model=List[dict])
 def get_live_shift_dashboard_for_all(
-    facility_id: Optional[int] = None,
+    facility_id: Optional[int] = Query(None, description="Lọc theo Cơ sở (Nếu là Admin/Doctor)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
+    """
+    DASHBOARD THEO DÕI SỨC KHỎE KHU VỰC REAL-TIME:
+    - Nhóm theo Cơ sở -> Phân Khu -> Phòng -> Danh sách Cụ.
+    - Nhân viên CS1/CS2 chỉ thấy cơ sở của mình.
+    - Admin/Doctor thấy đủ cả 2 cơ sở (hoặc lọc theo facility_id).
+    """
     return build_health_dashboard_cards(db, current_user, facility_id, is_doctor_view=False)
-
 
 # =========================================================================
 # 4. DASHBOARD Y TẾ CHUYÊN SÂU DÀNH RIÊNG CHO BÁC SĨ & MANAGER
@@ -738,58 +743,102 @@ def calculate_abnormal_flag(spo2, bp_sys, bp_dia, temp, pulse) -> bool:
     return False
 
 
-def build_health_dashboard_cards(db: Session, current_user: User, facility_id: Optional[int], is_doctor_view: bool) -> List[ElderHealthSummaryCard]:
-    query = db.query(Elder).options(joinedload(Elder.room).joinedload(Room.zone))
-    
+def build_health_dashboard_cards(db: Session, current_user: User, facility_id: Optional[int] = None, is_doctor_view: bool = False):
+    # 1. Xác định facility_id mục tiêu
     target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+
+    # 2. Truy vấn danh sách Phòng kèm Zone và Facility
+    room_query = db.query(Room).join(Zone, Room.zone_id == Zone.id).join(Facility, Zone.facility_id == Facility.id)
+
     if target_f_id is not None:
-        query = query.join(Room).join(Zone).filter(Zone.facility_id == target_f_id)
+        room_query = room_query.filter(Zone.facility_id == target_f_id)
 
-    elders = query.order_by(Elder.room_id).all()
-    cards = []
+    rooms = room_query.order_by(Facility.id, Zone.name, Room.room_number).all()
+
+    # Mốc thời gian hôm nay
     today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = datetime.combine(date.today(), datetime.max.time())
 
-    for elder in elders:
-        latest_vital = db.query(VitalSignRecord)\
-            .filter(VitalSignRecord.elder_id == elder.id)\
-            .order_by(VitalSignRecord.measured_at.desc()).first()
+    facility_map = {}
 
-        active_prescription = db.query(Prescription)\
-            .filter(Prescription.elder_id == elder.id, Prescription.is_active == True).first()
+    for room in rooms:
+        zone = room.zone
+        facility = zone.facility
 
-        today_diaries = db.query(TreatmentDiary)\
-            .filter(TreatmentDiary.elder_id == elder.id, TreatmentDiary.created_at >= today_start).all()
+        if facility.id not in facility_map:
+            facility_map[facility.id] = {
+                "facility_id": facility.id,
+                "facility_name": facility.name,  # "CS 1 - Thủ Đức", "CS 2 - Bình Chánh"
+                "zones": {}
+            }
 
-        diary_notes = [f"[{d.event_type}] {d.content}" for d in today_diaries]
+        if zone.id not in facility_map[facility.id]["zones"]:
+            facility_map[facility.id]["zones"][zone.id] = {
+                "zone_id": zone.id,
+                "zone_name": zone.name,  # "A", "B", "C"
+                "rooms": []
+            }
 
-        attention_reasons = []
-        has_abnormal_vital = False
+        # Lấy danh sách Cụ trong phòng
+        elders = db.query(Elder).filter(Elder.room_id == room.id).all()
+        elder_cards = []
 
-        if latest_vital and latest_vital.is_abnormal:
-            has_abnormal_vital = True
-            if latest_vital.spo2 and latest_vital.spo2 < VITAL_LIMITS["SPO2_WARNING"]:
-                attention_reasons.append(f"SpO2 thấp ({latest_vital.spo2}%)")
-            if latest_vital.temperature and latest_vital.temperature >= VITAL_LIMITS["TEMP_FEVER"]:
-                attention_reasons.append(f"Sốt ({latest_vital.temperature}°C)")
-            if latest_vital.bp_systolic and latest_vital.bp_systolic > VITAL_LIMITS["BP_SYSTOLIC_HIGH"]:
-                attention_reasons.append(f"Huyết áp cao ({latest_vital.bp_systolic}/{latest_vital.bp_diastolic})")
+        for elder in elders:
+            # Lấy sinh hiệu hôm nay của Cụ
+            latest_vital = db.query(VitalSignRecord)\
+                .filter(VitalSignRecord.elder_id == elder.id, VitalSignRecord.measured_at >= today_start, VitalSignRecord.measured_at <= today_end)\
+                .order_by(VitalSignRecord.measured_at.desc()).first()
 
-        if diary_notes:
-            has_abnormal_vital = True
-            attention_reasons.append(f"Có {len(diary_notes)} lưu ý giao ca")
+            status_tag = "NOT_MEASURED"  # Chưa đo
+            is_abnormal = False
+            is_edited = False
 
-        cards.append(
-            ElderHealthSummaryCard(
-                elder_id=elder.id,
-                elder_name=elder.full_name,
-                room_number=elder.room.room_number if elder.room else "Chưa xếp phòng",
-                latest_vital_signs=latest_vital,
-                has_abnormal_vital=has_abnormal_vital,
-                active_prescription_url=active_prescription.image_url if (is_doctor_view and active_prescription) else None,
-                recent_diary_events=diary_notes,
-                doctor_attention_reasons=attention_reasons
-            )
-        )
+            if latest_vital:
+                is_abnormal = latest_vital.is_abnormal
+                is_edited = getattr(latest_vital, 'is_edited', False)
 
-    cards.sort(key=lambda x: x.has_abnormal_vital, reverse=True)
-    return cards
+                if is_abnormal and is_edited:
+                    status_tag = "DANGER_EDITED"     # Nguy hiểm + Đã sửa
+                elif is_abnormal:
+                    status_tag = "DANGER"            # Nguy hiểm
+                elif is_edited:
+                    status_tag = "MEASURED_EDITED"   # Đã đo + Đã sửa
+                else:
+                    status_tag = "MEASURED"          # Đã đo chuẩn
+
+            elder_cards.append({
+                "elder_id": elder.id,
+                "full_name": elder.full_name,
+                "status_tag": status_tag,
+                "is_abnormal": is_abnormal,
+                "is_edited": is_edited,
+                "latest_vital": {
+                    "vital_id": latest_vital.id if latest_vital else None,
+                    "bp": f"{latest_vital.bp_systolic}/{latest_vital.bp_diastolic}" if latest_vital else None,
+                    "spo2": latest_vital.spo2 if latest_vital else None,
+                    "temperature": latest_vital.temperature if latest_vital else None,
+                    "measured_at": latest_vital.measured_at if latest_vital else None
+                } if latest_vital else None
+            })
+
+        facility_map[facility.id]["zones"][zone.id]["rooms"].append({
+            "room_id": room.id,
+            "room_number": room.room_number,  # "101", "102", "301", "401"
+            "elder_count": len(elders),
+            "elders": elder_cards
+        })
+
+    # Chuyển đổi dict map thành Danh sách phẳng theo cấu trúc Đa Cơ Sở
+    result = []
+    for f_id, f_data in facility_map.items():
+        zone_list = []
+        for z_id, z_data in f_data["zones"].items():
+            zone_list.append(z_data)
+        
+        result.append({
+            "facility_id": f_data["facility_id"],
+            "facility_name": f_data["facility_name"],
+            "zones": zone_list
+        })
+
+    return result

@@ -36,17 +36,18 @@ export const CareDutyPage = () => {
     if (!eldersList) return [];
     return eldersList.filter((elder) => {
       const kw = searchTerm.toLowerCase().trim();
-      const matchSearch = 
-        elder.fullName.toLowerCase().includes(kw) ||
-        elder.roomNumber.toString().includes(kw);
+      
+      const nameMatch = (elder.fullName || '').toLowerCase().includes(kw);
+      const roomMatch = (elder.roomNumber || '').toString().toLowerCase().includes(kw);
 
-      if (!matchSearch) return false;
+      if (!nameMatch && !roomMatch) return false;
       if (activeFilter === 'WARNING') return elder.hasAbnormal;
       if (activeFilter === 'WEIGHT_DUE') return elder.isWeightDue;
 
       return true;
     });
   }, [eldersList, searchTerm, activeFilter]);
+  
 
   const handleStartEditReport = () => {
     setIsEditingReport(true);
