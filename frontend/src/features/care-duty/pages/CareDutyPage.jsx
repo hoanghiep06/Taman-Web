@@ -27,9 +27,9 @@ export const CareDutyPage = () => {
   const [selectedElderForModal, setSelectedElderForModal] = useState(null);
   
   const [isEditingReport, setIsEditingReport] = useState(false);
+  const [editingReportItem, setEditingReportItem] = useState(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
-  // Ref cuộn mượt xuống Form khi bấm Sửa
   const formRef = useRef(null);
 
   const filteredElders = useMemo(() => {
@@ -47,9 +47,9 @@ export const CareDutyPage = () => {
       return true;
     });
   }, [eldersList, searchTerm, activeFilter]);
-  
 
-  const handleStartEditReport = () => {
+  const handleStartEditReport = (targetReport) => {
+    setEditingReportItem(targetReport);
     setIsEditingReport(true);
     setTimeout(() => {
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -66,18 +66,18 @@ export const CareDutyPage = () => {
         alert('🎉 Đã chốt Báo cáo Ca Trực thành công!');
       }
       setIsEditingReport(false);
+      setEditingReportItem(null);
       refreshData();
     } catch (err) {
       alert('Lỗi lưu báo cáo: ' + (err.response?.data?.detail || err.message));
     }
   };
 
-  const handleFetchArchivedReports = async (limitDays = 7) => {
+  const handleFetchArchivedReports = async (params = {}) => {
     try {
       const res = await careDutyApi.getArchivedShiftReports({
         facility_id: user?.facility_id,
-        limit_days: limitDays,
-        include_history: true
+        ...params
       });
       return res?.data || res || [];
     } catch (err) {
@@ -125,7 +125,6 @@ export const CareDutyPage = () => {
   return (
     <Layout>
       <div style={{ paddingBottom: '140px' }}>
-        {/* THANH TÁCH RIÊNG DOCTOR VÀ MANAGER MÔ PHỎNG */}
         <div style={{ background: '#e2e8f0', padding: '10px', borderRadius: '12px', marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontSize: '12px', fontWeight: 'bold' }}>🛠️ TEST ROLE:</span>
           <button onClick={() => setTestRole('CARESTAFF')} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', background: currentRole.includes('STAFF') ? '#059669' : '#fff', color: currentRole.includes('STAFF') ? '#fff' : '#000', fontWeight: 'bold', cursor: 'pointer' }}>Caregiver</button>
@@ -133,7 +132,6 @@ export const CareDutyPage = () => {
           <button onClick={() => setTestRole('DOCTOR')} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', background: currentRole === 'DOCTOR' ? '#059669' : '#fff', color: currentRole === 'DOCTOR' ? '#fff' : '#000', fontWeight: 'bold', cursor: 'pointer' }}>Doctor</button>
           <button onClick={() => setTestRole('MANAGER')} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', background: currentRole === 'MANAGER' ? '#059669' : '#fff', color: currentRole === 'MANAGER' ? '#fff' : '#000', fontWeight: 'bold', cursor: 'pointer' }}>Manager / Admin</button>
 
-          {/* NÚT TRA CỨU BÁO CÁO GIAO CA QUÁ KHỨ ĐỘC LẬP */}
           <button
             onClick={() => setIsHistoryModalOpen(true)}
             style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: '8px', border: '1px solid #0284c7', background: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}
@@ -142,16 +140,20 @@ export const CareDutyPage = () => {
           </button>
         </div>
 
-        {/* 1. BÁO CÁO CA TRỰC ĐÃ CHỐT */}
+        {/* 1. BÁO CÁO CA TRỰC TẤT CẢ CƠ SỞ (TRUYỀN ALERTS ĐỂ XUẤT ĐỦ CHỈ SỐ BẤT THƯỜNG TRÊN ẢNH) */}
         {isReportSubmitted && !isEditingReport && (
           <ShiftReportView 
-            report={reportData} 
+            reports={reportData} 
+            alerts={alerts}
             role={currentRole}
             onEditReport={handleStartEditReport} 
           />
         )}
 
-        <VitalAlertList alerts={alerts} />
+        <VitalAlertList 
+          alerts={alerts} 
+          onOpenModal={(elder) => setSelectedElderForModal(elder)}
+        />
 
         <ElderSearchFilter
           searchTerm={searchTerm}
@@ -167,20 +169,18 @@ export const CareDutyPage = () => {
           onOpenModal={(elder) => setSelectedElderForModal(elder)}
         />
 
-        {/* 2. FORM TẠO HOẶC HIỆU CHỈNH BÁO CÁO GIAO CA (CÓ REF CUỘN MƯỢT) */}
         <div ref={formRef}>
           {(currentRole.includes('COORDINATOR') || currentRole.includes('ADMIN')) && (!isReportSubmitted || isEditingReport) && (
             <HandoverReportForm
               facilityId={user?.facility_id}
               eldersList={eldersList}
-              existingReport={isEditingReport ? reportData : null}
+              existingReport={isEditingReport ? editingReportItem : null}
               onSubmitReport={handleSubmitHandover}
-              onCancelEdit={() => setIsEditingReport(false)}
+              onCancelEdit={() => { setIsEditingReport(false); setEditingReportItem(null); }}
             />
           )}
         </div>
 
-        {/* MODAL SOI CHỈ SỐ VÀ LỊCH SỬ */}
         <VitalModal
           isOpen={!!selectedElderForModal}
           onClose={() => setSelectedElderForModal(null)}
@@ -192,11 +192,11 @@ export const CareDutyPage = () => {
           onFetchWeightHistory={(id) => careDutyApi.getElderWeightHistory(id)}
         />
 
-        {/* POP-UP TRA CỨU BÁO CÁO GIAO CA ĐỘC LẬP */}
         <ShiftReportHistoryModal
           isOpen={isHistoryModalOpen}
           onClose={() => setIsHistoryModalOpen(false)}
           facilityId={user?.facility_id}
+          role={currentRole}
           onFetchArchived={handleFetchArchivedReports}
         />
       </div>
@@ -204,4 +204,4 @@ export const CareDutyPage = () => {
   );
 };
 
-export default CareDutyPage;  
+export default CareDutyPage;

@@ -4,7 +4,6 @@ import styles from './ElderGridSelect.module.css';
 export const ElderGridSelect = ({ elders = [], onOpenModal, role = 'CARESTAFF' }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Nhóm & Sort sẵn dữ liệu: Cơ sở -> Phòng -> Danh sách Cụ
   const groupedData = useMemo(() => {
     if (!elders || elders.length === 0) return {};
 
@@ -25,12 +24,9 @@ export const ElderGridSelect = ({ elders = [], onOpenModal, role = 'CARESTAFF' }
       const facilityKey = elder.facilityName || 'Cơ sở chưa xác định';
       const roomKey = elder.roomNumber || 'Chưa xếp phòng';
 
-      if (!grouped[facilityKey]) {
-        grouped[facilityKey] = {};
-      }
-      if (!grouped[facilityKey][roomKey]) {
-        grouped[facilityKey][roomKey] = [];
-      }
+      if (!grouped[facilityKey]) grouped[facilityKey] = {};
+      if (!grouped[facilityKey][roomKey]) grouped[facilityKey][roomKey] = [];
+
       grouped[facilityKey][roomKey].push(elder);
     });
 
@@ -40,7 +36,7 @@ export const ElderGridSelect = ({ elders = [], onOpenModal, role = 'CARESTAFF' }
   if (elders.length === 0) {
     return (
       <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '12px', color: '#64748b' }}>
-        Không tìm thấy thông tin Người Cao Tuổi.
+        Không tìm thấy thông tin danh sách.
       </div>
     );
   }
@@ -61,7 +57,7 @@ export const ElderGridSelect = ({ elders = [], onOpenModal, role = 'CARESTAFF' }
       <div className={styles.sectionHeader} onClick={() => setIsCollapsed(!isCollapsed)}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <h3 className={styles.sectionTitle}>📋 DANH SÁCH THEO DÕI SỨC KHỎE KHU VỰC</h3>
-          <span className={styles.countBadge}>{elders.length} Cụ</span>
+          <span className={styles.countBadge}>{elders.length} người</span>
         </div>
         <button type="button" className={styles.btnToggleCollapse}>
           {isCollapsed ? '▼ Mở rộng danh sách' : '▲ Thu gọn danh sách'}
@@ -90,7 +86,7 @@ export const ElderGridSelect = ({ elders = [], onOpenModal, role = 'CARESTAFF' }
                     <div key={roomNumber} className={styles.roomCardBox}>
                       <div className={styles.roomHeader}>
                         <span>🚪 Phòng {roomNumber}</span>
-                        <span className={styles.roomElderCount}>{elderList.length} Cụ</span>
+                        <span className={styles.roomElderCount}>{elderList.length} người</span>
                       </div>
 
                       <div className={styles.elderMiniGrid}>

@@ -433,6 +433,59 @@ def get_archived_shift_reports(
 
     return results
 
+
+@router.get("/shift-reports/auto-summary", response_model=dict)
+def get_shift_abnormal_summary(
+    facility_id: int = Query(..., description="ID Cơ sở"),
+    target_date: date = Query(default_factory=date.today),
+    shift_type: str = Query(..., description="'Sang' hoặc 'Toi'"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_coordinator_report)
+):
+    """
+    TỰ ĐỘNG TỔNG HỢP DIỄN BIẾN CÁC CỤ CÓ CỜ ĐỎ TRONG CA ĐỂ NỘP BÁO CÁO GIAO CA
+    """
+    # Lấy danh sách các Cụ thuộc Cơ sở
+    elders_in_fac = db.query(Elder).join(Room).join(Zone)\
+        .filter(Zone.facility_id == facility_id).all()
+    elder_ids = [e.id for e in elders_in_fac]
+
+    # Query các bản ghi sinh hiệu có is_abnormal = True trong ca đó
+    start_dt = datetime.combine(target_date, datetime.min.time())
+    end_dt = datetime.combine(target_date, datetime.max.time())
+
+    abnormal_vitals = db.query(VitalSignRecord)\
+        .filter(
+            VitalSignRecord.elder_id.in_(elder_ids),
+            VitalSignRecord.shift_type == shift_type,
+            VitalSignRecord.measured_at >= start_dt,
+            VitalSignRecord.measured_at <= end_dt,
+            VitalSignRecord.is_abnormal == True
+        ).all()
+
+    auto_descriptions = []
+    issues_summary = []
+
+    for idx, v in enumerate(abnormal_vitals, start=1):
+        elder = db.query(Elder).filter(Elder.id == v.elder_id).first()
+        name = elder.full_name if elder else f"Cụ ID {v.elder_id}"
+        
+        # Ghép chỉ số bất thường + ghi chú
+        vital_str = f"BP: {v.bp_systolic}/{v.bp_diastolic}, SpO2: {v.spo2}%, Temp: {v.temperature}°C"
+        note_str = f" - Ghi chú: {v.notes}" if v.notes else ""
+        
+        auto_descriptions.append(f"{idx}. {name} [{vital_str}]{note_str}")
+        issues_summary.append(f"{name} ({v.notes or 'Chỉ số bất thường'})")
+
+    return {
+        "facility_id": facility_id,
+        "shift_date": target_date,
+        "shift_type": shift_type,
+        "abnormal_count": len(abnormal_vitals),
+        "suggested_highlighted_issues": f"Ca có {len(abnormal_vitals)} Cụ báo hiệu bất thường: " + ", ".join(issues_summary) if issues_summary else "Ca trực bình thường, không có bất thường.",
+        "suggested_elder_descriptions": "\n".join(auto_descriptions)
+    }
+
 @router.get("/shift-reports/{report_id}/audit-history", response_model=List[ShiftReportAuditResponse])
 def get_shift_report_audit_history(
     report_id: int,
@@ -796,6 +849,7 @@ def build_health_dashboard_cards(db: Session, current_user: User, facility_id: O
             if latest_vital:
                 is_abnormal = latest_vital.is_abnormal
                 is_edited = getattr(latest_vital, 'is_edited', False)
+                vital_notes = latest_vital.notes if latest_vital.notes else ""
 
                 if is_abnormal and is_edited:
                     status_tag = "DANGER_EDITED"     # Nguy hiểm + Đã sửa
@@ -817,6 +871,8 @@ def build_health_dashboard_cards(db: Session, current_user: User, facility_id: O
                     "bp": f"{latest_vital.bp_systolic}/{latest_vital.bp_diastolic}" if latest_vital else None,
                     "spo2": latest_vital.spo2 if latest_vital else None,
                     "temperature": latest_vital.temperature if latest_vital else None,
+                    "pulse": latest_vital.pulse,
+                    "notes": vital_notes,
                     "measured_at": latest_vital.measured_at if latest_vital else None
                 } if latest_vital else None
             })

@@ -13,7 +13,6 @@ const VITAL_LIMITS = {
   PULSE_SLOW: 60,
 };
 
-// Chuẩn hóa ghép Khu + Phòng (VD: Khu A + Phòng 101 -> A101)
 const formatRoomSyntax = (zoneName, roomNumber) => {
   if (!roomNumber) return 'Chưa xếp phòng';
   
@@ -35,10 +34,12 @@ const formatRoomSyntax = (zoneName, roomNumber) => {
 export const useCareDutyData = (facilityId = null) => {
   const [eldersList, setEldersList] = useState([]);
   const [alerts, setAlerts] = useState([]);
-  const [reportData, setReportData] = useState(null);
+  const [reportData, setReportData] = useState([]);
   const [isReportSubmitted, setIsReportSubmitted] = useState(false);
   const [weightDueCount, setWeightDueCount] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  const targetFacilityId = facilityId ? Number(facilityId) : null;
 
   const fetchData = useCallback(async () => {
     try {
@@ -46,7 +47,7 @@ export const useCareDutyData = (facilityId = null) => {
       const todayStr = new Date().toISOString().split('T')[0];
 
       const [dashboardRes, weightDueRes] = await Promise.all([
-        careDutyApi.getLiveShiftDashboard(facilityId),
+        careDutyApi.getLiveShiftDashboard(targetFacilityId),
         careDutyApi.getEldersDueForWeight().catch(() => null)
       ]);
 
@@ -60,9 +61,8 @@ export const useCareDutyData = (facilityId = null) => {
         const mappedElders = [];
         const abnormalAlertsList = [];
 
-        // BÓC TÁCH CẤU TRÚC LỒNG 3 CẤP TỪ BACKEND NEW SCHEMA
         dashboardData.forEach((facility) => {
-          const facName = facility.facility_name || `Cơ sở ${facility.facility_id}`;
+          const facName = facility.facility_name || `CS ${facility.facility_id}`;
           const facId = facility.facility_id;
 
           (facility.zones || []).forEach((zone) => {
@@ -76,8 +76,13 @@ export const useCareDutyData = (facilityId = null) => {
                 const isMeasured = elder.status_tag !== 'NOT_MEASURED';
                 const hasAbnormal = Boolean(elder.is_abnormal);
                 const vital = elder.latest_vital;
+                const staffNote = vital?.notes?.trim() || '';
+                const hasNote = Boolean(staffNote);
 
-                // Tách chỉ số Huyết áp nếu có
+                const cleanFullName = String(elder.full_name || '')
+                  .replace(/^Cụ\s+/i, '')
+                  .trim() || 'Chưa cập nhật tên';
+
                 let bpSys = null;
                 let bpDia = null;
                 if (vital && vital.bp) {
@@ -88,7 +93,7 @@ export const useCareDutyData = (facilityId = null) => {
 
                 const elderObj = {
                   id: elder.elder_id,
-                  fullName: elder.full_name || 'Chưa cập nhật tên',
+                  fullName: cleanFullName,
                   roomNumber: formattedRoom,
                   facilityId: facId,
                   facilityName: facName,
@@ -102,6 +107,8 @@ export const useCareDutyData = (facilityId = null) => {
                     bp_diastolic: bpDia,
                     spo2: vital.spo2,
                     temperature: vital.temperature,
+                    pulse: vital.pulse,
+                    notes: staffNote,
                     measured_at: vital.measured_at
                   } : null,
                   weightData: null
@@ -109,18 +116,30 @@ export const useCareDutyData = (facilityId = null) => {
 
                 mappedElders.push(elderObj);
 
-                if (hasAbnormal) {
+                // PHÂN LOẠI: DANGER (Chỉ số bất thường), NOTE_ONLY (Có note), BOTH (Cả hai)
+                if (hasAbnormal || hasNote) {
                   const issueText = [];
                   if (vital?.spo2 && vital.spo2 < VITAL_LIMITS.SPO2_WARNING) issueText.push(`SpO2 thấp (${vital.spo2}%)`);
                   if (vital?.temperature && vital.temperature >= VITAL_LIMITS.TEMP_FEVER) issueText.push(`Sốt (${vital.temperature}°C)`);
                   if (bpSys && bpSys > VITAL_LIMITS.BP_SYSTOLIC_HIGH) issueText.push(`Huyết áp cao (${vital.bp})`);
+                  if (vital?.pulse && (vital.pulse > VITAL_LIMITS.PULSE_FAST || vital.pulse < VITAL_LIMITS.PULSE_SLOW)) issueText.push(`Mạch (${vital.pulse} bpm)`);
+
+                  let alertType = 'NOTE_ONLY';
+                  if (hasAbnormal && hasNote) {
+                    alertType = 'BOTH';
+                  } else if (hasAbnormal) {
+                    alertType = 'DANGER';
+                  }
 
                   abnormalAlertsList.push({
                     id: elder.elder_id,
                     roomNumber: formattedRoom,
-                    elderName: elder.full_name,
+                    elderName: cleanFullName,
                     facilityName: facName,
-                    issueDetail: issueText.join(' • ') || 'Chỉ số bất thường',
+                    facilityId: facId,
+                    alertType: alertType,
+                    issueDetail: issueText.join(' • '),
+                    staffNote: staffNote,
                     elder: elderObj
                   });
                 }
@@ -133,26 +152,26 @@ export const useCareDutyData = (facilityId = null) => {
         setAlerts(abnormalAlertsList);
       }
 
-      // Lấy báo cáo giao ca
       try {
         const archivedRes = await careDutyApi.getArchivedShiftReports({
-          facility_id: facilityId,
+          facility_id: targetFacilityId,
           target_date: todayStr
         });
         const reports = archivedRes?.data || archivedRes;
         
         if (Array.isArray(reports) && reports.length > 0) {
-          const matchedReport = facilityId 
-            ? reports.find(r => Number(r.facility_id) === Number(facilityId))
-            : reports[0];
+          const matchedReports = targetFacilityId 
+            ? reports.filter(r => Number(r.facility_id) === targetFacilityId)
+            : reports;
 
-          setReportData(matchedReport || null);
-          setIsReportSubmitted(Boolean(matchedReport));
+          setReportData(matchedReports);
+          setIsReportSubmitted(matchedReports.length > 0);
         } else {
-          setReportData(null);
+          setReportData([]);
           setIsReportSubmitted(false);
         }
       } catch (err) {
+        setReportData([]);
         setIsReportSubmitted(false);
       }
     } catch (error) {
@@ -160,7 +179,7 @@ export const useCareDutyData = (facilityId = null) => {
     } finally {
       setLoading(false);
     }
-  }, [facilityId]);
+  }, [targetFacilityId]);
 
   useEffect(() => {
     fetchData();
