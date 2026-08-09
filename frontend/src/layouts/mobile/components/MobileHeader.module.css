@@ -39,3 +39,14 @@
 
     cursor: pointer;
 }
+
+.logoutBtn {
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-danger, #C0392B);
+    cursor: pointer;
+    padding: 6px 4px;
+    white-space: nowrap;
+}

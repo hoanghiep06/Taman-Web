@@ -1,28 +1,23 @@
+import { useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import { MobileHeader } from "./components/MobileHeader";
-import { BottomNavigation } from "./components/BottomNavigation";
+import { MobileDrawer } from "./components/MobileDrawer";
 
 import styles from "./MobileLayout.module.css";
 
 export const MobileLayout = () => {
+    const [drawerOpen, setDrawerOpen] = useState(false);
 
     return (
-
         <div className={styles.layout}>
-
-            <MobileHeader />
+            <MobileHeader onToggle={() => setDrawerOpen(true)} />
 
             <main className={styles.main}>
-
                 <Outlet />
-
             </main>
 
-            <BottomNavigation />
-
+            <MobileDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
         </div>
-
     );
-
 };

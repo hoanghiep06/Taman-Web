@@ -1,0 +1,35 @@
+.message {
+    margin: 0;
+    font-size: var(--text-base);
+    color: var(--color-text);
+    line-height: 1.6;
+}
+
+.cancelBtn,
+.confirmBtn {
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-md);
+    font-weight: 700;
+    font-size: var(--text-sm);
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.cancelBtn {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-text);
+}
+
+.cancelBtn:hover {
+    background: var(--color-bg);
+}
+
+.confirmBtn {
+    background: var(--color-danger);
+    color: white;
+}
+
+.confirmBtn:hover {
+    opacity: 0.9;
+}
