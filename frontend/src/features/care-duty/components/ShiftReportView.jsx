@@ -1,25 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { careDutyApi } from '../api/careDutyApi';
 
-// HÀM VẼ TẢI ẢNH JPG PHONG CÁCH PHIẾU BÁO CÁO Y TẾ CAO CẤP
-export const exportReportToJPG = (report, facilityAlerts = [], isHistory = false) => {
-  const scale = 2; // Độ phân giải Retina HD
-  const width = 800;
-  const padding = 36;
-  const contentWidth = width - padding * 2;
+const FACILITY_THEMES = {
+  1: { border: '#0284c7', headerBg: '#e0f2fe', textColor: '#0369a1', badge: '🏢 CƠ SỞ 1 - THỦ ĐỨC' },
+  2: { border: '#059669', headerBg: '#dcfce7', textColor: '#15803d', badge: '🏢 CƠ SỞ 2 - BÌNH CHÁNH' },
+  default: { border: '#7c3aed', headerBg: '#f3e8ff', textColor: '#6d28d9', badge: '🏢 CƠ SỞ DỰ PHÒNG' }
+};
 
-  // Xử lý dữ liệu văn bản
+// HÀM VẼ THẺ BO GÓC CANVAS
+const drawRoundedRect = (ctx, x, y, width, height, radius, fillStyle = null, strokeStyle = null, lineWidth = 1) => {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+
+  if (fillStyle) {
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+  }
+  if (strokeStyle) {
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+  }
+};
+
+// HÀM TẠO ẢNH BÁO CÁO CÓ GIAO DIỆN KHUÔN MẪU CHUẨN CARD UI (IMAGE_A090D4)
+export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false) => {
+  const scale = 2; // Độ phân giải Retina HD
+  const baseWidth = 840;
+  const margin = 28;
+  const contentWidth = baseWidth - margin * 2;
+
+  // Làm sạch dữ liệu
   const rawEvents = (report.formatted_elder_descriptions || '').split('\n').filter(Boolean);
   const cleanEvents = rawEvents.map(e => e.replace(/\bCụ\s+/gi, ''));
   const handoverNotes = (report.handover_notes || 'Không có lưu ý đặc biệt.').replace(/\bCụ\s+/gi, '');
-  const realDangerAlerts = facilityAlerts.filter(alt => alt.issueDetail && alt.issueDetail.trim() !== '' && alt.alertType !== 'NOTE_ONLY');
 
-  // Canvas phụ tính toán chiều cao động
+  // CHỈ LẤY NHỮNG CỤ CÓ CHỈ SỐ SỨC KHỎE BẤT THƯỜNG THỰC SỰ
+  const realDangerAlerts = facilityAlerts.filter(
+    alt => alt.issueDetail && alt.issueDetail.trim() !== '' && alt.alertType !== 'NOTE_ONLY'
+  );
+
+  // Canvas phụ để đo chiều cao văn bản
   const dummyCanvas = document.createElement('canvas');
   const dummyCtx = dummyCanvas.getContext('2d');
-  dummyCtx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
-  const wrapText = (text, maxWidth) => {
+  const wrapText = (text, maxWidth, font) => {
+    dummyCtx.font = font;
     const words = text.split(' ');
     const lines = [];
     let currentLine = '';
@@ -36,218 +71,229 @@ export const exportReportToJPG = (report, facilityAlerts = [], isHistory = false
     return lines;
   };
 
-  // Tính chiều cao
-  let h = 40 + 70 + 20 + 80 + 24; // Header + Facility Info + Meta Grid
+  // 1. TÍNH TOÁN CHÍNH XÁC CHIỀU CAO CỦA TẤM ẢNH
+  let h = margin + 92 + 20 + 68 + 24; // Header + Meta Grid + Margin
 
-  // Chiều cao Diễn biến
-  h += 36;
+  // Chiều cao Diễn biến trong ca
+  h += 32;
   if (cleanEvents.length === 0) {
-    h += 40;
+    h += 48 + 12;
   } else {
     cleanEvents.forEach(item => {
-      const lines = wrapText(item, contentWidth - 36);
-      h += lines.length * 22 + 16;
+      const lines = wrapText(item, contentWidth - 44, '600 14px system-ui, -apple-system, sans-serif');
+      h += lines.length * 22 + 18 + 8;
     });
+    h += 12;
   }
-  h += 20;
 
-  // Chiều cao Cảnh báo
+  // Chiều cao Cảnh báo sức khỏe
   if (realDangerAlerts.length > 0) {
-    h += 36;
+    h += 32;
     realDangerAlerts.forEach(alt => {
-      const lines = wrapText(`${alt.roomNumber} • ${alt.elderName} - ${alt.issueDetail}`, contentWidth - 36);
-      h += lines.length * 22 + 16;
+      const text = `${alt.roomNumber} • ${alt.elderName} - ${alt.issueDetail}`;
+      const lines = wrapText(text, contentWidth - 32, '700 13.5px system-ui, -apple-system, sans-serif');
+      h += lines.length * 22 + 18 + 8;
     });
-    h += 20;
+    h += 12;
   }
 
   // Chiều cao Lưu ý ca sau
-  h += 36;
-  const noteLines = wrapText(handoverNotes, contentWidth - 32);
-  h += Math.max(noteLines.length * 24 + 24, 60) + 40;
+  h += 32;
+  const noteLines = wrapText(handoverNotes, contentWidth - 32, '500 14px system-ui, -apple-system, sans-serif');
+  const noteBoxH = Math.max(noteLines.length * 24 + 20, 56);
+  h += noteBoxH + 28;
 
-  // VẼ CANVAS CHÍNH
+  // Footer
+  h += 40;
+
+  // 2. KHỞI TẠO CANVAS THẬT VỚI KÍCH THƯỚC CHUẨN
   const canvas = document.createElement('canvas');
-  canvas.width = width * scale;
+  canvas.width = baseWidth * scale;
   canvas.height = h * scale;
 
   const ctx = canvas.getContext('2d');
   ctx.scale(scale, scale);
 
-  // Nền trắng tinh tế
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, width, h);
+  // Background Slate Nền xám nhạt
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, baseWidth, h);
 
-  // Đường viền trang trí xanh ngọc ở mép trên cùng
-  ctx.fillStyle = '#0284c7';
-  ctx.fillRect(0, 0, width, 6);
+  let currentY = margin;
 
-  let y = 32;
-
-  // 1. HEADER THƯƠNG HIỆU TÂM AN
-  ctx.fillStyle = '#0369a1';
-  ctx.font = '800 12px -apple-system, sans-serif';
-  ctx.fillText('VIỆN DƯỠNG LÃO TÂM AN', padding, y);
+  // -------------------------------------------------------------
+  // A. HEADER BANNER NỀN ĐEN NAVY (#0b1329)
+  // -------------------------------------------------------------
+  drawRoundedRect(ctx, margin, currentY, contentWidth, 92, 18, '#0b1329');
 
   ctx.fillStyle = '#94a3b8';
-  ctx.font = '600 12px -apple-system, sans-serif';
-  ctx.fillText(isHistory ? 'PHIẾU TRÍCH XUẤT LỊCH SỬ GIAO CA' : 'PHIẾU BÁO CÁO GIAO CA Y TẾ', width - padding - 220, y);
+  ctx.font = '700 11px system-ui, -apple-system, sans-serif';
+  ctx.fillText('VIỆN DƯỠNG LÃO TÂM AN • BÁO CÁO GIAO CA Y TẾ', margin + 24, currentY + 32);
 
-  y += 24;
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 23px system-ui, -apple-system, sans-serif';
+  ctx.fillText(report.facility_name || `CS ${report.facility_id}`, margin + 24, currentY + 65);
 
-  // Tên Cơ sở
+  // Badge trạng thái góc phải Header
+  const badgeText = isHistory ? '📜 BẢN LỊCH SỬ' : '✓ ĐÃ CHỐT CA';
+  const badgeBg = isHistory ? '#0284c7' : '#16a34a';
+  drawRoundedRect(ctx, margin + contentWidth - 140, currentY + 28, 116, 36, 18, badgeBg);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 12.5px system-ui, -apple-system, sans-serif';
+  ctx.fillText(badgeText, margin + contentWidth - 126, currentY + 51);
+
+  currentY += 92 + 20;
+
+  // -------------------------------------------------------------
+  // B. KHỐI TỔNG HỢP THÔNG TIN 3 CỘT (METADATA GRID)
+  // -------------------------------------------------------------
+  const colGap = 12;
+  const colWidth = (contentWidth - colGap * 2) / 3;
+
+  // Box 1: Ngày
+  drawRoundedRect(ctx, margin, currentY, colWidth, 68, 14, '#ffffff', '#e2e8f0');
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '700 11px system-ui, -apple-system, sans-serif';
+  ctx.fillText('NGÀY BÁO CÁO', margin + 16, currentY + 24);
   ctx.fillStyle = '#0f172a';
-  ctx.font = '800 24px -apple-system, sans-serif';
-  ctx.fillText(report.facility_name || `CS ${report.facility_id}`, padding, y + 8);
+  ctx.font = '800 15px system-ui, -apple-system, sans-serif';
+  ctx.fillText(report.shift_date || '', margin + 16, currentY + 48);
 
-  y += 44;
+  // Box 2: Ca Trực
+  drawRoundedRect(ctx, margin + colWidth + colGap, currentY, colWidth, 68, 14, '#ffffff', '#e2e8f0');
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '700 11px system-ui, -apple-system, sans-serif';
+  ctx.fillText('CA TRỰC', margin + colWidth + colGap + 16, currentY + 24);
+  ctx.fillStyle = '#0284c7';
+  ctx.font = '800 15px system-ui, -apple-system, sans-serif';
+  ctx.fillText(`Ca ${report.shift_type || 'Trực'}`, margin + colWidth + colGap + 16, currentY + 48);
 
-  // Đường kẻ phân cách xám nhạt
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding, y);
-  ctx.lineTo(width - padding, y);
-  ctx.stroke();
+  // Box 3: Người báo cáo (Đã sửa hiển thị ĐẦY ĐỦ TÊN 100%)
+  drawRoundedRect(ctx, margin + (colWidth + colGap) * 2, currentY, colWidth, 68, 14, '#ffffff', '#e2e8f0');
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '700 11px system-ui, -apple-system, sans-serif';
+  ctx.fillText('NGƯỜI BÁO CÁO', margin + (colWidth + colGap) * 2 + 16, currentY + 24);
 
-  y += 16;
-
-  // 2. KHỐI THÔNG TIN METADATA (3 Ô CHUẨN ĐỒNG BỘ)
-  const boxW = (contentWidth - 24) / 3;
-  const drawMetaBox = (x, label, value, valColor = '#0f172a') => {
-    ctx.fillStyle = '#f8fafc';
-    ctx.beginPath();
-    ctx.roundRect(x, y, boxW, 58, 8);
-    ctx.fill();
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.stroke();
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = '700 10px -apple-system, sans-serif';
-    ctx.fillText(label, x + 12, y + 20);
-
-    ctx.fillStyle = valColor;
-    ctx.font = '800 13px -apple-system, sans-serif';
-    ctx.fillText(value, x + 12, y + 40);
-  };
-
-  drawMetaBox(padding, 'NGÀY BÁO CÁO', report.shift_date || '');
-  drawMetaBox(padding + boxW + 12, 'CA TRỰC', `Ca ${report.shift_type || 'Trực'}`, '#0284c7');
-  
-  const reporter = report.reporter_name || 'Điều phối viên';
-  const cleanReporter = reporter.length > 20 ? reporter.substring(0, 18) + '...' : reporter;
-  drawMetaBox(padding + (boxW + 12) * 2, 'NGƯỜI BÁO CÁO', cleanReporter);
-
-  y += 78;
-
-  // 3. SECTIONS CÁC DIỄN BIẾN TRONG CA
   ctx.fillStyle = '#0f172a';
-  ctx.font = '800 14px -apple-system, sans-serif';
-  ctx.fillText('DIỄN BIẾN TRONG CA TRỰC', padding, y);
-  y += 16;
+  const reporterName = report.reporter_name || 'Điều phối viên';
+  const nameLines = wrapText(reporterName, colWidth - 28, '800 13.5px system-ui, -apple-system, sans-serif');
+
+  if (nameLines.length > 1) {
+    ctx.font = '800 12px system-ui, -apple-system, sans-serif';
+    ctx.fillText(nameLines[0], margin + (colWidth + colGap) * 2 + 16, currentY + 41);
+    ctx.fillText(nameLines[1], margin + (colWidth + colGap) * 2 + 16, currentY + 55);
+  } else {
+    ctx.font = '800 13.5px system-ui, -apple-system, sans-serif';
+    ctx.fillText(reporterName, margin + (colWidth + colGap) * 2 + 16, currentY + 48);
+  }
+
+  currentY += 68 + 24;
+
+  // -------------------------------------------------------------
+  // C. CÁC DIỄN BIẾN TRONG CA
+  // -------------------------------------------------------------
+  ctx.fillStyle = '#334155';
+  ctx.font = '800 14.5px system-ui, -apple-system, sans-serif';
+  ctx.fillText('📋 CÁC DIỄN BIẾN TRONG CA', margin, currentY);
+  currentY += 12;
 
   if (cleanEvents.length === 0) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = 'italic 13px -apple-system, sans-serif';
-    ctx.fillText('Ca trực bình thường, không ghi nhận diễn biến đặc biệt.', padding, y + 16);
-    y += 36;
+    drawRoundedRect(ctx, margin, currentY, contentWidth, 48, 12, '#ffffff', '#e2e8f0');
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'italic 13.5px system-ui, -apple-system, sans-serif';
+    ctx.fillText('Ca trực bình thường, không ghi nhận diễn biến đặc biệt.', margin + 18, currentY + 29);
+    currentY += 48 + 16;
   } else {
     cleanEvents.forEach(item => {
-      const lines = wrapText(item, contentWidth - 36);
-      const boxH = lines.length * 22 + 14;
+      const lines = wrapText(item, contentWidth - 44, '600 14px system-ui, -apple-system, sans-serif');
+      const boxH = lines.length * 22 + 18;
 
-      ctx.fillStyle = '#f8fafc';
-      ctx.beginPath();
-      ctx.roundRect(padding, y, contentWidth, boxH, 8);
-      ctx.fill();
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.stroke();
+      drawRoundedRect(ctx, margin, currentY, contentWidth, boxH, 12, '#ffffff', '#e2e8f0');
 
-      // Vệt trang trí xanh lá góc trái
+      // Chấm tròn Xanh lá
       ctx.fillStyle = '#10b981';
       ctx.beginPath();
-      ctx.roundRect(padding, y, 4, boxH, { tl: 8, bl: 8, tr: 0, br: 0 });
+      ctx.arc(margin + 20, currentY + 20, 4.5, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = '#1e293b';
-      ctx.font = '600 13px -apple-system, sans-serif';
+      ctx.font = '600 14px system-ui, -apple-system, sans-serif';
       lines.forEach((line, idx) => {
-        ctx.fillText(line, padding + 16, y + 20 + idx * 22);
+        ctx.fillText(line, margin + 34, currentY + 24 + idx * 22);
       });
 
-      y += boxH + 8;
+      currentY += boxH + 8;
     });
+    currentY += 12;
   }
 
-  y += 12;
-
-  // 4. CẢNH BÁO SỨC KHỎE (CHỈ HIỂN THỊ NẾU CÓ CẢNH BÁO THỰC SỰ)
+  // -------------------------------------------------------------
+  // D. CẢNH BÁO SỨC KHỎE (CHỈ HIỂN THỊ KHI CÓ BẤT THƯỜNG THỰC SỰ)
+  // -------------------------------------------------------------
   if (realDangerAlerts.length > 0) {
-    ctx.fillStyle = '#dc2626';
-    ctx.font = '800 14px -apple-system, sans-serif';
-    ctx.fillText('CẢNH BÁO SỨC KHỎE & CHỈ SỐ BẤT THƯỜNG', padding, y);
-    y += 16;
+    ctx.fillStyle = '#9f1239';
+    ctx.font = '800 14.5px system-ui, -apple-system, sans-serif';
+    ctx.fillText('🚨 CẢNH BÁO SỨC KHỎE & CHỈ SỐ BẤT THƯỜNG', margin, currentY);
+    currentY += 12;
 
     realDangerAlerts.forEach(alt => {
-      const lines = wrapText(`${alt.roomNumber} • ${alt.elderName} - ${alt.issueDetail}`, contentWidth - 36);
-      const boxH = lines.length * 22 + 14;
+      const text = `${alt.roomNumber} • ${alt.elderName} - ${alt.issueDetail}`;
+      const lines = wrapText(text, contentWidth - 32, '700 13.5px system-ui, -apple-system, sans-serif');
+      const boxH = lines.length * 22 + 18;
 
-      ctx.fillStyle = '#fff1f2';
-      ctx.beginPath();
-      ctx.roundRect(padding, y, contentWidth, boxH, 8);
-      ctx.fill();
-      ctx.strokeStyle = '#fecdd3';
-      ctx.stroke();
+      drawRoundedRect(ctx, margin, currentY, contentWidth, boxH, 12, '#fff1f2', '#fecdd3');
 
       ctx.fillStyle = '#be123c';
-      ctx.font = '700 13px -apple-system, sans-serif';
+      ctx.font = '700 13.5px system-ui, -apple-system, sans-serif';
       lines.forEach((line, idx) => {
-        ctx.fillText(line, padding + 16, y + 20 + idx * 22);
+        ctx.fillText(line, margin + 16, currentY + 22 + idx * 22);
       });
 
-      y += boxH + 8;
+      currentY += boxH + 8;
     });
-    y += 12;
+    currentY += 12;
   }
 
-  // 5. HƯỚNG XỬ LÝ / LƯU Ý CA SAU
+  // -------------------------------------------------------------
+  // E. HƯỚNG XỬ LÝ & LƯU Ý CHO CA TIẾP THEO
+  // -------------------------------------------------------------
   ctx.fillStyle = '#b45309';
-  ctx.font = '800 14px -apple-system, sans-serif';
-  ctx.fillText('HƯỚNG XỬ LÝ & LƯU Ý CA TIẾP THEO', padding, y);
-  y += 16;
+  ctx.font = '800 14.5px system-ui, -apple-system, sans-serif';
+  ctx.fillText('📌 HƯỚNG XỬ LÝ & LƯU Ý CHO CA TIẾP THEO', margin, currentY);
+  currentY += 12;
 
-  const handoverLines = wrapText(handoverNotes, contentWidth - 32);
-  const handoverH = Math.max(handoverLines.length * 24 + 18, 54);
+  ctx.font = '500 14px system-ui, -apple-system, sans-serif';
+  const handoverLines = wrapText(handoverNotes, contentWidth - 32, '500 14px system-ui, -apple-system, sans-serif');
+  const handoverBoxH = Math.max(handoverLines.length * 24 + 20, 56);
 
-  ctx.fillStyle = '#fffbeb';
-  ctx.beginPath();
-  ctx.roundRect(padding, y, contentWidth, handoverH, 8);
-  ctx.fill();
-  ctx.strokeStyle = '#fde68a';
-  ctx.stroke();
+  drawRoundedRect(ctx, margin, currentY, contentWidth, handoverBoxH, 12, '#fffbeb', '#fde68a');
 
   ctx.fillStyle = '#78350f';
-  ctx.font = '600 13.5px -apple-system, sans-serif';
   handoverLines.forEach((line, idx) => {
-    ctx.fillText(line, padding + 16, y + 22 + idx * 24);
+    ctx.fillText(line, margin + 16, currentY + 24 + idx * 24);
   });
 
-  y += handoverH + 30;
+  currentY += handoverBoxH + 28;
 
-  // FOOTER CHỮ KÝ MINH BẠCH
+  // -------------------------------------------------------------
+  // F. FOOTER TÂM AN HEALTHCARE
+  // -------------------------------------------------------------
   ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(padding, y);
-  ctx.lineTo(width - padding, y);
+  ctx.moveTo(margin, currentY);
+  ctx.lineTo(baseWidth - margin, currentY);
   ctx.stroke();
 
-  y += 18;
+  currentY += 18;
   ctx.fillStyle = '#94a3b8';
-  ctx.font = '500 11px -apple-system, sans-serif';
-  ctx.fillText('Hệ thống Quản lý Ca trực Tâm An Healthcare • Báo cáo tự động', padding, y);
-  ctx.fillText(new Date().toLocaleString('vi-VN'), width - padding - 130, y);
+  ctx.font = '500 11.5px system-ui, -apple-system, sans-serif';
+  ctx.fillText('Hệ thống Quản lý Ca trực Viện Dưỡng Lão Tâm An • Ảnh báo cáo xuất tự động', margin, currentY);
 
-  // Tải file JPG
+  const nowStr = new Date().toLocaleString('vi-VN');
+  const timeWidth = dummyCtx.measureText(nowStr).width;
+  ctx.fillText(nowStr, baseWidth - margin - timeWidth, currentY);
+
+  // 3. TẢI FILE JPG NẾU XUẤT ẢNH
   const imageUrl = canvas.toDataURL('image/jpeg', 0.95);
   const link = document.createElement('a');
   link.href = imageUrl;
@@ -279,6 +325,7 @@ export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CA
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }}>
       {reportsList.map((report) => {
+        const theme = FACILITY_THEMES[report.facility_id] || FACILITY_THEMES.default;
         const parsedEvents = parseDescriptions(report.formatted_elder_descriptions);
         const facilityAlerts = alerts.filter(a => Number(a.facilityId) === Number(report.facility_id));
 
@@ -287,11 +334,12 @@ export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CA
             key={report.id}
             report={report}
             facilityAlerts={facilityAlerts}
+            theme={theme}
             parsedEvents={parsedEvents}
             canEditReport={canEditReport}
             isAdminOrManager={isAdminOrManager}
             onEditReport={() => onEditReport && onEditReport(report)}
-            onExportJPG={() => exportReportToJPG(report, facilityAlerts, false)}
+            onExportJPG={() => exportReportAsJPG(report, facilityAlerts, false)}
           />
         );
       })}
@@ -299,7 +347,7 @@ export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CA
   );
 };
 
-const SingleFacilityReportCard = ({ report, facilityAlerts, parsedEvents, canEditReport, isAdminOrManager, onEditReport, onExportJPG }) => {
+const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, isAdminOrManager, onEditReport, onExportJPG }) => {
   const [showEditHistory, setShowEditHistory] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
@@ -318,14 +366,14 @@ const SingleFacilityReportCard = ({ report, facilityAlerts, parsedEvents, canEdi
     <div style={{
       background: '#ffffff',
       padding: '20px',
-      borderRadius: '16px',
-      border: '2px solid #e2e8f0',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+      borderRadius: '18px',
+      border: `3px solid ${theme.border}`,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.06)'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
         <div>
-          <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '800' }}>
-            🏢 {report.facility_name || `CƠ SỞ ${report.facility_id}`}
+          <span style={{ background: theme.headerBg, color: theme.textColor, padding: '4px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '900', letterSpacing: '0.5px' }}>
+            {report.facility_name || theme.badge}
           </span>
           <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a', margin: '6px 0 0 0' }}>
             BÁO CÁO GIAO CA CHÍNH THỨC

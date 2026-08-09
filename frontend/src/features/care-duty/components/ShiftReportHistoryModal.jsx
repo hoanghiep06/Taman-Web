@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { exportReportToJPG } from './ShiftReportView';
+import { exportReportAsJPG } from './ShiftReportView';
 
-// BẢNG MÀU ĐỒNG BỘ CHO MANAGER / ADMIN
 const SHIFT_PALETTE = [
   { bg: '#f0f9ff', border: '#0284c7', badgeBg: '#e0f2fe', badgeColor: '#0369a1' },
   { bg: '#fdf4ff', border: '#c084fc', badgeBg: '#fae8ff', badgeColor: '#86198f' },
@@ -20,235 +19,6 @@ const getShiftColorStyle = (shiftDate, shiftType) => {
   return SHIFT_PALETTE[index];
 };
 
-// HÀM VẼ KHUNG BO GÓC CANVAS
-const drawRoundedRect = (ctx, x, y, width, height, radius, fillStyle = null, strokeStyle = null, lineWidth = 1) => {
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
-
-  if (fillStyle) {
-    ctx.fillStyle = fillStyle;
-    ctx.fill();
-  }
-  if (strokeStyle) {
-    ctx.strokeStyle = strokeStyle;
-    ctx.lineWidth = lineWidth;
-    ctx.stroke();
-  }
-};
-
-// HÀM TỰ ĐỘNG XUỐNG DÒNG VĂN BẢN
-const wrapText = (ctx, text, maxWidth) => {
-  const words = text.split(' ');
-  const lines = [];
-  let currentLine = '';
-
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i];
-    const testLine = currentLine + (currentLine ? ' ' : '') + word;
-    if (ctx.measureText(testLine).width > maxWidth && i > 0) {
-      lines.push(currentLine);
-      currentLine = word;
-    } else {
-      currentLine = testLine;
-    }
-  }
-  if (currentLine) lines.push(currentLine);
-  return lines;
-};
-
-// HÀM TẠO ẢNH BÁO CÁO CŨ DÀNH RIÊNG CHO MANAGER / ADMIN
-const exportHistoryReportAsJPG = (report) => {
-  const scale = 2; // Độ phân giải Retina HD
-  const baseWidth = 840;
-  const margin = 32;
-  const contentWidth = baseWidth - margin * 2;
-
-  const rawEvents = (report.formatted_elder_descriptions || '').split('\n').filter(Boolean);
-  const cleanEvents = rawEvents.map(e => e.replace(/\bCụ\s+/gi, ''));
-  const handoverNotes = (report.handover_notes || 'Không có lưu ý đặc biệt.').replace(/\bCụ\s+/gi, '');
-
-  // 1. TÍNH CHỈ SỐ CHIỀU CAO CANVAS ĐỘNG
-  const dummyCanvas = document.createElement('canvas');
-  const dummyCtx = dummyCanvas.getContext('2d');
-  dummyCtx.font = '14px system-ui, -apple-system, sans-serif';
-
-  let computedHeight = 30 + 90 + 20 + 70 + 20;
-
-  // Chiều cao phần diễn biến
-  computedHeight += 45;
-  if (cleanEvents.length === 0) {
-    computedHeight += 48;
-  } else {
-    cleanEvents.forEach(item => {
-      const lines = wrapText(dummyCtx, item, contentWidth - 40);
-      computedHeight += lines.length * 22 + 20;
-    });
-  }
-  computedHeight += 16;
-
-  // Chiều cao phần lưu ý
-  computedHeight += 45;
-  const noteLines = wrapText(dummyCtx, handoverNotes, contentWidth - 36);
-  computedHeight += Math.max(noteLines.length * 24 + 24, 60);
-  computedHeight += 70;
-
-  // 2. VẼ CANVAS
-  const canvas = document.createElement('canvas');
-  canvas.width = baseWidth * scale;
-  canvas.height = computedHeight * scale;
-
-  const ctx = canvas.getContext('2d');
-  ctx.scale(scale, scale);
-
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(0, 0, baseWidth, computedHeight);
-
-  let currentY = 24;
-
-  // 3. HEADER BANNER
-  drawRoundedRect(ctx, margin, currentY, contentWidth, 90, 16, '#0f172a');
-  drawRoundedRect(ctx, margin, currentY, 8, 90, { tl: 16, bl: 16, tr: 0, br: 0 }, '#0284c7');
-
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '700 11px system-ui, sans-serif';
-  ctx.fillText('VIỆN DƯỠNG LÃO TÂM AN • BÁO CÁO GIAO CA LỊCH SỬ', margin + 24, currentY + 30);
-
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '800 22px system-ui, sans-serif';
-  ctx.fillText(report.facility_name || `CƠ SỞ ${report.facility_id}`, margin + 24, currentY + 62);
-
-  drawRoundedRect(ctx, margin + contentWidth - 130, currentY + 28, 106, 32, 20, '#0369a1');
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '800 12px system-ui, sans-serif';
-  ctx.fillText('📜 BẢN LỊCH SỬ', margin + contentWidth - 118, currentY + 49);
-
-  currentY += 106;
-
-  // 4. METADATA GRID 3 CỘT
-  const colGap = 12;
-  const colWidth = (contentWidth - colGap * 2) / 3;
-
-  // Ngày
-  drawRoundedRect(ctx, margin, currentY, colWidth, 64, 12, '#ffffff', '#e2e8f0');
-  ctx.fillStyle = '#64748b';
-  ctx.font = '700 11px system-ui, sans-serif';
-  ctx.fillText('NGÀY BÁO CÁO', margin + 14, currentY + 22);
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '800 14px system-ui, sans-serif';
-  ctx.fillText(report.shift_date || '', margin + 14, currentY + 44);
-
-  // Ca Trực
-  drawRoundedRect(ctx, margin + colWidth + colGap, currentY, colWidth, 64, 12, '#ffffff', '#e2e8f0');
-  ctx.fillStyle = '#64748b';
-  ctx.font = '700 11px system-ui, sans-serif';
-  ctx.fillText('CA TRỰC', margin + colWidth + colGap + 14, currentY + 22);
-  ctx.fillStyle = '#0369a1';
-  ctx.font = '800 14px system-ui, sans-serif';
-  ctx.fillText(`Ca ${report.shift_type || 'Trực'}`, margin + colWidth + colGap + 14, currentY + 44);
-
-  // Người báo cáo
-  drawRoundedRect(ctx, margin + (colWidth + colGap) * 2, currentY, colWidth, 64, 12, '#ffffff', '#e2e8f0');
-  ctx.fillStyle = '#64748b';
-  ctx.font = '700 11px system-ui, sans-serif';
-  ctx.fillText('NGƯỜI BÁO CÁO', margin + (colWidth + colGap) * 2 + 14, currentY + 22);
-
-  ctx.fillStyle = '#0f172a';
-  const reporterName = report.reporter_name || 'Điều phối viên';
-  const reporterLines = wrapText(dummyCtx, reporterName, colWidth - 28);
-
-  if (reporterLines.length > 1) {
-    ctx.font = '800 11.5px system-ui, sans-serif';
-    ctx.fillText(reporterLines[0], margin + (colWidth + colGap) * 2 + 14, currentY + 38);
-    ctx.fillText(reporterLines[1], margin + (colWidth + colGap) * 2 + 14, currentY + 52);
-  } else {
-    ctx.font = '800 13px system-ui, sans-serif';
-    ctx.fillText(reporterName, margin + (colWidth + colGap) * 2 + 14, currentY + 44);
-  }
-
-  currentY += 80;
-
-  // 5. CÁC DIỄN BIẾN TRONG CA
-  ctx.fillStyle = '#334155';
-  ctx.font = '800 14px system-ui, sans-serif';
-  ctx.fillText('📋 CÁC DIỄN BIẾN TRONG CA', margin, currentY + 14);
-  currentY += 26;
-
-  ctx.font = '14px system-ui, sans-serif';
-  if (cleanEvents.length === 0) {
-    drawRoundedRect(ctx, margin, currentY, contentWidth, 48, 12, '#ffffff', '#e2e8f0');
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'italic 13px system-ui, sans-serif';
-    ctx.fillText('Không ghi nhận diễn biến bất thường.', margin + 16, currentY + 28);
-    currentY += 60;
-  } else {
-    cleanEvents.forEach(item => {
-      const lines = wrapText(ctx, item, contentWidth - 40);
-      const itemHeight = lines.length * 22 + 16;
-
-      drawRoundedRect(ctx, margin, currentY, contentWidth, itemHeight, 10, '#ffffff', '#e2e8f0');
-      
-      ctx.fillStyle = '#10b981';
-      ctx.beginPath();
-      ctx.arc(margin + 18, currentY + 18, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#1e293b';
-      ctx.font = '600 13.5px system-ui, sans-serif';
-      lines.forEach((line, lIdx) => {
-        ctx.fillText(line, margin + 32, currentY + 20 + lIdx * 22);
-      });
-
-      currentY += itemHeight + 8;
-    });
-    currentY += 12;
-  }
-
-  // 6. HƯỚNG XỬ LÝ / LƯU Ý CA SAU
-  ctx.fillStyle = '#b45309';
-  ctx.font = '800 14px system-ui, sans-serif';
-  ctx.fillText('📌 HƯỚNG XỬ LÝ & LƯU Ý CHO CA TIẾP THEO', margin, currentY + 14);
-  currentY += 26;
-
-  ctx.font = '600 14px system-ui, sans-serif';
-  const handoverLines = wrapText(ctx, handoverNotes, contentWidth - 36);
-  const handoverBoxHeight = Math.max(handoverLines.length * 24 + 20, 56);
-
-  drawRoundedRect(ctx, margin, currentY, contentWidth, handoverBoxHeight, 12, '#fffbeb', '#fde68a');
-
-  ctx.fillStyle = '#78350f';
-  handoverLines.forEach((line, lIdx) => {
-    ctx.fillText(line, margin + 18, currentY + 24 + lIdx * 24);
-  });
-
-  currentY += handoverBoxHeight + 30;
-
-  // 7. FOOTER
-  ctx.fillStyle = '#cbd5e1';
-  ctx.fillRect(margin, currentY, contentWidth, 1);
-  currentY += 16;
-
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '600 11px system-ui, sans-serif';
-  ctx.fillText('Hệ thống Quản lý Ca trực Viện Dưỡng Lão Tâm An • Ảnh trích xuất lịch sử', margin, currentY);
-  ctx.fillText(new Date().toLocaleString('vi-VN'), margin + contentWidth - 140, currentY);
-
-  // 8. TẢI FILE JPG
-  const imageUrl = canvas.toDataURL('image/jpeg', 0.95);
-  const link = document.createElement('a');
-  link.href = imageUrl;
-  link.download = `LichSu_BaoCao_${(report.facility_name || 'CS').replace(/\s+/g, '_')}_${report.shift_date}.jpg`;
-  link.click();
-};
-
 export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchArchived, role = 'CARESTAFF' }) => {
   const currentRole = (role || '').toUpperCase();
   const isAdminOrManager = currentRole.includes('ADMIN') || currentRole.includes('MANAGER');
@@ -256,7 +26,6 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // States lọc
   const [searchTerm, setSearchTerm] = useState('');
   const [targetDate, setTargetDate] = useState('');
   const [shiftType, setShiftType] = useState('');
@@ -325,13 +94,11 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
       <div style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '750px', maxHeight: '90vh', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
 
-        {/* HEADER MODAL */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #e2e8f0' }}>
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#0f172a' }}>📚 TRA CỨU BÁO CÁO GIAO CA QUÁ KHỨ</h3>
           <button onClick={onClose} style={{ border: 'none', background: '#f1f5f9', width: '32px', height: '32px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>✕</button>
         </div>
 
-        {/* BAR FILTER */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
           <input
             type="text"
@@ -370,7 +137,6 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
           </select>
         </div>
 
-        {/* NÚT LỌC NHANH & TOGGLE LỊCH SỬ MANAGER */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}>Nhanh:</span>
           {[3, 7, 15, 30].map((d) => (
@@ -396,7 +162,6 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
           )}
         </div>
 
-        {/* DANH SÁCH BÁO CÁO QUÁ KHỨ */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '20px', fontWeight: 'bold' }}>⏳ Đang tải dữ liệu...</div>
@@ -432,24 +197,23 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                      {/* NÚT TẢI ẢNH ĐỘC QUYỀN CHO MANAGER / ADMIN */}
                       {isAdminOrManager && (
                         <button
-                            type="button"
-                            onClick={() => exportReportToJPG(item, [], true)}
-                            style={{
-                                padding: '4px 10px',
-                                borderRadius: '6px',
-                                border: '1px solid #0284c7',
-                                backgroundColor: '#e0f2fe',
-                                fontSize: '11px',
-                                fontWeight: '800',
-                                color: '#0369a1',
-                                cursor: 'pointer'
-                            }}
-                            >
-                            📸 Tải ảnh
-                            </button>
+                          type="button"
+                          onClick={() => exportReportAsJPG(item, [], true)}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid #0284c7',
+                            backgroundColor: '#e0f2fe',
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            color: '#0369a1',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📸 Tải ảnh Zalo
+                        </button>
                       )}
 
                       <span style={{ color: '#0369a1', fontWeight: '700', fontSize: '12px' }}>
@@ -468,7 +232,6 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
                     </div>
                   )}
 
-                  {/* LỊCH SỬ CHỈNH SỬA CHO MANAGER */}
                   {showAuditLogsToggle && isAdminOrManager && item.edit_history && item.edit_history.length > 0 && (
                     <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #cbd5e1' }}>
                       <div style={{ fontSize: '11px', fontWeight: '800', color: '#0369a1', marginBottom: '4px' }}>
