@@ -9,11 +9,12 @@
     border-bottom: 1px solid #E5E7EB;
 }
 
-.toggle {
+.toggleBtn {
     font-size: 24px;
     border: none;
     background: none;
     cursor: pointer;
+    color: var(--color-text-heading, #0F172A);
 }
 
 .right {
@@ -43,9 +44,4 @@
 .logoutBtn:hover {
     background: var(--color-danger, #C0392B);
     color: white;
-}
-
-.logoutIcon {
-    font-size: 16px;
-    line-height: 1;
 }

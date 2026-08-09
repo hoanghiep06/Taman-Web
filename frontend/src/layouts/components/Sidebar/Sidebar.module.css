@@ -1,19 +1,16 @@
-.sidebar{
-    width:270px;
-    height:100vh;
-    flex-shrink:0;
+.sidebar {
+    width: 270px;
+    height: 100vh;
+    flex-shrink: 0;
 
-    display:flex;
-    flex-direction:column;
+    display: flex;
+    flex-direction: column;
 
-    background:#173F43;
-    color:white;
+    background: #173F43;
+    color: white;
 
-    transition:width .25s;
-}
-
-.collapsed{
-    width:82px;
+    overflow: hidden;
+    animation: expandIn 0.2s ease-out;
 }
 
 /* ================= Header ================= */
@@ -74,9 +71,9 @@
 
 }
 
-/* ================= Toggle ================= */
+/* ================= Close button ================= */
 
-.toggleBtn{
+.closeBtn{
 
     width:34px;
     height:34px;
@@ -90,9 +87,12 @@
     color:white;
     background:rgba(255,255,255,.15);
 
+    font-size: 16px;
+    flex-shrink: 0;
+
 }
 
-.toggleBtn:hover{
+.closeBtn:hover{
 
     background:rgba(255,255,255,.25);
 
@@ -128,6 +128,8 @@
 
     transition:.2s;
 
+    white-space: nowrap;
+
 }
 
 .link:hover{
@@ -149,25 +151,17 @@
 
     font-size:20px;
 
-}
-
-/* ================= Collapse ================= */
-
-.collapsed .brand h2,
-.collapsed .brand span{
-
-    display:none;
+    flex-shrink: 0;
 
 }
 
-.collapsed .link{
-
-    justify-content:center;
-
-}
-
-.collapsed .toggleBtn{
-
-    margin:auto;
-
+@keyframes expandIn {
+    from {
+        width: 0;
+        opacity: 0;
+    }
+    to {
+        width: 270px;
+        opacity: 1;
+    }
 }

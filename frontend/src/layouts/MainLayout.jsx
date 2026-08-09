@@ -8,21 +8,23 @@ import styles from "./MainLayout.module.css";
 
 export const MainLayout = () => {
 
-    const [collapsed, setCollapsed] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     return (
 
         <div className={styles.layout}>
 
             <Sidebar
-                collapsed={collapsed}
-                onToggle={() => setCollapsed(!collapsed)}
+                isOpen={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
             />
 
             <div className={styles.content}>
 
-                {/* Header không còn nút mở sidebar */}
-                <Header />
+                <Header
+                    onToggle={() => setSidebarOpen(true)}
+                    sidebarOpen={sidebarOpen}
+                />
 
                 <main className={styles.main}>
                     <Outlet />

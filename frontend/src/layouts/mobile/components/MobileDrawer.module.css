@@ -1,0 +1,116 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    z-index: 200;
+    animation: fadeIn 0.15s ease-out;
+}
+
+.drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 78%;
+    max-width: 300px;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    animation: slideIn 0.2s ease-out;
+    padding-bottom: var(--safe-bottom);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-5) var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.logoCircle {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full);
+    background: var(--color-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+
+.brandTitle {
+    margin: 0;
+    font-size: var(--text-base);
+    color: var(--color-text-heading);
+    font-weight: 800;
+}
+
+.brandSubtitle {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+}
+
+.closeBtn {
+    background: none;
+    border: none;
+    font-size: var(--text-xl);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: var(--space-1);
+}
+
+.menu {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-3);
+    gap: var(--space-1);
+    overflow-y: auto;
+}
+
+.link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: var(--font-body);
+}
+
+.link:active {
+    background: var(--color-bg);
+}
+
+.active {
+    background: var(--color-primary-light);
+    color: var(--color-primary-dark);
+}
+
+.icon {
+    font-size: var(--text-lg);
+    width: 24px;
+    text-align: center;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+}

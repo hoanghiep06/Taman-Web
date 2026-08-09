@@ -7,20 +7,19 @@ import { SIDEBAR_MENU } from "../../../config/navigation";
 import styles from "./Sidebar.module.css";
 
 export const Sidebar = ({
-    collapsed,
-    onToggle
+    isOpen,
+    onClose
 }) => {
 
     const { user } = useContext(AuthContext);
 
     const menu = SIDEBAR_MENU[user?.role] || [];
 
+    if (!isOpen) return null;
 
     return (
 
-        <aside
-            className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}
-        >
+        <aside className={styles.sidebar}>
 
             {/* Header */}
 
@@ -32,25 +31,22 @@ export const Sidebar = ({
                         TA
                     </div>
 
-                    {!collapsed && (
+                    <div>
 
-                        <div>
+                        <h2>TÂM AN</h2>
 
-                            <h2>TÂM AN</h2>
+                        <span>Healthcare</span>
 
-                            <span>Healthcare</span>
-
-                        </div>
-
-                    )}
+                    </div>
 
                 </div>
 
                 <button
-                    className={styles.toggleBtn}
-                    onClick={onToggle}
+                    className={styles.closeBtn}
+                    onClick={onClose}
+                    aria-label="Đóng menu"
                 >
-                    {collapsed ? "▶" : "◀"}
+                    ✕
                 </button>
 
             </div>
@@ -77,9 +73,7 @@ export const Sidebar = ({
                                 {item.icon}
                             </span>
 
-                            {!collapsed && (
-                                <span>{item.title}</span>
-                            )}
+                            <span>{item.title}</span>
 
                         </NavLink>
 
