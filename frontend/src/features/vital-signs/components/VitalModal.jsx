@@ -1,5 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import styles from './VitalModal.module.css';
+import { VITAL_LIMITS } from '../../../utils/constants';
+
+// --- ICON CÂN ĐIỆN TỬ (Tự thiết kế bằng SVG để nổi bật) ---
+const DigitalScaleIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="16" rx="3" ry="3" />
+    <line x1="3" y1="11" x2="21" y2="11" />
+    <rect x="9" y="6" width="6" height="3" rx="1" fill="#fff" stroke="currentColor" />
+  </svg>
+);
+
+// --- ICON ĐO NHỊP TIM/SINH HIỆU ---
+const VitalsIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+  </svg>
+);
 
 const formatDateString = (rawDate) => {
   if (!rawDate) return 'N/A';
@@ -21,7 +38,8 @@ export const VitalModal = ({
   isOpen, 
   onClose, 
   elder, 
-  role = 'CARESTAFF', 
+  role = 'CAREGIVER', 
+  defaultTab = 'VITALS',
   onSaveVital,
   onSaveWeight,
   onFetchHistory,
@@ -29,12 +47,28 @@ export const VitalModal = ({
 }) => {
   if (!isOpen || !elder) return null;
 
+  const rawBpSys = elder.vitalData?.bp_systolic;
+  const rawBpDia = elder.vitalData?.bp_diastolic;
+  const rawPulse = elder.vitalData?.pulse;
+  const rawSpo2 = elder.vitalData?.spo2;
+  const rawTemp = elder.vitalData?.temperature;
+
+  const isBpAbnormal = Boolean(
+    (rawBpSys && (rawBpSys > VITAL_LIMITS.BP_SYSTOLIC_HIGH || rawBpSys < VITAL_LIMITS.BP_SYSTOLIC_LOW)) ||
+    (rawBpDia && (rawBpDia > VITAL_LIMITS.BP_DIASTOLIC_HIGH || rawBpDia < VITAL_LIMITS.BP_DIASTOLIC_LOW))
+  );
+  const isSpo2Abnormal = Boolean(rawSpo2 && rawSpo2 < VITAL_LIMITS.SPO2_WARNING);
+  const isPulseAbnormal = Boolean(rawPulse && (rawPulse > VITAL_LIMITS.PULSE_FAST || rawPulse < VITAL_LIMITS.PULSE_SLOW));
+  const isTempAbnormal = Boolean(rawTemp && rawTemp >= VITAL_LIMITS.TEMP_FEVER);
+
   const currentRole = role.toUpperCase();
-  const canEdit = currentRole.includes('STAFF') || currentRole.includes('CAREGIVER') || currentRole.includes('COORDINATOR') || currentRole.includes('ADMIN');
+  const canEdit = currentRole.includes('CAREGIVER') || currentRole.includes('COORDINATOR') || currentRole.includes('ADMIN');
   const canViewHistory = currentRole.includes('COORDINATOR') || currentRole.includes('DOCTOR') || currentRole.includes('MANAGER') || currentRole.includes('ADMIN');
   const isCoordinator = currentRole.includes('COORDINATOR');
+  const isDoctor = currentRole.includes('DOCTOR');
 
-  const [activeTab, setActiveTab] = useState('VITALS');
+  // Đã gộp và xóa phần khai báo biến activeTab bị lặp
+  const [activeTab, setActiveTab] = useState(defaultTab); 
   const [isEditMode, setIsEditMode] = useState(!elder.isMeasured && canEdit);
 
   const [bpSystolic, setBpSystolic] = useState(elder.vitalData?.bp_systolic || '');
@@ -63,6 +97,13 @@ export const VitalModal = ({
       });
     }
   }, [activeTab, elder.id, onFetchWeightHistory]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(defaultTab);
+      setShowHistory(false);
+    }
+  }, [isOpen, defaultTab]);
 
   const handleSubmitVital = (e) => {
     e.preventDefault();
@@ -114,7 +155,7 @@ export const VitalModal = ({
     }
     setShowHistory(!showHistory);
   };
-
+  
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
@@ -129,20 +170,22 @@ export const VitalModal = ({
         </div>
 
         <div className={styles.modalBody}>
+          
+          {/* CẬP NHẬT 2 ICON MỚI VÀO NÚT BẤM CHUYỂN TAB */}
           <div className={styles.segmentedControl}>
             <button
               type="button"
               onClick={() => { setActiveTab('VITALS'); setShowHistory(false); }}
               className={`${styles.segmentBtn} ${activeTab === 'VITALS' ? styles.segmentActiveVital : ''}`}
             >
-              📊 Sinh Hiệu
+              <VitalsIcon /> Sinh Hiệu
             </button>
             <button
               type="button"
               onClick={() => { setActiveTab('WEIGHT'); setShowHistory(false); }}
               className={`${styles.segmentBtn} ${activeTab === 'WEIGHT' ? styles.segmentActiveWeight : ''}`}
             >
-              ⚖️ Cân Nặng
+              <DigitalScaleIcon /> Cân Nặng
             </button>
           </div>
 
@@ -151,30 +194,47 @@ export const VitalModal = ({
               {activeTab === 'VITALS' ? (
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-                    <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>HUYẾT ÁP</div>
-                      <div style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>
-                        {elder.vitalData?.bp_systolic ? `${elder.vitalData.bp_systolic}/${elder.vitalData.bp_diastolic}` : '--/--'}
+                    
+                    {/* HUYẾT ÁP */}
+                    <div style={{ background: isBpAbnormal ? '#fef2f2' : '#f8fafc', padding: '12px', borderRadius: '12px', textAlign: 'center', border: isBpAbnormal ? '1.5px solid #fecdd3' : '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: isBpAbnormal ? '#be123c' : '#64748b' }}>
+                        HUYẾT ÁP {isBpAbnormal && '⚠️'}
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: '800', color: isBpAbnormal ? '#dc2626' : '#0f172a' }}>
+                        {rawBpSys ? `${rawBpSys}/${rawBpDia}` : '--/--'}
                       </div>
                     </div>
-                    <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>SPO2</div>
-                      <div style={{ fontSize: '18px', fontWeight: '800', color: elder.vitalData?.spo2 < 95 ? '#dc2626' : '#0f172a' }}>
-                        {elder.vitalData?.spo2 ? `${elder.vitalData.spo2}%` : '--'}
+
+                    {/* SPO2 */}
+                    <div style={{ background: isSpo2Abnormal ? '#fef2f2' : '#f8fafc', padding: '12px', borderRadius: '12px', textAlign: 'center', border: isSpo2Abnormal ? '1.5px solid #fecdd3' : '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: isSpo2Abnormal ? '#be123c' : '#64748b' }}>
+                        SPO2 {isSpo2Abnormal && '⚠️'}
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: '800', color: isSpo2Abnormal ? '#dc2626' : '#0f172a' }}>
+                        {rawSpo2 ? `${rawSpo2}%` : '--'}
                       </div>
                     </div>
-                    <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>NHỊP TIM</div>
-                      <div style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>
-                        {elder.vitalData?.pulse ? `${elder.vitalData.pulse} bpm` : '--'}
+
+                    {/* NHỊP TIM */}
+                    <div style={{ background: isPulseAbnormal ? '#fef2f2' : '#f8fafc', padding: '12px', borderRadius: '12px', textAlign: 'center', border: isPulseAbnormal ? '1.5px solid #fecdd3' : '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: isPulseAbnormal ? '#be123c' : '#64748b' }}>
+                        NHỊP TIM {isPulseAbnormal && '⚠️'}
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: '800', color: isPulseAbnormal ? '#dc2626' : '#0f172a' }}>
+                        {rawPulse ? `${rawPulse} bpm` : '--'}
                       </div>
                     </div>
-                    <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>NHIỆT ĐỘ</div>
-                      <div style={{ fontSize: '18px', fontWeight: '800', color: elder.vitalData?.temperature >= 37.5 ? '#dc2626' : '#0f172a' }}>
-                        {elder.vitalData?.temperature ? `${elder.vitalData.temperature} °C` : '--'}
+
+                    {/* NHIỆT ĐỘ */}
+                    <div style={{ background: isTempAbnormal ? '#fef2f2' : '#f8fafc', padding: '12px', borderRadius: '12px', textAlign: 'center', border: isTempAbnormal ? '1.5px solid #fecdd3' : '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: isTempAbnormal ? '#be123c' : '#64748b' }}>
+                        NHIỆT ĐỘ {isTempAbnormal && '⚠️'}
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: '800', color: isTempAbnormal ? '#dc2626' : '#0f172a' }}>
+                        {rawTemp ? `${rawTemp} °C` : '--'}
                       </div>
                     </div>
+
                   </div>
 
                   {elder.vitalData?.notes && (
@@ -309,7 +369,7 @@ export const VitalModal = ({
               ) : (
                 <form onSubmit={handleSubmitWeight}>
                   <div style={{ marginBottom: '12px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Sức nặng (kg)</label>
+                    <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Cân nặng (kg)</label>
                     <input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="VD: 54.5" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '2px solid #f59e0b', textAlign: 'center', fontWeight: 'bold', fontSize: '20px', backgroundColor: '#fffbeb', boxSizing: 'border-box' }} />
                   </div>
                   <div style={{ marginBottom: '16px' }}>

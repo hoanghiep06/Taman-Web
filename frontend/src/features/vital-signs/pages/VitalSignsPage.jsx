@@ -15,24 +15,52 @@ export const VitalSignsPage = () => {
   const isDesktop = useIsDesktop();
   const currentRole = (user?.role || '').toUpperCase();
 
-  const { eldersList, alerts, refreshData, loading } = useVitalSignsData(user?.facility_id);
+  // Phân quyền: Bác sĩ không có quyền quản lý lịch cân tới hạn
+  const isDoctor = currentRole.includes('DOCTOR');
+  const canManageWeightDue = !isDoctor && (
+    currentRole.includes('STAFF') ||
+    currentRole.includes('CAREGIVER') ||
+    currentRole.includes('COORDINATOR') ||
+    currentRole.includes('MANAGER') ||
+    currentRole.includes('ADMIN')
+  );
+
+  const { 
+    eldersList = [], 
+    alerts = [], 
+    weightDueList = [], 
+    refreshData, 
+    loading 
+  } = useVitalSignsData(user?.facility_id);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState('ALL');
+  const [viewMode, setViewMode] = useState('VITALS'); // 'VITALS' | 'WEIGHT'
+  const [activeFilter, setActiveFilter] = useState('ALL'); // 'ALL' | 'WARNING' | 'WEIGHT_DUE'
   const [selectedElderForModal, setSelectedElderForModal] = useState(null);
 
+  // Lọc danh sách cụ theo từ khóa & chế độ xem
   const filteredElders = useMemo(() => {
     if (!eldersList) return [];
     return eldersList.filter((elder) => {
       const kw = searchTerm.toLowerCase().trim();
       const nameMatch = (elder.fullName || '').toLowerCase().includes(kw);
       const roomMatch = (elder.roomNumber || '').toString().toLowerCase().includes(kw);
+
       if (!nameMatch && !roomMatch) return false;
-      if (activeFilter === 'WARNING') return elder.hasAbnormal;
-      if (activeFilter === 'WEIGHT_DUE') return elder.isWeightDue;
+
+      // Nếu đang ở chế độ xem Cân nặng hoặc lọc WEIGHT_DUE
+      if (viewMode === 'WEIGHT' || activeFilter === 'WEIGHT_DUE') {
+        return elder.isWeightDue;
+      }
+
+      if (activeFilter === 'WARNING') {
+        const hasNote = Boolean(elder.vitalData?.notes?.trim());
+        return elder.hasAbnormal || hasNote;
+      }
+
       return true;
     });
-  }, [eldersList, searchTerm, activeFilter]);
+  }, [eldersList, searchTerm, activeFilter, viewMode]);
 
   const handleSaveVital = async (payload) => {
     try {
@@ -58,7 +86,7 @@ export const VitalSignsPage = () => {
       }
       refreshData();
     } catch (err) {
-      console.error('Lỗi lưu cân nặng:', err.response?.data?.detail || err.message);
+      console.error('Lỗi cân nặng:', err.response?.data?.detail || err.message);
     }
   };
 
@@ -67,7 +95,7 @@ export const VitalSignsPage = () => {
   if (loading) {
     return (
       <div style={{ padding: '40px', textAlign: 'center', fontWeight: 'bold' }}>
-        Đang tải dữ liệu theo dõi sinh hiệu...
+        Đang tải thông tin sinh hiệu & cân nặng...
       </div>
     );
   }
@@ -75,38 +103,49 @@ export const VitalSignsPage = () => {
   return (
     <Layout>
       <div style={{ paddingBottom: '140px' }}>
-        {/* Danh sách Cảnh báo chỉ số sinh hiệu bất thường */}
+        {/* 1. KHUNG CẢNH BÁO NGUY HIỂM CHỈ DÀNH CHO SINH HIỆU BẤT THƯỜNG */}
         <VitalAlertList
           alerts={alerts}
           onOpenModal={(elder) => setSelectedElderForModal(elder)}
         />
 
-        {/* Tìm kiếm & Lọc người cao tuổi */}
+        {/* 2. BỘ LỌC VÀ CHUYỂN ĐỔI CHẾ ĐỘ XEM (SINH HIỆU / CÂN NẶNG) */}
         <ElderSearchFilter
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           activeFilter={activeFilter}
           onFilterChange={setActiveFilter}
+          viewMode={viewMode}
+          onViewModeChange={(mode) => {
+            setViewMode(mode);
+            if (mode === 'WEIGHT') setActiveFilter('WEIGHT_DUE');
+            else if (activeFilter === 'WEIGHT_DUE') setActiveFilter('ALL');
+          }}
+          canManageWeightDue={canManageWeightDue}
           counts={{
-            all: eldersList.length,
-            warning: alerts.length,
-            weightDue: eldersList.filter((e) => e.isWeightDue).length,
+            all: eldersList?.length || 0,
+            warning: alerts?.length || 0,
+            weightDue: weightDueList?.length || 0,
           }}
         />
 
-        {/* Sơ đồ phòng & Danh sách người cao tuổi */}
+        {/* 3. LƯỚI DANH SÁCH - TÁCH BIỆT MÀU SẮC VÀ DỮ LIỆU THEO VIEW MODE */}
         <ElderGridSelect
           elders={filteredElders}
+          weightDueList={weightDueList}
+          viewMode={viewMode}
           role={currentRole}
+          canManageWeightDue={canManageWeightDue}
           onOpenModal={(elder) => setSelectedElderForModal(elder)}
         />
 
-        {/* Modal nhập / cập nhật sinh hiệu & cân nặng */}
+        {/* 4. MODAL BÁO CÁO / ĐO LƯỜNG */}
         <VitalModal
           isOpen={!!selectedElderForModal}
           onClose={() => setSelectedElderForModal(null)}
           elder={selectedElderForModal}
           role={currentRole}
+          defaultTab={viewMode} // Truyền viewMode hiện tại vào đây
           onSaveVital={handleSaveVital}
           onSaveWeight={handleSaveWeight}
           onFetchHistory={(id, d) => vitalSignsApi.getVitalsHistory({ elder_id: id, limit_days: d })}

@@ -27,3 +27,18 @@ export const ROLE_LABELS = {
   [ROLES.CAREGIVER]: 'Nhân viên chăm sóc',
 };
 
+
+
+
+// Ngưỡng cảnh báo y tế chuẩn
+export const VITAL_LIMITS = {
+  SPO2_WARNING: 95.0,
+  BP_SYSTOLIC_HIGH: 150,
+  BP_DIASTOLIC_HIGH: 90,
+  BP_SYSTOLIC_LOW: 90,
+  BP_DIASTOLIC_LOW: 60,
+  TEMP_FEVER: 37.5,
+  TEMP_ALARM: 38.5,
+  PULSE_FAST: 100,
+  PULSE_SLOW: 60,
+};

@@ -7,9 +7,32 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
+/* HÀNG TRÊN: BỐ CỤC SEARCH + TOGGLE BUTTONS */
+.topRow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 768px) {
+  .topRow {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+/* THANH TÌM KIẾM */
 .searchBox {
   position: relative;
-  margin-bottom: 14px;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .searchBox {
+    max-width: 350px;
+  }
 }
 
 .searchIcon {
@@ -49,6 +72,57 @@
   cursor: pointer;
 }
 
+/* KHUNG CHUYỂN ĐỔI CHẾ ĐỘ XEM (TOGGLE PILL) */
+.viewModeToggle {
+  display: flex;
+  flex-direction: row;
+  background-color: #f1f5f9;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .viewModeToggle {
+    width: auto;
+  }
+}
+
+.modeBtn {
+  flex: 1;
+  padding: 10px 4px; /* Giảm padding ngang để vừa màn hình điện thoại */
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 800;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: normal; /* Cho phép rớt dòng nếu text dài trên máy siêu nhỏ */
+  text-align: center;
+  line-height: 1.2;
+}
+
+.modeBtnActiveVital {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25) !important;
+}
+
+.modeBtnActiveWeight {
+  background-color: #d97706 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.25) !important;
+}
+
+/* HÀNG BẬT TẮT CHIP LỌC NHANH */
 .chipGroup {
   display: flex;
   gap: 8px;
@@ -71,21 +145,21 @@
 }
 
 .btnChipActiveAll {
-  background-color: #0f172a;
-  color: #ffffff;
-  border-color: #0f172a;
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+  border-color: #0f172a !important;
 }
 
 .btnChipActiveWarning {
-  background-color: #e11d48;
-  color: #ffffff;
-  border-color: #e11d48;
+  background-color: #e11d48 !important;
+  color: #ffffff !important;
+  border-color: #e11d48 !important;
 }
 
 .btnChipActiveWeight {
-  background-color: #d97706;
-  color: #ffffff;
-  border-color: #d97706;
+  background-color: #d97706 !important;
+  color: #ffffff !important;
+  border-color: #d97706 !important;
 }
 
 .badgeCount {

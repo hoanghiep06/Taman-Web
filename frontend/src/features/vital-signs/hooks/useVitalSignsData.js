@@ -1,20 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { vitalSignsApi } from '../api/vitalSignsApi';
-
-const VITAL_LIMITS = {
-  SPO2_WARNING: 95.0,
-  BP_SYSTOLIC_HIGH: 150,
-  BP_DIASTOLIC_HIGH: 90,
-  BP_SYSTOLIC_LOW: 90,
-  BP_DIASTOLIC_LOW: 60,
-  TEMP_FEVER: 37.5,
-  TEMP_ALARM: 38.5,
-  PULSE_FAST: 100,
-  PULSE_SLOW: 60,
-};
+import { VITAL_LIMITS } from '../../../utils/constants';
 
 const formatRoomSyntax = (zoneName, roomNumber) => {
-  if (!roomNumber) return 'Chờ xếp phòng';
+  if (!roomNumber) return 'Chưa xếp phòng';
   const cleanZone = String(zoneName || '').replace(/^(Khu|Zone|\s)+/i, '').trim();
   const cleanRoom = String(roomNumber).replace(/^(Phòng|P\.?|\s)+/i, '').trim();
   if (!cleanZone) return cleanRoom || String(roomNumber);
@@ -25,7 +14,7 @@ const formatRoomSyntax = (zoneName, roomNumber) => {
 export const useVitalSignsData = (facilityId = null) => {
   const [eldersList, setEldersList] = useState([]);
   const [alerts, setAlerts] = useState([]);
-  const [weightDueCount, setWeightDueCount] = useState(0);
+  const [weightDueList, setWeightDueList] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const targetFacilityId = facilityId ? Number(facilityId) : null;
@@ -40,9 +29,22 @@ export const useVitalSignsData = (facilityId = null) => {
 
       const dashboardData = dashboardRes?.data || dashboardRes || [];
       const weightDueData = weightDueRes?.data || weightDueRes || [];
-      const dueElderIds = new Set((Array.isArray(weightDueData) ? weightDueData : []).map(item => item.elder_id));
-      
-      setWeightDueCount(dueElderIds.size);
+
+      // Map đúng 100% định dạng ElderWeightDueResponse từ FastAPI
+      const formattedWeightDue = (Array.isArray(weightDueData) ? weightDueData : []).map((item) => ({
+        id: item.elder_id,
+        elder_id: item.elder_id,
+        elderName: item.elder_name || 'Người cao tuổi',
+        roomNumber: item.room_number || 'Chưa xếp phòng',
+        lastWeightDate: item.last_weight_date,
+        daysSinceLastWeight: item.days_since_last_weight,
+        daysRemaining: item.days_remaining ?? 0,
+        statusFlag: item.status_flag || 'NORMAL', // 'OVERDUE' | 'WARNING'
+        isOverdue: Boolean(item.is_overdue),
+      }));
+
+      const dueElderIds = new Set(formattedWeightDue.map((item) => item.elder_id));
+      setWeightDueList(formattedWeightDue);
 
       if (Array.isArray(dashboardData)) {
         const mappedElders = [];
@@ -54,6 +56,7 @@ export const useVitalSignsData = (facilityId = null) => {
 
           (facility.zones || []).forEach((zone) => {
             const zoneName = zone.zone_name || '';
+
             (zone.rooms || []).forEach((room) => {
               const rawRoomNumber = room.room_number || '';
               const formattedRoom = formatRoomSyntax(zoneName, rawRoomNumber);
@@ -99,6 +102,7 @@ export const useVitalSignsData = (facilityId = null) => {
 
                 mappedElders.push(elderObj);
 
+                // Khung cảnh báo chỉ gom Sinh hiệu bất thường + Ghi chú ca trực
                 if (hasAbnormal || hasNote) {
                   const issueText = [];
                   if (vital?.spo2 && vital.spo2 < VITAL_LIMITS.SPO2_WARNING) issueText.push(`SpO2 thấp (${vital.spo2}%)`);
@@ -131,7 +135,7 @@ export const useVitalSignsData = (facilityId = null) => {
         setAlerts(abnormalAlertsList);
       }
     } catch (error) {
-      console.error('Lỗi tải dữ liệu sinh hiệu ca trực:', error);
+      console.error('Lỗi lấy dữ liệu sinh hiệu & cân nặng:', error);
     } finally {
       setLoading(false);
     }
@@ -142,9 +146,10 @@ export const useVitalSignsData = (facilityId = null) => {
   }, [fetchData]);
 
   return {
-    eldersList,
-    alerts,
-    weightDueCount,
+    eldersList: eldersList || [],
+    alerts: alerts || [],
+    weightDueList: weightDueList || [],
+    weightDueCount: weightDueList?.length || 0,
     refreshData: fetchData,
     loading
   };

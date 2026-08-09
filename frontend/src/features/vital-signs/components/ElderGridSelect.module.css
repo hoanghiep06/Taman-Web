@@ -105,7 +105,7 @@
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   padding: 10px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .roomHeader {
@@ -151,12 +151,33 @@
   transform: scale(0.96);
 }
 
-/* MÀU TRẠNG THÁI */
+/* MÀU TRẠNG THÁI SINH HIỆU */
 .statusWhite { background-color: #ffffff; border-color: #cbd5e1; color: #0f172a; }
 .statusGreen { background-color: #bbf7d0; border-color: #22c55e; color: #14532d; }
 .statusRed { background-color: #fca5a5; border-color: #ef4444; color: #7f1d1d; }
 .statusYellow { background-color: #fef08a; border-color: #eab308; color: #713f12; }
 .statusOrange { background-color: #fed7aa; border-color: #f97316; color: #7c2d12; }
+
+/* MÀU TRẠNG THÁI CÂN NẶNG */
+.weightCardOverdue {
+  background-color: #fef2f2 !important;
+  border: 2px solid #ef4444 !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
+}
+
+.weightCardWarning {
+  background-color: #fffbeb !important;
+  border: 2px solid #f59e0b !important;
+}
+
+.weightStatusTag {
+  font-size: 11px;
+  margin-top: 6px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: inline-block;
+}
 
 .alertLight {
   position: absolute;
