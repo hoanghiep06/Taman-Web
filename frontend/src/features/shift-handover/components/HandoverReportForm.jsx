@@ -2,12 +2,17 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { AuthContext } from '../../../contexts/AuthContext';
 import styles from './HandoverReportForm.module.css';
 
-const SearchableElderSelect = ({ eldersList, selectedElderId, onSelect }) => {
+const SearchableElderSelect = ({ eldersList, selectedElderId, selectedElderIds = [], onSelect, hasError }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   const selectedElder = eldersList.find((e) => e.id === selectedElderId);
+
+  // LỌC BỎ CÁC CỤ ĐÃ ĐƯỢC CHỌN Ở DÒNG KHÁC
   const filteredElders = eldersList.filter((e) => {
+    const isAlreadySelectedInOtherRow = selectedElderIds.includes(e.id) && e.id !== selectedElderId;
+    if (isAlreadySelectedInOtherRow) return false;
+
     const kw = searchTerm.toLowerCase().trim();
     return e.fullName.toLowerCase().includes(kw) || e.roomNumber.toString().includes(kw);
   });
@@ -18,6 +23,10 @@ const SearchableElderSelect = ({ eldersList, selectedElderId, onSelect }) => {
         type="button"
         className={styles.selectTrigger}
         onClick={() => setIsOpen(!isOpen)}
+        style={{
+          border: hasError ? '2px solid #ef4444' : '1px solid #cbd5e1',
+          backgroundColor: hasError ? '#fef2f2' : '#ffffff',
+        }}
       >
         {selectedElder ? `${selectedElder.roomNumber} - ${selectedElder.fullName}` : 'Chọn người...'}
       </button>
@@ -32,7 +41,11 @@ const SearchableElderSelect = ({ eldersList, selectedElderId, onSelect }) => {
           />
           <div className={styles.optionsList}>
             {filteredElders.length === 0 ? (
-              <div style={{ padding: '6px', fontSize: '11px', color: '#94a3b8' }}>Không thấy</div>
+              <div style={{ padding: '6px', fontSize: '11px', color: '#94a3b8' }}>
+                {eldersList.length > 0 && selectedElderIds.length >= eldersList.length
+                  ? 'Đã chọn hết tất cả NCT'
+                  : 'Không tìm thấy'}
+              </div>
             ) : (
               filteredElders.map((elder) => (
                 <div
@@ -60,15 +73,21 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [elderEvents, setElderEvents] = useState([{ elder_id: '', note: '' }]);
   const [handoverNotes, setHandoverNotes] = useState('');
-  
   const [recordingIndex, setRecordingIndex] = useState(null);
   const [isRecordingHandover, setIsRecordingHandover] = useState(false);
+  
+  // STATE QUẢN LÝ LỖI FIELD & LỖI TỔNG THỂ
+  const [errorMessage, setErrorMessage] = useState('');
+  const [fieldErrors, setFieldErrors] = useState([]); // Mảng chứa cờ lỗi cho từng dòng: [{ elder_id: true/false, note: true/false }]
+
   const recognitionRef = useRef(null);
+
+  // TỔNG HỢP TẤT CẢ ID NGƯỜI CAO TUỔI ĐANG ĐƯỢC CHỌN TRONG FORM
+  const allSelectedElderIds = elderEvents.map((item) => item.elder_id).filter(Boolean);
 
   useEffect(() => {
     if (existingReport) {
       setHandoverNotes(existingReport.handover_notes || '');
-      
       if (existingReport.formatted_elder_descriptions) {
         const lines = existingReport.formatted_elder_descriptions.split('\n');
         const parsed = lines.map((line) => {
@@ -81,7 +100,7 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
             );
             return {
               elder_id: matchedElder ? matchedElder.id : '',
-              note: noteText
+              note: noteText,
             };
           }
           return { elder_id: '', note: line };
@@ -92,13 +111,11 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
   }, [existingReport, eldersList]);
 
   const toggleVoiceRecording = (targetType, index = null) => {
-    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      alert('⚠️ Trình duyệt di động bắt buộc kết nối HTTPS mới cho phép bật Micro!');
-    }
-
+    setErrorMessage('');
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      return alert('Trình duyệt trên điện thoại này chưa hỗ trợ nhận diện giọng nói. Hãy dùng Google Chrome hoặc Safari mới nhất.');
+      setErrorMessage('Trình duyệt không hỗ trợ nhận diện giọng nói.');
+      return;
     }
 
     if (recognitionRef.current) {
@@ -127,10 +144,8 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
       };
 
       recognition.onerror = (event) => {
-        console.error('Lỗi Micro:', event.error);
-        if (event.error === 'not-allowed') {
-          alert('Bạn cần cấp quyền truy cập Micro cho ứng dụng trên điện thoại!');
-        }
+        console.error('Microphone Error:', event.error);
+        setErrorMessage('Không thể thu âm voice, hãy kiểm tra quyền Micro.');
         setRecordingIndex(null);
         setIsRecordingHandover(false);
         recognitionRef.current = null;
@@ -140,12 +155,7 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
         const transcript = event.results[0][0].transcript;
         if (transcript) {
           if (targetType === 'EVENT' && index !== null) {
-            setElderEvents((prev) => {
-              const updated = [...prev];
-              const oldText = updated[index].note || '';
-              updated[index].note = oldText ? `${oldText} ${transcript}` : transcript;
-              return updated;
-            });
+            handleEventChange(index, 'note', elderEvents[index].note ? `${elderEvents[index].note} ${transcript}` : transcript);
           } else if (targetType === 'HANDOVER') {
             setHandoverNotes((prev) => (prev ? `${prev} ${transcript}` : transcript));
           }
@@ -156,60 +166,120 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
       recognition.start();
     } catch (e) {
       console.error(e);
-      alert('Không thể khởi động Micro, vui lòng thử lại!');
+      setErrorMessage('Lỗi khởi chạy Microphone.');
     }
   };
 
   const handleAddEvent = () => {
     setElderEvents([...elderEvents, { elder_id: '', note: '' }]);
+    setFieldErrors([...fieldErrors, { elder_id: false, note: false }]);
   };
 
   const handleRemoveEvent = (index) => {
     setElderEvents(elderEvents.filter((_, i) => i !== index));
+    setFieldErrors(fieldErrors.filter((_, i) => i !== index));
   };
 
   const handleEventChange = (index, field, value) => {
     const updated = [...elderEvents];
     updated[index][field] = value;
     setElderEvents(updated);
+
+    // TỰ ĐỘNG XÓA VẾT ĐỎ BÁO LỖI KHI NGUỜI DÙNG BẮT ĐẦU CHỌN / NHẬP VÀO Ô ĐÓ
+    if (fieldErrors[index] && fieldErrors[index][field]) {
+      const updatedErrors = [...fieldErrors];
+      updatedErrors[index] = { ...updatedErrors[index], [field]: false };
+      setFieldErrors(updatedErrors);
+    }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const validEvents = elderEvents.filter((item) => item.note.trim());
-    
-    if (validEvents.length === 0) {
-      return alert('Vui lòng nhập nội dung diễn biến!');
+    setErrorMessage('');
+
+    let hasValidationError = false;
+    const errorsList = elderEvents.map((item) => {
+      const isElderMissing = !item.elder_id;
+      const isNoteMissing = !item.note.trim();
+
+      if (isElderMissing || isNoteMissing) {
+        hasValidationError = true;
+      }
+
+      return {
+        elder_id: isElderMissing,
+        note: isNoteMissing,
+      };
+    });
+
+    // NẾU CÓ BẤT KỲ DÒNG NÀO THIẾU TÊN CỤ HOẶC THIẾU MÔ TẢ
+    if (hasValidationError) {
+      setFieldErrors(errorsList);
+      setErrorMessage('Vui lòng chọn tên NCT và nhập mô tả đầy đủ cho tất cả các dòng!');
+      return;
     }
 
-    // LẤY CƠ SỞ CHUẨN ĐA TẦNG (TỰ ĐỘNG LẤY THEO CỤ ĐƯỢC CHỌN NẾU THIẾU TÀI KHOẢN)
-    const firstSelectedElder = eldersList.find(e => e.id === validEvents[0]?.elder_id);
+    setFieldErrors([]);
 
-    const rawFacilityId = 
-      existingReport?.facility_id || 
-      facilityId || 
-      user?.facility_id || 
-      user?.facilityId || 
-      user?.facility?.id ||
+    const firstSelectedElder = eldersList.find((e) => e.id === elderEvents[0]?.elder_id);
+    const rawFacilityId =
+      existingReport?.facility_id ||
+      facilityId ||
+      user?.facility_id ||
+      user?.facilityId ||
       firstSelectedElder?.facilityId ||
-      1; // Fallback an toàn về CS1 nếu hoàn toàn không tìm thấy
+      1;
 
-    const targetFacilityId = Number(rawFacilityId);
-
-    onSubmitReport({
-      facility_id: targetFacilityId,
-      shift_date: new Date().toISOString().split('T')[0],
-      shift_type: "Sang",
-      elder_events: validEvents,
-      handover_notes: handoverNotes,
-    }, existingReport?.id);
+    onSubmitReport(
+      {
+        facility_id: Number(rawFacilityId),
+        shift_date: new Date().toISOString().split('T')[0],
+        shift_type: 'Sang',
+        elder_events: elderEvents,
+        handover_notes: handoverNotes,
+      },
+      existingReport?.id
+    );
   };
 
   return (
-    <div className={styles.box} style={{ border: existingReport ? '2px solid #d97706' : '2px solid #10b981' }}>
+    <div className={styles.box} style={{ position: 'relative', border: existingReport ? '2px solid #d97706' : '2px solid #10b981' }}>
+      
+      {/* KHỐI THÔNG BÁO LỖI BÁO CÁO Ở GÓC TRÊN CỦA FORM */}
+      {errorMessage && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '-16px',
+            right: '16px',
+            backgroundColor: '#ef4444',
+            color: '#ffffff',
+            padding: '8px 16px',
+            borderRadius: '10px',
+            fontSize: '12px',
+            fontWeight: '800',
+            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            animation: 'fadeIn 0.2s ease-in-out',
+          }}
+        >
+          <span>⚠️ {errorMessage}</span>
+          <button
+            type="button"
+            onClick={() => setErrorMessage('')}
+            style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold', marginLeft: '6px' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className={styles.headerToggle} onClick={() => setIsCollapsed(!isCollapsed)}>
         <h2 className={styles.title} style={{ color: existingReport ? '#b45309' : '#065f46' }}>
-          {existingReport ? '✏️ HIỆU CHỈNH BÁO CÁO GIAO CA' : '📝 BÁO CÁO GIAO CA (ĐIỀU PHỐI)'}
+          {existingReport ? 'HIỆU CHỈNH BÁO CÁO GIAO CA' : 'TẠO BÁO CÁO GIAO CA (ĐIỀU PHỐI)'}
         </h2>
         <button type="button" style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: 'bold' }}>
           {isCollapsed ? 'Mở' : 'Thu gọn'}
@@ -221,57 +291,70 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
           <label style={{ display: 'block', fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
             1. Các diễn biến trong ca:
           </label>
-          {elderEvents.map((item, idx) => (
-            <div key={idx} className={styles.eventRow}>
-              {elderEvents.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => handleRemoveEvent(idx)}
-                  className={styles.btnRemoveLeft}
-                >
-                  ✕
-                </button>
-              )}
-              <SearchableElderSelect
-                eldersList={eldersList}
-                selectedElderId={item.elder_id}
-                onSelect={(id) => handleEventChange(idx, 'elder_id', id)}
-              />
+          
+          {elderEvents.map((item, idx) => {
+            const rowError = fieldErrors[idx] || {};
 
-              <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  placeholder="Diễn biến trong ca..."
-                  value={item.note}
-                  onChange={(e) => handleEventChange(idx, 'note', e.target.value)}
-                  className={styles.inputNote}
-                  style={{ paddingRight: '42px' }}
+            return (
+              <div key={idx} className={styles.eventRow}>
+                {elderEvents.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveEvent(idx)}
+                    className={styles.btnRemoveLeft}
+                  >
+                    ✕
+                  </button>
+                )}
+
+                {/* SELECT CHỌN NCT - CÓ NỔI BẬT LỖI KHI CHƯA CHỌN */}
+                <SearchableElderSelect
+                  eldersList={eldersList}
+                  selectedElderId={item.elder_id}
+                  selectedElderIds={allSelectedElderIds}
+                  onSelect={(id) => handleEventChange(idx, 'elder_id', id)}
+                  hasError={rowError.elder_id}
                 />
-                <button
-                  type="button"
-                  onClick={() => toggleVoiceRecording('EVENT', idx)}
-                  style={{
-                    position: 'absolute',
-                    right: '6px',
-                    background: recordingIndex === idx ? '#ffe4e6' : '#f1f5f9',
-                    border: recordingIndex === idx ? '1px solid #f43f5e' : '1px solid #cbd5e1',
-                    borderRadius: '50%',
-                    width: '32px',
-                    height: '32px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    fontSize: '15px',
-                    zIndex: 2,
-                    touchAction: 'manipulation'
-                  }}
-                >
-                  {recordingIndex === idx ? '🔴' : '🎙️'}
-                </button>
+
+                {/* Ô NHẬP MÔ TẢ - CÓ NỔI BẬT LỖI VIỀN ĐỎ VÀ NỀN HỒNG KHI ĐỂ TRỐNG */}
+                <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    placeholder={rowError.note ? '⚠️ Bắt buộc nhập diễn biến tại đây...' : 'Diễn biến trong ca...'}
+                    value={item.note}
+                    onChange={(e) => handleEventChange(idx, 'note', e.target.value)}
+                    className={styles.inputNote}
+                    style={{
+                      paddingRight: '42px',
+                      border: rowError.note ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                      backgroundColor: rowError.note ? '#fef2f2' : '#ffffff',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleVoiceRecording('EVENT', idx)}
+                    style={{
+                      position: 'absolute',
+                      right: '6px',
+                      background: recordingIndex === idx ? '#ffe4e6' : '#f1f5f9',
+                      border: recordingIndex === idx ? '1px solid #f43f5e' : '1px solid #cbd5e1',
+                      borderRadius: '50%',
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      fontSize: '15px',
+                      zIndex: 2,
+                    }}
+                  >
+                    🎙️
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           <button
             type="button"
@@ -285,7 +368,6 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
             <label style={{ display: 'block', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>
               2. Hướng xử lý / Lưu ý cho ca tiếp theo:
             </label>
-            
             <div style={{ position: 'relative' }}>
               <textarea
                 rows={3}
@@ -312,10 +394,9 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
                   cursor: 'pointer',
                   fontSize: '16px',
                   zIndex: 2,
-                  touchAction: 'manipulation'
                 }}
               >
-                {isRecordingHandover ? '🔴' : '🎙️'}
+                🎙️
               </button>
             </div>
           </div>

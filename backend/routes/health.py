@@ -3,12 +3,16 @@ from typing import List, Optional
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
+
+
+from services.shift_service import check_and_sync_shift_jit 
 
 from database import get_db
 from models import (
     Elder, VitalSignRecord, Prescription, PrescriptionLog, 
     TreatmentDiary, ShiftReport, User, Room, Zone, Facility, AuditLog,
-    WeightRecord  
+    WeightRecord , Shift, VitalSignRecord
 )
 from schemas import (
     VitalSignCreate, VitalSignResponse, VitalSignUpdate,
@@ -21,6 +25,10 @@ from schemas import (
 )
 from core.dependencies import PermissionChecker, get_current_user, require_care_team, require_medical_team
 from core.constants import VITAL_LIMITS, max_allowed_days_for_staff, max_allowed_days_max
+
+import json 
+import logging
+
 
 router = APIRouter(prefix="/api/health", tags=["[Y tế/Bác sĩ/Điều phối/NVCS] Quản lý Sức Khỏe & Ca Trực"])
 
@@ -258,10 +266,17 @@ def get_live_shift_dashboard_for_all(
 ):
     """
     DASHBOARD THEO DÕI SỨC KHỎE KHU VỰC REAL-TIME:
+    - Kích hoạt JIT Sync kiểm tra/chốt/mở ca tự động.
     - Nhóm theo Cơ sở -> Phân Khu -> Phòng -> Danh sách Cụ.
-    - Nhân viên CS1/CS2 chỉ thấy cơ sở của mình.
-    - Admin/Doctor thấy đủ cả 2 cơ sở (hoặc lọc theo facility_id).
+    - Lọc đúng dữ liệu sinh hiệu của CA TRỰC LIVE HIỆN TẠI.
     """
+    # 1. KÍCH HOẠT JIT REFRESH CA TỰ ĐỘNG DỰA TRÊN SHIFT_SETTING
+    try:
+            check_and_sync_shift_jit(db)
+    except Exception as jit_err:
+        db.rollback()
+        logging.error(f"[JIT SHIFT FATAL_ERROR]: Lỗi tiến trình đồng bộ ca trực lúc đăng nhập: {str(jit_err)}")
+
     return build_health_dashboard_cards(db, current_user, facility_id, is_doctor_view=False)
 
 # =========================================================================
@@ -552,8 +567,13 @@ def update_shift_medical_report(
     if current_user.facility_id is not None and report.facility_id != current_user.facility_id:
         raise HTTPException(status_code=403, detail="Bạn không có quyền chỉnh sửa báo cáo của Cơ sở khác!")
 
-    old_notes = report.handover_notes or ""
+    # 1. 📸 CHỤP SNAPSHOT NỘI DUNG CŨ DẠNG DICT
+    old_data = {
+        "elder_descriptions": report.elder_descriptions or "",
+        "handover_notes": report.handover_notes or ""
+    }
 
+    # 2. THỰC HIỆN CẬP NHẬT DỮ LIỆU
     if payload.elder_events is not None:
         formatted_descriptions = []
         for idx, item in enumerate(payload.elder_events, start=1):
@@ -578,17 +598,28 @@ def update_shift_medical_report(
     if payload.handover_notes is not None:
         report.handover_notes = payload.handover_notes
 
-    # 🌟 GHI LOG CHUẨN XÁC VỚI TARGET_ID ĐƯỢC CHUẨN HÓA STR
+    # 3. 📸 CHỤP SNAPSHOT NỘI DUNG MỚI DẠNG DICT
+    new_data = {
+        "elder_descriptions": report.elder_descriptions or "",
+        "handover_notes": report.handover_notes or ""
+    }
+
+    # 4. ĐÓNG GÓI PAYLOAD DẠNG JSON STRING CHUẨN XÁC
+    audit_payload = json.dumps({
+        "old": old_data,
+        "new": new_data
+    }, ensure_ascii=False)
+
     audit = AuditLog(
         actor_id=current_user.id,
         action="UPDATE_SHIFT_REPORT",
         target_id=str(report.id).strip(),
         ip_address="Internal",
-        payload=f"Ghi chú cũ: [{old_notes}] -> Ghi chú mới: [{report.handover_notes}]"
+        payload=audit_payload
     )
     db.add(audit)
 
-    # Commit toàn bộ để đảm bảo AuditLog chắc chắn lưu thành công
+    # Commit toàn bộ giao dịch
     db.commit()
     db.refresh(report)
 
@@ -796,21 +827,24 @@ def calculate_abnormal_flag(spo2, bp_sys, bp_dia, temp, pulse) -> bool:
     return False
 
 
-def build_health_dashboard_cards(db: Session, current_user: User, facility_id: Optional[int] = None, is_doctor_view: bool = False):
-    # 1. Xác định facility_id mục tiêu
+def build_health_dashboard_cards(db: Session, current_user: User, facility_id: Optional[int] = None):
+    # 1. Lấy thông tin Ca đang Mở ("Open") thực tế trong DB do JIT vừa đồng bộ
+    active_shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.id.desc()).first()
+    
+    # Trường hợp fallback nếu DB chưa có ca nào
+    active_date = active_shift.shift_date if active_shift else date.today()
+    active_type = active_shift.shift_type if active_shift else "Sang"
+
+    # 2. Xác định Cơ sở mục tiêu
     target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
 
-    # 2. Truy vấn danh sách Phòng kèm Zone và Facility
+    # 3. Query cây cấu trúc Cơ sở -> Phân khu -> Phòng ốc
     room_query = db.query(Room).join(Zone, Room.zone_id == Zone.id).join(Facility, Zone.facility_id == Facility.id)
 
     if target_f_id is not None:
         room_query = room_query.filter(Zone.facility_id == target_f_id)
 
     rooms = room_query.order_by(Facility.id, Zone.name, Room.room_number).all()
-
-    # Mốc thời gian hôm nay
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    today_end = datetime.combine(date.today(), datetime.max.time())
 
     facility_map = {}
 
@@ -821,44 +855,46 @@ def build_health_dashboard_cards(db: Session, current_user: User, facility_id: O
         if facility.id not in facility_map:
             facility_map[facility.id] = {
                 "facility_id": facility.id,
-                "facility_name": facility.name,  # "CS 1 - Thủ Đức", "CS 2 - Bình Chánh"
+                "facility_name": facility.name,
                 "zones": {}
             }
 
         if zone.id not in facility_map[facility.id]["zones"]:
             facility_map[facility.id]["zones"][zone.id] = {
                 "zone_id": zone.id,
-                "zone_name": zone.name,  # "A", "B", "C"
+                "zone_name": zone.name, # "A", "B", "C"
                 "rooms": []
             }
 
-        # Lấy danh sách Cụ trong phòng
+        # 4. Lấy các Cụ trong phòng và lọc Sinh hiệu ĐÚNG THEO CA LIVE
         elders = db.query(Elder).filter(Elder.room_id == room.id).all()
         elder_cards = []
 
         for elder in elders:
-            # Lấy sinh hiệu hôm nay của Cụ
             latest_vital = db.query(VitalSignRecord)\
-                .filter(VitalSignRecord.elder_id == elder.id, VitalSignRecord.measured_at >= today_start, VitalSignRecord.measured_at <= today_end)\
+                .filter(
+                    VitalSignRecord.elder_id == elder.id,
+                    VitalSignRecord.shift_type == active_type,
+                    func.date(VitalSignRecord.measured_at) == active_date
+                )\
                 .order_by(VitalSignRecord.measured_at.desc()).first()
 
-            status_tag = "NOT_MEASURED"  # Chưa đo
+            status_tag = "NOT_MEASURED" # Chưa đo (Reset trắng khi sang ca mới)
             is_abnormal = False
             is_edited = False
 
             if latest_vital:
                 is_abnormal = latest_vital.is_abnormal
                 is_edited = getattr(latest_vital, 'is_edited', False)
-                vital_notes = latest_vital.notes if latest_vital.notes else ""
 
                 if is_abnormal and is_edited:
-                    status_tag = "DANGER_EDITED"     # Nguy hiểm + Đã sửa
+                    status_tag = "DANGER_EDITED"
                 elif is_abnormal:
-                    status_tag = "DANGER"            # Nguy hiểm
+                    status_tag = "DANGER"
                 elif is_edited:
-                    status_tag = "MEASURED_EDITED"   # Đã đo + Đã sửa
+                    status_tag = "MEASURED_EDITED"
                 else:
-                    status_tag = "MEASURED"          # Đã đo chuẩn
+                    status_tag = "MEASURED"
 
             elder_cards.append({
                 "elder_id": elder.id,
@@ -867,33 +903,32 @@ def build_health_dashboard_cards(db: Session, current_user: User, facility_id: O
                 "is_abnormal": is_abnormal,
                 "is_edited": is_edited,
                 "latest_vital": {
-                    "vital_id": latest_vital.id if latest_vital else None,
-                    "bp": f"{latest_vital.bp_systolic}/{latest_vital.bp_diastolic}" if latest_vital else None,
-                    "spo2": latest_vital.spo2 if latest_vital else None,
-                    "temperature": latest_vital.temperature if latest_vital else None,
+                    "vital_id": latest_vital.id,
+                    "bp": f"{latest_vital.bp_systolic}/{latest_vital.bp_diastolic}",
+                    "spo2": latest_vital.spo2,
+                    "temperature": latest_vital.temperature,
                     "pulse": latest_vital.pulse,
-                    "notes": vital_notes,
-                    "measured_at": latest_vital.measured_at if latest_vital else None
+                    "notes": latest_vital.notes,
+                    "measured_at": latest_vital.measured_at
                 } if latest_vital else None
             })
 
         facility_map[facility.id]["zones"][zone.id]["rooms"].append({
             "room_id": room.id,
-            "room_number": room.room_number,  # "101", "102", "301", "401"
+            "room_number": room.room_number, # "101", "102"
             "elder_count": len(elders),
             "elders": elder_cards
         })
 
-    # Chuyển đổi dict map thành Danh sách phẳng theo cấu trúc Đa Cơ Sở
+    # Đóng gói Response đa Cơ sở
     result = []
     for f_id, f_data in facility_map.items():
-        zone_list = []
-        for z_id, z_data in f_data["zones"].items():
-            zone_list.append(z_data)
-        
+        zone_list = [z_data for z_id, z_data in f_data["zones"].items()]
         result.append({
             "facility_id": f_data["facility_id"],
             "facility_name": f_data["facility_name"],
+            "active_shift_date": str(active_date),
+            "active_shift_type": active_type,
             "zones": zone_list
         })
 

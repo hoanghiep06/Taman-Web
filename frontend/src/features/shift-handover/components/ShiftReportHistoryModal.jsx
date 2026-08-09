@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { exportReportAsJPG } from './ShiftReportView';
+import styles from './ShiftReportHistoryModal.module.css';
 
 const SHIFT_PALETTE = [
   { bg: '#f0f9ff', border: '#0284c7', badgeBg: '#e0f2fe', badgeColor: '#0369a1' },
@@ -91,66 +92,85 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
   if (!isOpen) return null;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-      <div style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '750px', maxHeight: '90vh', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+    <div className={styles.overlay}>
+      <div className={styles.modalBox}>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #e2e8f0' }}>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#0f172a' }}>📚 TRA CỨU BÁO CÁO GIAO CA QUÁ KHỨ</h3>
-          <button onClick={onClose} style={{ border: 'none', background: '#f1f5f9', width: '32px', height: '32px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>✕</button>
+        {/* HEADER MODAL */}
+        <div className={styles.header}>
+          <h3 className={styles.title}>📚 TRA CỨU BÁO CÁO GIAO CA QUÁ KHỨ</h3>
+          <button onClick={onClose} className={styles.closeBtn}>✕</button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-          <input
-            type="text"
-            placeholder="Tìm tên, nội dung..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: '600' }}
-          />
+        {/* BỘ LỌC TÌM KIẾM SMART GRID */}
+        <div className={styles.filterGrid}>
+          <div className={styles.filterItem}>
+            <label className={styles.filterLabel}>🔍 Tìm kiếm</label>
+            <input
+              type="text"
+              placeholder="Tên, nội dung..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className={styles.filterInput}
+            />
+          </div>
 
-          <select
-            value={selectedFacilityFilter}
-            onChange={(e) => setSelectedFacilityFilter(e.target.value)}
-            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: '600', backgroundColor: '#fff' }}
-          >
-            <option value="">Tất cả Cơ sở</option>
-            {availableFacilities.map(([id, name]) => (
-              <option key={id} value={id}>{name}</option>
-            ))}
-          </select>
+          <div className={styles.filterItem}>
+            <label className={styles.filterLabel}>🏢 Cơ sở</label>
+            <select
+              value={selectedFacilityFilter}
+              onChange={(e) => setSelectedFacilityFilter(e.target.value)}
+              className={styles.filterInput}
+            >
+              <option value="">Tất cả Cơ sở</option>
+              {availableFacilities.map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+          </div>
 
-          <input
-            type="date"
-            value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
-            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: '600' }}
-          />
+          <div className={styles.filterItem}>
+            <label className={styles.filterLabel}>📅 Chọn ngày</label>
+            <input
+              type="date"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+              className={styles.filterInput}
+            />
+          </div>
 
-          <select
-            value={shiftType}
-            onChange={(e) => setShiftType(e.target.value)}
-            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: '600', backgroundColor: '#fff' }}
-          >
-            <option value="">Tất cả ca</option>
-            <option value="Sang">Ca Sáng</option>
-            <option value="Toi">Ca Tối</option>
-          </select>
+          <div className={styles.filterItem}>
+            <label className={styles.filterLabel}>⏰ Chọn ca</label>
+            <select
+              value={shiftType}
+              onChange={(e) => setShiftType(e.target.value)}
+              className={styles.filterInput}
+            >
+              <option value="">Tất cả ca</option>
+              <option value="Sang">Ca Sáng</option>
+              <option value="Toi">Ca Tối</option>
+            </select>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}>Nhanh:</span>
+        {/* THANH LỌC NHANH VÀ VẾT SỬA */}
+        <div className={styles.quickBar}>
+          <span className={styles.quickLabel}>Nhanh:</span>
           {[3, 7, 15, 30].map((d) => (
             <button
               key={d}
               onClick={() => { setLimitDays(d); setTargetDate(''); }}
-              style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', background: limitDays === d && !targetDate ? '#0284c7' : '#fff', color: limitDays === d && !targetDate ? '#fff' : '#333', fontWeight: 'bold', fontSize: '11px', cursor: 'pointer' }}
+              className={styles.quickBtn}
+              style={{
+                background: limitDays === d && !targetDate ? '#0284c7' : '#fff',
+                color: limitDays === d && !targetDate ? '#fff' : '#333',
+              }}
             >
               {d} ngày
             </button>
           ))}
 
           {isAdminOrManager && (
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+            <div className={styles.auditToggleBox}>
               <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#0f172a' }}>🛡️ Vết sửa:</span>
               <input
                 type="checkbox"
@@ -162,7 +182,8 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
           )}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        {/* DANH SÁCH BÁO CÁO */}
+        <div className={styles.reportList}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '20px', fontWeight: 'bold' }}>⏳ Đang tải dữ liệu...</div>
           ) : filteredReports.length === 0 ? (
@@ -176,22 +197,20 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
               return (
                 <div 
                   key={idx} 
+                  className={styles.reportCard}
                   style={{ 
                     backgroundColor: colorStyle.bg, 
                     borderLeft: `5px solid ${colorStyle.border}`,
                     border: `1px solid ${colorStyle.border}`,
-                    borderRadius: '12px', 
-                    padding: '12px 14px', 
-                    marginBottom: '10px' 
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                  <div className={styles.cardHeader}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ background: '#0284c7', color: '#ffffff', padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
+                      <span className={styles.facilityTag}>
                         🏢 {item.facility_name || `CS ${item.facility_id}`}
                       </span>
 
-                      <span style={{ fontWeight: '800', fontSize: '13px', color: '#0f172a' }}>
+                      <span className={styles.shiftTitle}>
                         Ca {item.shift_type} - {item.shift_date}
                       </span>
                     </div>
@@ -201,44 +220,35 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
                         <button
                           type="button"
                           onClick={() => exportReportAsJPG(item, [], true)}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #0284c7',
-                            backgroundColor: '#e0f2fe',
-                            fontSize: '11px',
-                            fontWeight: '800',
-                            color: '#0369a1',
-                            cursor: 'pointer'
-                          }}
+                          className={styles.exportBtn}
                         >
                           📸 Tải ảnh Zalo
                         </button>
                       )}
 
-                      <span style={{ color: '#0369a1', fontWeight: '700', fontSize: '12px' }}>
+                      <span className={styles.reporterTag}>
                         👤 {item.reporter_name}
                       </span>
                     </div>
                   </div>
 
-                  <div style={{ fontSize: '12px', whiteSpace: 'pre-wrap', color: '#1e293b', background: '#ffffff', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', lineHeight: '1.5' }}>
+                  <div className={styles.contentBox}>
                     {cleanElderText(item.formatted_elder_descriptions)}
                   </div>
 
                   {item.handover_notes && (
-                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#b45309', fontWeight: '600' }}>
+                    <div className={styles.handoverNote}>
                       <b>📌 Lưu ý ca sau:</b> {item.handover_notes}
                     </div>
                   )}
 
                   {showAuditLogsToggle && isAdminOrManager && item.edit_history && item.edit_history.length > 0 && (
-                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #cbd5e1' }}>
+                    <div className={styles.auditHistoryBox}>
                       <div style={{ fontSize: '11px', fontWeight: '800', color: '#0369a1', marginBottom: '4px' }}>
                         📜 Lịch sử chỉnh sửa ({item.edit_history.length} lần):
                       </div>
                       {item.edit_history.map((log, lIdx) => (
-                        <div key={lIdx} style={{ fontSize: '11px', color: '#475569', background: '#f1f5f9', padding: '6px 8px', borderRadius: '6px', marginBottom: '4px' }}>
+                        <div key={lIdx} className={styles.auditItem}>
                           <b>{log.actor_name}</b> ({new Date(log.created_at).toLocaleString('vi-VN')}): {log.payload}
                         </div>
                       ))}

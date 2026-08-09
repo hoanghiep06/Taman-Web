@@ -32,6 +32,38 @@ const drawRoundedRect = (ctx, x, y, width, height, radius, fillStyle = null, str
   }
 };
 
+const formatAuditOldContent = (rawPayload) => {
+  if (!rawPayload) return 'Không có dữ liệu cũ';
+
+  try {
+    const obj = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
+    
+    // Đọc cấu trúc {"old": { "elder_descriptions": "...", "handover_notes": "..." }}
+    if (obj && obj.old) {
+      const oldElder = obj.old.elder_descriptions || 'Không có ghi nhận';
+      const oldHandover = obj.old.handover_notes || 'Không có ghi chú';
+      return `Diễn biến Cụ: [${oldElder}] | Giao ca: [${oldHandover}]`;
+    }
+
+    if (obj && (obj.old_content || obj.old_notes)) {
+      return obj.old_content || obj.old_notes;
+    }
+  } catch (e) {
+    // Trường hợp không phải JSON
+  }
+
+  // Fallback xử lý dạng chuỗi cũ
+  let text = String(rawPayload);
+  if (text.includes('-->') || text.includes('->')) {
+    const separator = text.includes('-->') ? '-->' : '->';
+    text = text.split(separator)[0];
+  }
+  return text
+    .replace(/^NỘI DUNG CŨ:\s*/i, '')
+    .replace(/^Ghi chú cũ:\s*/i, '')
+    .trim();
+};
+
 // HÀM TẠO ẢNH BÁO CÁO CÓ GIAO DIỆN KHUÔN MẪU CHUẨN CARD UI (IMAGE_A090D4)
 export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false) => {
   const scale = 2; // Độ phân giải Retina HD
@@ -352,10 +384,12 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
   const [auditLogs, setAuditLogs] = useState([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
 
+  const isPrevious = Boolean(report.isPrevious);
+
   useEffect(() => {
     if (showEditHistory && report.id && isAdminOrManager) {
       setLoadingAudit(true);
-      careDutyApi.getShiftReportAuditHistory(report.id)
+      shiftHandoverApi.getShiftReportAuditHistory(report.id)
         .then((res) => setAuditLogs(res?.data || res || []))
         .catch((err) => console.error('Lỗi lấy audit history:', err))
         .finally(() => setLoadingAudit(false));
@@ -386,13 +420,20 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
             onClick={onExportJPG}
             style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #0284c7', backgroundColor: '#e0f2fe', fontSize: '12px', fontWeight: '800', color: '#0369a1', cursor: 'pointer' }}
           >
-            📸 Tải ảnh Zalo
+            📸 Tải ảnh
           </button>
 
-          <span style={{ background: '#dcfce7', color: '#15803d', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: '800' }}>
-            ✓ Đã chốt ca
-          </span>
+          {isPrevious ? (
+              <span style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: '800' }}>
+                🟠 Ca gần nhất
+              </span>
+            ) : (
+              <span style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: '800' }}>
+                🟢 Ca hiện tại
+              </span>
+            )}
 
+          
           {canEditReport && (
             <button
               type="button"
@@ -454,21 +495,41 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
             {showEditHistory && (
               <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {loadingAudit ? (
-                  <div style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic', padding: '4px' }}>Đang tải log...</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic', padding: '4px' }}>
+                    Đang tải log...
+                  </div>
                 ) : auditLogs.length === 0 ? (
-                  <div style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic', padding: '4px' }}>Chưa có lượt sửa nào.</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic', padding: '4px' }}>
+                    Chưa có lượt sửa nào.
+                  </div>
                 ) : (
-                  auditLogs.map((log, idx) => (
-                    <div key={idx} style={{ background: '#f1f5f9', borderLeft: '4px solid #0284c7', padding: '8px 10px', borderRadius: '6px', fontSize: '11px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
-                        <span>👤 {log.actor_name}</span>
-                        <span>🕒 {new Date(log.created_at).toLocaleString('vi-VN')}</span>
+                  auditLogs.map((log, idx) => {
+                    const oldContent = formatAuditOldContent(log.payload);
+
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          background: '#f1f5f9',
+                          borderLeft: '4px solid #0284c7',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
+                          <span>👤 {log.actor_name}</span>
+                          <span>🕒 {new Date(log.created_at).toLocaleString('vi-VN')}</span>
+                        </div>
+
+                        {/* CHỈ HIỂN THỊ NỘI DUNG CŨ */}
+                        <div style={{ color: '#334155', marginTop: '4px', lineHeight: '1.4' }}>
+                          <span style={{ fontWeight: '800', color: '#b45309' }}>Nội dung cũ: </span>
+                          <span style={{ fontStyle: 'italic' }}>{oldContent || 'Không có'}</span>
+                        </div>
                       </div>
-                      <div style={{ color: '#334155', fontStyle: 'italic', marginTop: '2px' }}>
-                        {log.payload}
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}

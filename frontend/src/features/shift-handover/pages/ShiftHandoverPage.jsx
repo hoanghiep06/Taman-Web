@@ -14,40 +14,100 @@ export const ShiftHandoverPage = () => {
   const isDesktop = useIsDesktop();
   const currentRole = (user?.role || '').toUpperCase();
 
-  const { eldersList, alerts, loading } = useVitalSignsData(user?.facility_id);
+  // 1. Chỉ COORDINATOR mới có quyền nhập/sửa báo cáo giao ca
+  const canEdit = currentRole.includes('COORDINATOR') || currentRole.includes('ADMIN');
+
+  // 2. Lọc phạm vi cơ sở dựa trực tiếp vào user.facility_id
+  // Nếu facility_id là null/undefined -> Xem TOÀN BỘ cơ sở (facilityParam = null)
+  const hasSpecificFacility = user?.facility_id !== null && user?.facility_id !== undefined;
+  const targetFacilityId = hasSpecificFacility ? Number(user.facility_id) : null;
+
+  const { eldersList, alerts, loading } = useVitalSignsData(targetFacilityId);
 
   const [reportData, setReportData] = useState([]);
   const [isReportSubmitted, setIsReportSubmitted] = useState(false);
+  const [isPreviousReportShown, setIsPreviousReportShown] = useState(false);
   const [isEditingReport, setIsEditingReport] = useState(false);
   const [editingReportItem, setEditingReportItem] = useState(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const formRef = useRef(null);
 
-  const fetchTodayReport = async () => {
+  const fetchShiftReportData = async () => {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
-      const archivedRes = await shiftHandoverApi.getArchivedShiftReports({
-        facility_id: user?.facility_id,
-        target_date: todayStr,
-      });
-      const reports = archivedRes?.data || archivedRes;
-      if (Array.isArray(reports) && reports.length > 0) {
-        setReportData(reports);
-        setIsReportSubmitted(true);
+
+      // Tải báo cáo hôm nay và báo cáo quá khứ (7 ngày)
+      const [todayRes, archiveRes] = await Promise.all([
+        shiftHandoverApi.getArchivedShiftReports({
+          facility_id: targetFacilityId,
+          target_date: todayStr,
+        }),
+        shiftHandoverApi.getArchivedShiftReports({
+          facility_id: targetFacilityId,
+          limit_days: 7,
+        }),
+      ]);
+
+      const todayReports = todayRes?.data || todayRes || [];
+      const archiveReports = archiveRes?.data || archiveRes || [];
+
+      if (!hasSpecificFacility) {
+        // =========================================================
+        // TRƯỜNG HỢP 1: facility_id LÀ NULL / UNDEFINED -> XEM TẤT CẢ CƠ SỞ
+        // =========================================================
+        const facilityMap = new Map();
+
+        // Nạp báo cáo quá khứ vào Map (mỗi cơ sở lấy 1 báo cáo mới nhất)
+        archiveReports.forEach((report) => {
+          const facId = String(report.facility_id);
+          if (!facilityMap.has(facId)) {
+            facilityMap.set(facId, { ...report, isPrevious: true });
+          }
+        });
+
+        // Nạp / Ghi đè bằng báo cáo HÔM NAY nếu cơ sở đó đã có báo cáo
+        todayReports.forEach((report) => {
+          const facId = String(report.facility_id);
+          facilityMap.set(facId, { ...report, isPrevious: false });
+        });
+
+        const combinedReports = Array.from(facilityMap.values());
+        setReportData(combinedReports);
+
+        const hasFallback = combinedReports.some((r) => r.isPrevious);
+        setIsPreviousReportShown(hasFallback);
+        setIsReportSubmitted(todayReports.length > 0);
+
       } else {
-        setReportData([]);
-        setIsReportSubmitted(false);
+        // =========================================================
+        // TRƯỜNG HỢP 2: facility_id CÓ ID CỤ THỂ -> CHỈ XEM 1 CƠ SỞ ĐÓ
+        // =========================================================
+        if (todayReports.length > 0) {
+          setReportData(todayReports.map((r) => ({ ...r, isPrevious: false })));
+          setIsReportSubmitted(true);
+          setIsPreviousReportShown(false);
+        } else if (archiveReports.length > 0) {
+          // Lấy 1 báo cáo ca mới nhất của đúng cơ sở này trong quá khứ
+          setReportData([{ ...archiveReports[0], isPrevious: true }]);
+          setIsReportSubmitted(false);
+          setIsPreviousReportShown(true);
+        } else {
+          setReportData([]);
+          setIsReportSubmitted(false);
+          setIsPreviousReportShown(false);
+        }
       }
     } catch (err) {
-      console.error('Lỗi lấy báo cáo giao ca:', err);
+      console.error('Lỗi tải dữ liệu báo cáo giao ca:', err);
     }
   };
 
   useEffect(() => {
-    fetchTodayReport();
-  }, [user?.facility_id]);
+    fetchShiftReportData();
+  }, [user?.facility_id, currentRole]);
 
   const handleStartEditReport = (targetReport) => {
+    if (!canEdit) return;
     setEditingReportItem(targetReport);
     setIsEditingReport(true);
     setTimeout(() => {
@@ -64,21 +124,21 @@ export const ShiftHandoverPage = () => {
       }
       setIsEditingReport(false);
       setEditingReportItem(null);
-      fetchTodayReport();
+      fetchShiftReportData();
     } catch (err) {
-      console.error('Lỗi cập nhật giao ca:', err.response?.data?.detail || err.message);
+      console.error('Lỗi lưu báo cáo giao ca:', err.response?.data?.detail || err.message);
     }
   };
 
   const handleFetchArchivedReports = async (params = {}) => {
     try {
       const res = await shiftHandoverApi.getArchivedShiftReports({
-        facility_id: user?.facility_id,
+        facility_id: targetFacilityId,
         ...params,
       });
       return res?.data || res || [];
     } catch (err) {
-      console.error('Lỗi tra cứu kho giao ca:', err);
+      console.error('Lỗi tra cứu lịch sử báo cáo:', err);
       return [];
     }
   };
@@ -97,7 +157,7 @@ export const ShiftHandoverPage = () => {
     <Layout>
       <div style={{ paddingBottom: '140px' }}>
         {/* Header trang Giao ca */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', margin: 0 }}>
             QUẢN LÝ BÁO CÁO BÀN GIAO CA TRỰC
           </h2>
@@ -118,8 +178,26 @@ export const ShiftHandoverPage = () => {
           </button>
         </div>
 
-        {/* 1. HIỂN THỊ BÁO CÁO CỦA CA TRỰC HIỆN TẠI */}
-        {isReportSubmitted && !isEditingReport && (
+        {/* THÔNG BÁO BỔ SUNG KHI HIỂN THỊ BÁO CÁO CA TRƯỚC */}
+        {isPreviousReportShown && (
+          <div
+            style={{
+              backgroundColor: '#fffbeb',
+              border: '1px solid #fef3c7',
+              color: '#b45309',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              marginBottom: '16px',
+              fontSize: '13px',
+              fontWeight: '700',
+            }}
+          >
+            ℹ️ Một số hoặc tất cả cơ sở chưa có báo cáo ca trực hôm nay. Hệ thống đang hiển thị nội dung giao ca gần nhất trước đó.
+          </div>
+        )}
+
+        {/* 1. HIỂN THỊ BÁO CÁO GIAO CA */}
+        {reportData.length > 0 && !isEditingReport && (
           <ShiftReportView
             reports={reportData}
             alerts={alerts}
@@ -128,9 +206,9 @@ export const ShiftHandoverPage = () => {
           />
         )}
 
-        {/* 2. FORM TẠO/SỬA BÁO CÁO GIAO CA (COORDINATOR HOẶC ADMIN) */}
+        {/* 2. FORM TẠO/SỬA BÁO CÁO GIAO CA (CHỈ COORDINATOR) */}
         <div ref={formRef}>
-          {(currentRole.includes('COORDINATOR') || currentRole.includes('ADMIN')) && (!isReportSubmitted || isEditingReport) && (
+          {canEdit && (!isReportSubmitted || isEditingReport) && (
             <HandoverReportForm
               facilityId={user?.facility_id}
               eldersList={eldersList}
@@ -144,11 +222,11 @@ export const ShiftHandoverPage = () => {
           )}
         </div>
 
-        {/* MODAL TRA CỨU LỊCH SỬ BÁN GIAO CA QUÁ KHỨ */}
+        {/* MODAL TRA CỨU LỊCH SỬ BÀN GIAO CA QUÁ KHỨ */}
         <ShiftReportHistoryModal
           isOpen={isHistoryModalOpen}
           onClose={() => setIsHistoryModalOpen(false)}
-          facilityId={user?.facility_id}
+          facilityId={targetFacilityId}
           role={currentRole}
           onFetchArchived={handleFetchArchivedReports}
         />

@@ -1,0 +1,229 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.modalBox {
+  background-color: #ffffff;
+  width: 100%;
+  max-width: 780px;
+  max-height: 90vh;
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.closeBtn {
+  border: none;
+  background: #f1f5f9;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* BỘ LỌC RESPONSIVE SMART GRID */
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.filterItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filterLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.filterInput {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  color: #0f172a;
+  outline: none;
+}
+
+.filterInput:focus {
+  border-color: #0284c7;
+}
+
+/* THANH CHỌN NHANH & AUDIT LOG TOGGLE */
+.quickBar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.quickLabel {
+  font-size: 12px;
+  font-weight: bold;
+  color: #64748b;
+}
+
+.quickBtn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-weight: bold;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.auditToggleBox {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+}
+
+/* DANH SÁCH BÁO CÁO QUÁ KHỨ */
+.reportList {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.reportCard {
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.facilityTag {
+  background: #0284c7;
+  color: #ffffff;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.shiftTitle {
+  font-weight: 800;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.reporterTag {
+  color: #0369a1;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.exportBtn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #0284c7;
+  background-color: #e0f2fe;
+  font-size: 11px;
+  font-weight: 800;
+  color: #0369a1;
+  cursor: pointer;
+}
+
+.contentBox {
+  font-size: 12px;
+  white-space: pre-wrap;
+  color: #1e293b;
+  background: #ffffff;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  line-height: 1.5;
+}
+
+.handoverNote {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #b45309;
+  font-weight: 600;
+}
+
+.auditHistoryBox {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.auditItem {
+  font-size: 11px;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+/* RESPONSIVE TRÊN ĐIỆN THOẠI (DƯỚI 640PX) */
+@media (max-width: 640px) {
+  .filterGrid {
+    grid-template-columns: repeat(2, 1fr); /* Tự chuyển thành 2 hàng x 2 cột */
+  }
+  
+  .auditToggleBox {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+}
