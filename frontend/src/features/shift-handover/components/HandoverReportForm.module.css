@@ -1,0 +1,136 @@
+.box {
+  background-color: #ffffff;
+  padding: 16px;
+  border-radius: 16px;
+  border: 2px solid #10b981;
+  margin-bottom: 24px;
+}
+
+.headerToggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #065f46;
+  margin: 0;
+}
+
+/* Dòng Sự cố: Responsive Stacked Layout trên Mobile */
+.eventRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background-color: #f8fafc;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 640px) {
+  .eventRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.btnRemoveLeft {
+  background-color: #ffe4e6;
+  color: #e11d48;
+  border: none;
+  width: 36px;
+  height: 38px;
+  border-radius: 8px;
+  font-weight: 800;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.customSelectContainer {
+  position: relative;
+  width: 170px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .customSelectContainer {
+    width: 100%;
+  }
+}
+
+.selectTrigger {
+  width: 100%;
+  padding: 9px 10px;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: 105%;
+  left: 0;
+  right: 0;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+  z-index: 999;
+  padding: 6px;
+}
+
+.searchInputInside {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+
+.optionsList {
+  max-height: 150px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.optionItem {
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #334155;
+}
+
+.optionItem:hover {
+  background-color: #ecfdf5;
+  color: #047857;
+}
+
+.inputNote {
+  flex: 1;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+}

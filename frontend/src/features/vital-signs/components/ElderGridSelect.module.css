@@ -1,0 +1,197 @@
+.container {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sectionTitle {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.countBadge {
+  background-color: #e2e8f0;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.btnToggleCollapse {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0284c7;
+  cursor: pointer;
+}
+
+/* BAR CHÚ THÍCH MÀU */
+.legendBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  background-color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  margin-top: 12px;
+  margin-bottom: 16px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #334155;
+}
+
+.colorDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* PHẦN CƠ SỞ & PHÒNG */
+.facilityGroupList {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.facilityBlock {
+  border: 2px solid #0284c7;
+  border-radius: 14px;
+  padding: 12px;
+  background-color: #f0f9ff;
+}
+
+.facilityTitle {
+  font-size: 15px;
+  font-weight: 900;
+  color: #0369a1;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px dashed #bae6fd;
+}
+
+.roomsContainer {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.roomCardBox {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.roomHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 800;
+  font-size: 13px;
+  color: #1e293b;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.roomElderCount {
+  font-size: 10px;
+  color: #64748b;
+}
+
+/* GRID THẺ CỤ TRONG PHÒNG */
+.elderMiniGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.cardItem {
+  padding: 8px 10px;
+  border-radius: 10px;
+  text-align: left;
+  border: 1.5px solid #cbd5e1;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 60px;
+  position: relative;
+  box-sizing: border-box;
+  transition: transform 0.1s ease;
+}
+
+.cardItem:active {
+  transform: scale(0.96);
+}
+
+/* MÀU TRẠNG THÁI */
+.statusWhite { background-color: #ffffff; border-color: #cbd5e1; color: #0f172a; }
+.statusGreen { background-color: #bbf7d0; border-color: #22c55e; color: #14532d; }
+.statusRed { background-color: #fca5a5; border-color: #ef4444; color: #7f1d1d; }
+.statusYellow { background-color: #fef08a; border-color: #eab308; color: #713f12; }
+.statusOrange { background-color: #fed7aa; border-color: #f97316; color: #7c2d12; }
+
+.alertLight {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 12px;
+  animation: pulseLight 1.2s infinite;
+}
+
+@keyframes pulseLight {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.elderName {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.actionTag {
+  font-size: 10px;
+  font-weight: 800;
+  margin-top: 6px;
+  opacity: 0.85;
+}
+
+/* MOBILE OPTIMIZATION */
+@media (max-width: 640px) {
+  .roomsContainer {
+    grid-template-columns: 1fr;
+  }
+  
+  .elderMiniGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

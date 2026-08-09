@@ -1,0 +1,45 @@
+.viewContainer {
+  background-color: #ffffff;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid #cbd5e1;
+  margin-bottom: 24px;
+}
+
+.viewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.doneBadge {
+  background-color: #d1fae5;
+  color: #065f46;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.descBox {
+  background-color: #f8fafc;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  margin-top: 6px;
+}
+
+.guideBox {
+  background-color: #fffbeb;
+  color: #78350f;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #fef3c7;
+  font-weight: 600;
+  margin-top: 6px;
+}

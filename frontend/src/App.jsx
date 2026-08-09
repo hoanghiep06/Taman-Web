@@ -32,9 +32,15 @@ const DashboardPage = lazy(() =>
    MODULE PAGES
 ========================= */
 
-const CareDutyPage = lazy(() =>
-    import("./features/care-duty/pages/CareDutyPage").then((m) => ({
-        default: m.CareDutyPage,
+const VitalSignsPage = lazy(() =>
+    import("./features/vital-signs/pages/VitalSignsPage").then((m) => ({
+        default: m.VitalSignsPage,
+    }))
+);
+
+const ShiftHandoverPage = lazy(() =>
+    import("./features/shift-handover/pages/ShiftHandoverPage").then((m) => ({
+        default: m.ShiftHandoverPage,
     }))
 );
 
@@ -106,7 +112,7 @@ const ReportPage = lazy(() =>
 );
 
 const VitalPage = lazy(() =>
-    import("./features/vitals/pages/VitalPage").then((m) => ({
+    import("./features/vital-signs/pages/VitalSignsPage").then((m) => ({
         default: m.VitalPage,
     }))
 );
@@ -167,7 +173,7 @@ function App() {
                                         ROLES.MANAGER,
                                         ROLES.DOCTOR,
                                         ROLES.COORDINATOR,
-                                        ROLES.CARE_STAFF,
+                                        ROLES.CAREGIVER,
                                     ]}
                                 >
                                     <ResponsiveLayout />
@@ -178,9 +184,10 @@ function App() {
                             <Route path="/dashboard" element={<DashboardPage />} />
 
                             {/* Modules */}
-                            <Route path="/care-duty" element={<CareDutyPage />} />
-                            <Route path="/shifts" element={<CareDutyPage />} />
-                            
+                            <Route path="/vitals" element={<VitalSignsPage />} />
+                            <Route path="/shifts" element={<ShiftHandoverPage />} />
+                            <Route path="/reports" element={<ShiftHandoverPage />} />
+
                             <Route path="/users" element={<UserManagementPage />} />
                             <Route path="/elders" element={<ElderListPage />} />
                             <Route path="/staffs" element={<StaffListPage />} />
@@ -191,7 +198,7 @@ function App() {
                             <Route path="/prescriptions" element={<PrescriptionPage />} />
                             <Route path="/medicines" element={<MedicinePage />} />
                             <Route path="/diseases" element={<DiseasePage />} />
-                            <Route path="/reports" element={<ReportPage />} />
+                            
                             <Route path="/vitals" element={<VitalPage />} />
                             <Route path="/incident" element={<IncidentPage />} />
                             <Route path="/backup" element={<BackupPage />} />

@@ -12,7 +12,7 @@ export const ROLES = {
   MANAGER: 'Manager',
   DOCTOR: 'Doctor',
   COORDINATOR: 'Coordinator',
-  CARE_STAFF: 'CareStaff',
+  CAREGIVER: 'Caregiver',
 };
 
 // ROLE LABELS
@@ -24,6 +24,6 @@ export const ROLE_LABELS = {
 
   [ROLES.COORDINATOR]: 'Điều phối viên',
 
-  [ROLES.CARE_STAFF]: 'Nhân viên chăm sóc',
+  [ROLES.CAREGIVER]: 'Nhân viên chăm sóc',
 };
 
