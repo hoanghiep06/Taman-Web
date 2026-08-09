@@ -1,9 +1,20 @@
 .layout {
-    min-height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
     background: #f5f6fa;
+
+    /* Khóa toàn bộ khung ở đúng chiều cao màn hình, không cho cả trang tràn ra
+       ngoài tầm kiểm soát — thay vào đó chỉ .main bên dưới được phép cuộn */
+    overflow: hidden;
 }
 
 .main {
+    flex: 1;
+    min-height: 0; /* bắt buộc để flex item có thể cuộn thay vì bị đẩy tràn ra ngoài */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+
     padding: 16px;
     padding-bottom: calc(16px + var(--safe-bottom));
 }
