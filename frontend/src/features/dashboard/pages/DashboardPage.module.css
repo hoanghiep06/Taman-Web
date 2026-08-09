@@ -1,41 +1,988 @@
-.statistics {
+.dashboard {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: var(--space-lg);
+    padding-bottom: 32px;
+}
+
+.statistics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-lg);
 }
 
-.statistics > * {
+.statCard {
+    width: 100%;
+    min-height: 112px;
+    padding: 20px;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.statCard:hover {
+    transform: translateY(-2px);
+    border-color: var(--stat-color);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.statIcon {
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border-radius: 14px;
+    background: color-mix(
+        in srgb,
+        var(--stat-color) 12%,
+        white
+    );
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+}
+
+.statContent {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.statContent span {
+    color: #64748b;
+    font-size: 14px;
+}
+
+.statContent strong {
+    color: #0f172a;
+    font-size: 28px;
+    line-height: 1;
+}
+
+.section {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 20px;
+    min-width: 0;
+}
+
+.sectionHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.sectionHeader h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 18px;
+}
+
+.twoColumns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-lg);
+    align-items: start;
+}
+
+.countBadge {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #dc2626;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+.linkButton {
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 4px;
+}
+
+.linkButton:hover {
+    text-decoration: underline;
+}
+
+/* =========================================================
+   ALERTS
+========================================================= */
+
+.alertList {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.alertItem {
+    display: flex;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.alertItem:last-child {
+    border-bottom: none;
+}
+
+.alertDot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 50%;
+    margin-top: 6px;
+}
+
+.alertDot.danger {
+    background: #dc2626;
+}
+
+.alertDot.warning {
+    background: #f59e0b;
+}
+
+.alertDot.info {
+    background: #2563eb;
+}
+
+.alertContent {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.alertContent strong {
+    color: #0f172a;
+    font-size: 14px;
+}
+
+.alertContent p {
+    margin: 0;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.alertContent small {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+/* =========================================================
+   ACTIVITY
+========================================================= */
+
+.activityList {
+    display: flex;
+    flex-direction: column;
+}
+
+.activityItem {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.activityItem:last-child {
+    border-bottom: none;
+}
+
+.activityItem strong {
+    color: #0f172a;
+    font-size: 14px;
+}
+
+.activityItem p {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.activityItem time {
+    color: #94a3b8;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+.statusBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    min-height: 26px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.statusSuccess {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.statusWarning {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.statusDanger {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.statusInfo {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+/* =========================================================
+   MANAGER
+========================================================= */
+
+.shiftCard {
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 12px;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.shiftCard div {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.shiftCard span {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.shiftCard strong {
+    color: #0f172a;
+}
+
+.shiftTime {
+    color: #2563eb !important;
+    font-weight: 700;
+    justify-content: center;
+}
+
+.staffSummary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+}
+
+.staffSummary div {
+    padding: 14px;
+    background: #f8fafc;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.staffSummary strong {
+    font-size: 22px;
+    color: #0f172a;
+}
+
+.staffSummary span {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.staffList,
+.medicationList,
+.taskList,
+.appointmentList,
+.reportList,
+.scheduleList,
+.notesList {
+    display: flex;
+    flex-direction: column;
+}
+
+.staffRow,
+.medicationRow,
+.taskRow,
+.appointmentRow,
+.reportRow,
+.scheduleRow {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.staffRow:last-child,
+.medicationRow:last-child,
+.taskRow:last-child,
+.appointmentRow:last-child,
+.reportRow:last-child,
+.scheduleRow:last-child {
+    border-bottom: none;
+}
+
+.staffRow > div:first-child,
+.taskRow > div:first-child,
+.scheduleRow > div,
+.appointmentRow > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
     flex: 1;
-    min-width: 200px;
 }
 
-.middle {
+.staffRow span,
+.taskRow span,
+.scheduleRow span,
+.appointmentRow span,
+.reportRow span {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.subTitle {
+    margin: 20px 0 8px;
+    color: #334155;
+    font-size: 14px;
+}
+
+.healthAlert {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.healthAlert > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.healthAlert span {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.medicationRow strong {
+    min-width: 150px;
+}
+
+.medicationRow span {
+    flex: 1;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.medicationRow time {
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.roomToolbar {
+    display: grid;
+    grid-template-columns: minmax(200px, 1fr) 180px 180px;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.roomToolbar input,
+.roomToolbar select {
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #334155;
+    outline: none;
+}
+
+.roomToolbar input:focus,
+.roomToolbar select:focus {
+    border-color: #2563eb;
+}
+
+.roomTable {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.tableHeader,
+.tableRow {
+    min-width: 600px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    align-items: center;
+    gap: 16px;
+}
+
+.tableHeader {
+    padding: 10px 12px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.tableRow {
+    padding: 14px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.tableRow strong {
+    color: #0f172a;
+}
+
+.emptyState {
+    padding: 30px;
+    color: #64748b;
+    text-align: center;
+}
+
+.taskRow {
+    justify-content: space-between;
+}
+
+.taskRow > div:first-child {
+    flex: 1;
+}
+
+.taskRow time {
+    color: #64748b;
+    font-size: 13px;
+}
+
+/* =========================================================
+   DOCTOR
+========================================================= */
+
+.healthOverview {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.patientAlert {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    border-radius: 12px;
+}
+
+.patientDanger {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+}
+
+.patientWarning {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+}
+
+.patientAlert > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.patientAlert span {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.appointmentRow time {
+    width: 55px;
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.reportRow {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.reportRow > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.reportRow time {
+    color: #64748b;
+    font-size: 12px;
+}
+
+/* =========================================================
+   COORDINATOR
+========================================================= */
+
+.scheduleRow time {
+    width: 60px;
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.scheduleRow > div {
+    flex: 1;
+}
+
+.currentShift {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: var(--space-lg);
+    gap: 16px;
 }
 
-.roleWidgets {
+.currentShift > div {
+    padding: 18px;
+    border-radius: 12px;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.currentShift span {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.currentShift strong {
+    color: #0f172a;
+    font-size: 18px;
+}
+
+/* =========================================================
+   CAREGIVER
+========================================================= */
+
+.caregiverTaskList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.caregiverTask {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-lg);
+    grid-template-columns: 70px 1fr auto;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #ffffff;
 }
 
-.elderSection h2 {
-    font-size: var(--text-xl);
-    color: var(--color-text-heading);
-    margin-bottom: var(--space-md);
+.taskNow {
+    border: 2px solid #dc2626;
+    background: #fef2f2;
 }
 
-.elderGrid {
+.taskNext {
+    border-color: #f59e0b;
+    background: #fffbeb;
+}
+
+.taskTime {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.taskMain {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.taskMain strong {
+    color: #0f172a;
+}
+
+.taskMain span {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.notesList {
+    gap: 10px;
+}
+
+.noteItem {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--space-lg);
+    grid-template-columns: 100px 1fr;
+    gap: 16px;
+    padding: 16px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border-left: 4px solid #2563eb;
+}
+
+.noteTime {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.noteTime strong {
+    color: #2563eb;
+}
+
+.noteTime span {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.noteContent {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.noteContent strong {
+    color: #0f172a;
+}
+
+.noteContent span {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.noteContent p {
+    margin: 4px 0 0;
+    color: #334155;
+    line-height: 1.5;
+}
+
+/* =========================================================
+   ADMIN MODAL
+========================================================= */
+
+.personList {
+    display: flex;
+    flex-direction: column;
+}
+
+.personRow {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 15px 4px;
+    border: none;
+    border-bottom: 1px solid #f1f5f9;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.personRow:hover {
+    background: #f8fafc;
+}
+
+.personRow > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.personRow span {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.profile {
+    text-align: center;
+    padding: 10px 0 20px;
+}
+
+.profileAvatar {
+    width: 70px;
+    height: 70px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    background: #dbeafe;
+    color: #1d4ed8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    font-weight: 800;
+}
+
+.profile h3 {
+    margin: 0 0 20px;
+    color: #0f172a;
+}
+
+.profile p {
+    margin: 8px 0;
+    color: #475569;
+}
+
+/* =========================================================
+   MODAL
+========================================================= */
+
+.modalOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal {
+    width: min(650px, 100%);
+    max-height: 85vh;
+    overflow: hidden;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modalHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modalHeader h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #0f172a;
+}
+
+.closeButton {
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.modalBody {
+    max-height: calc(85vh - 70px);
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 1200px) {
+    .statistics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .twoColumns {
+        grid-template-columns: 1fr;
+    }
+
+    .roomToolbar {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .roomToolbar input {
+        grid-column: 1 / -1;
+    }
 }
 
 @media (max-width: 768px) {
-    .middle,
-    .roleWidgets {
+    .dashboard {
+        gap: 14px;
+        padding-bottom: 20px;
+    }
+
+    .statistics {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .statCard {
+        min-height: 90px;
+        padding: 14px;
+        gap: 10px;
+        border-radius: 13px;
+    }
+
+    .statIcon {
+        width: 38px;
+        height: 38px;
+        flex-basis: 38px;
+        border-radius: 10px;
+        font-size: 17px;
+    }
+
+    .statContent strong {
+        font-size: 22px;
+    }
+
+    .statContent span {
+        font-size: 12px;
+    }
+
+    .section {
+        padding: 15px;
+        border-radius: 13px;
+    }
+
+    .sectionHeader {
+        margin-bottom: 13px;
+    }
+
+    .sectionHeader h2 {
+        font-size: 16px;
+    }
+
+    .roomToolbar {
         grid-template-columns: 1fr;
+    }
+
+    .roomToolbar input {
+        grid-column: auto;
+    }
+
+    .currentShift {
+        grid-template-columns: 1fr;
+    }
+
+    .caregiverTask {
+        grid-template-columns: 55px 1fr;
+        gap: 10px;
+    }
+
+    .caregiverTask .statusBadge {
+        grid-column: 2;
+    }
+
+    .reportRow {
+        grid-template-columns: 1fr;
+        gap: 5px;
+    }
+
+    .noteItem {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .modalOverlay {
+        padding: 10px;
+        align-items: flex-end;
+    }
+
+    .modal {
+        max-height: 90vh;
+        border-radius: 18px 18px 0 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .statistics {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .statCard {
+        min-height: 82px;
+        padding: 11px;
+    }
+
+    .statIcon {
+        display: none;
+    }
+
+    .statContent strong {
+        font-size: 20px;
+    }
+
+    .shiftCard,
+    .staffSummary {
+        grid-template-columns: 1fr;
+    }
+
+    .shiftCard {
+        flex-direction: column;
+    }
+
+    .staffSummary {
+        display: grid;
+    }
+
+    .medicationRow {
+        display: grid;
+        grid-template-columns: 1fr auto;
+    }
+
+    .medicationRow span {
+        grid-column: 1 / -1;
+    }
+
+    .taskRow {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .patientAlert {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }

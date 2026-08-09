@@ -25,7 +25,7 @@
 }
 
 .logoutBtn {
-    display: flex;
+    display: margin;
     align-items: center;
     gap: 8px;
 

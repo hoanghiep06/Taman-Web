@@ -1,4 +1,5 @@
 .header {
+
     height: 56px;
 
     display: flex;
@@ -41,12 +42,24 @@
 }
 
 .logoutBtn {
-    border: none;
-    background: transparent;
-    font-size: 14px;
-    font-weight: 700;
+    border: 1.5px solid var(--color-danger, #C0392B);
+    background: var(--color-danger-bg, #FDEDEC);
     color: var(--color-danger, #C0392B);
+
+    font-size: 13px;
+    font-weight: 700;
+
+    padding: 7px 14px;
+    border-radius: var(--radius-full, 9999px);
+
     cursor: pointer;
-    padding: 6px 4px;
     white-space: nowrap;
+
+    transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.logoutBtn:active {
+    transform: scale(0.96);
+    background: var(--color-danger, #C0392B);
+    color: white;
 }
