@@ -64,37 +64,37 @@ const AssignmentPage = lazy(() =>
 
 
 const HealthDashboardPage = lazy(() =>
-    import("./features/medical/pages/overview/HealthDashboardPage").then((m) => ({
+    import("./features/medical/pages/HealthDashboardPage").then((m) => ({
         default: m.HealthDashboardPage,
     }))
 );
 
 const HealthCheckPage = lazy(() =>
-    import("./features/medical/pages/records/HealthCheckPage").then((m) => ({
+    import("./features/medical/pages/HealthCheckPage").then((m) => ({
         default: m.HealthCheckPage,
     }))
 );
 
 const MedicalRecordPage = lazy(() =>
-    import("./features/medical/pages/records/MedicalRecordPage").then((m) => ({
+    import("./features/medical/pages/MedicalRecordPage").then((m) => ({
         default: m.MedicalRecordPage,
     }))
 );
 
 const PrescriptionPage = lazy(() =>
-    import("./features/medical/pages/prescriptions/PrescriptionPage").then((m) => ({
+    import("./features/medical/pages/PrescriptionPage").then((m) => ({
         default: m.PrescriptionPage,
     }))
 );
 
 const MedicinePage = lazy(() =>
-    import("./features/medical/pages/medicines/MedicinePage").then((m) => ({
+    import("./features/medical/pages/MedicinePage").then((m) => ({
         default: m.MedicinePage,
     }))
 );
 
 const DiseasePage = lazy(() =>
-    import("./features/medical/pages/diseases/DiseasePage").then((m) => ({
+    import("./features/medical/pages/DiseasePage").then((m) => ({
         default: m.DiseasePage,
     }))
 );
