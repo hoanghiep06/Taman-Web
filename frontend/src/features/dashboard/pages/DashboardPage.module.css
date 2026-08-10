@@ -35,6 +35,11 @@
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
 }
 
+.statCard:disabled,
+.statCard[data-disabled="true"] {
+    cursor: default;
+}
+
 .statIcon {
     width: 48px;
     height: 48px;
@@ -126,6 +131,37 @@
 }
 
 /* =========================================================
+   GENERIC CLICKABLE ROW (reset button, keep row layout classes)
+========================================================= */
+
+.rowButton {
+    all: unset;
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+    border-radius: 10px;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.rowButton:hover {
+    background-color: rgba(37, 99, 235, 0.05);
+}
+
+.rowButton:active {
+    transform: scale(0.997);
+}
+
+.chevron {
+    color: #94a3b8;
+    font-size: 15px;
+    align-self: center;
+    flex: 0 0 auto;
+}
+
+/* =========================================================
    ALERTS
 ========================================================= */
 
@@ -138,7 +174,7 @@
 .alertItem {
     display: flex;
     gap: 12px;
-    padding: 13px 0;
+    padding: 13px 8px;
     border-bottom: 1px solid #f1f5f9;
 }
 
@@ -204,7 +240,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    padding: 14px 0;
+    padding: 14px 8px;
     border-bottom: 1px solid #f1f5f9;
 }
 
@@ -346,7 +382,7 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 13px 0;
+    padding: 13px 8px;
     border-bottom: 1px solid #f1f5f9;
 }
 
@@ -390,7 +426,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px 0;
+    padding: 12px 8px;
     border-bottom: 1px solid #f1f5f9;
 }
 
@@ -545,7 +581,7 @@
     grid-template-columns: 1fr 1fr auto;
     align-items: center;
     gap: 12px;
-    padding: 13px 0;
+    padding: 13px 8px;
     border-bottom: 1px solid #f1f5f9;
 }
 
@@ -702,7 +738,7 @@
 }
 
 /* =========================================================
-   ADMIN MODAL
+   PERSON LIST / DETAIL MODAL
 ========================================================= */
 
 .personList {
@@ -766,6 +802,7 @@
 .profile p {
     margin: 8px 0;
     color: #475569;
+    text-align: left;
 }
 
 /* =========================================================

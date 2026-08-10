@@ -13,21 +13,31 @@ import {
     ADMIN_ALERTS,
     ADMIN_ACTIVITIES,
     MANAGER_RESIDENTS,
+    MANAGER_ELDERS_LIST,
+    MANAGER_ADMITTED_LIST,
+    MANAGER_ATTENTION_LIST,
+    MANAGER_APPOINTMENTS_LIST,
     MANAGER_STAFF,
     MANAGER_HEALTH_ALERTS,
     MANAGER_MEDICATIONS,
     MANAGER_ROOMS,
     MANAGER_INCOMPLETE_TASKS,
     DOCTOR_STATS,
+    DOCTOR_ELDERS_LIST,
+    DOCTOR_NOTIFICATIONS,
     DOCTOR_ALERTS,
     DOCTOR_APPOINTMENTS,
     DOCTOR_CARE_REPORTS,
     COORDINATOR_STATS,
+    COORDINATOR_ELDERS_LIST,
+    COORDINATOR_NOTIFICATIONS,
     COORDINATOR_TASK_STATS,
     COORDINATOR_TASKS,
     COORDINATOR_ATTENTION,
     COORDINATOR_SCHEDULE,
     CAREGIVER_STATS,
+    CAREGIVER_ELDERS_LIST,
+    CAREGIVER_NOTIFICATIONS,
     CAREGIVER_SHIFT,
     CAREGIVER_TASKS,
     CAREGIVER_NOTES,
@@ -46,6 +56,7 @@ const ROLE_NAMES = {
     doctor: "Doctor",
     coordinator: "Coordinator",
     caregiver: "Caregiver",
+    carestaff: "Caregiver",
 };
 
 const normalizeRole = (role) => {
@@ -63,6 +74,7 @@ const StatCard = ({ title, value, icon, color, onClick }) => (
         className={styles.statCard}
         style={{ "--stat-color": color }}
         onClick={onClick}
+        data-disabled={!onClick}
     >
         <div className={styles.statIcon}>{icon}</div>
 
@@ -126,17 +138,33 @@ const StatusBadge = ({ status }) => {
 };
 
 
-const AlertItem = ({ item }) => (
-    <div className={styles.alertItem}>
-        <div className={`${styles.alertDot} ${styles[item.type]}`} />
+const AlertItem = ({ item, onClick }) => {
+    const content = (
+        <>
+            <div className={`${styles.alertDot} ${styles[item.type]}`} />
 
-        <div className={styles.alertContent}>
-            <strong>{item.title}</strong>
-            <p>{item.message || item.description || item.condition}</p>
-            {item.time && <small>{item.time}</small>}
-        </div>
-    </div>
-);
+            <div className={styles.alertContent}>
+                <strong>{item.title}</strong>
+                <p>{item.message || item.description || item.condition}</p>
+                {item.time && <small>{item.time}</small>}
+            </div>
+        </>
+    );
+
+    if (!onClick) {
+        return <div className={styles.alertItem}>{content}</div>;
+    }
+
+    return (
+        <button
+            type="button"
+            className={`${styles.rowButton} ${styles.alertItem}`}
+            onClick={onClick}
+        >
+            {content}
+        </button>
+    );
+};
 
 
 const Modal = ({ title, children, onClose }) => (
@@ -165,6 +193,67 @@ const Modal = ({ title, children, onClose }) => (
 );
 
 
+/* Generic "key -> value" detail modal, used for single-item detail popups
+   across every dashboard (a room, a task, a staff member, a note, etc.) */
+const DetailFieldsModal = ({ title, fields, avatarLabel, onClose }) => (
+    <Modal title={title} onClose={onClose}>
+        <div className={styles.profile}>
+            {avatarLabel && (
+                <div className={styles.profileAvatar}>{avatarLabel}</div>
+            )}
+
+            {fields.map((field) => (
+                <p key={field.label}>
+                    <b>{field.label}:</b> {field.value}
+                </p>
+            ))}
+        </div>
+    </Modal>
+);
+
+
+/* Generic list modal, used for "xem tất cả" popups (danh sách cụ, thông báo...) */
+const DetailListModal = ({ title, items, onClose, onItemClick, renderPrimary, renderSecondary }) => (
+    <Modal title={title} onClose={onClose}>
+        <div className={styles.personList}>
+            {items.map((item, index) => {
+                const rowContent = (
+                    <>
+                        <div>
+                            <strong>{renderPrimary(item)}</strong>
+                            <span>{renderSecondary(item)}</span>
+                        </div>
+
+                        {onItemClick && <span className={styles.chevron}>→</span>}
+                    </>
+                );
+
+                if (!onItemClick) {
+                    return (
+                        <div className={styles.personRow} key={item.id ?? index}>
+                            {rowContent}
+                        </div>
+                    );
+                }
+
+                return (
+                    <button
+                        type="button"
+                        className={`${styles.rowButton} ${styles.personRow}`}
+                        key={item.id ?? index}
+                        onClick={() => onItemClick(item)}
+                    >
+                        {rowContent}
+                    </button>
+                );
+            })}
+
+            {!items.length && <EmptyState />}
+        </div>
+    </Modal>
+);
+
+
 /* =========================================================
    ADMIN
 ========================================================= */
@@ -173,6 +262,7 @@ const AdminDashboard = () => {
     const [peopleType, setPeopleType] = useState(null);
     const [selectedPerson, setSelectedPerson] = useState(null);
     const [showActivities, setShowActivities] = useState(false);
+    const [selectedAlert, setSelectedAlert] = useState(null);
 
     const peopleConfig = {
         elders: {
@@ -252,7 +342,11 @@ const AdminDashboard = () => {
                 >
                     <div className={styles.alertList}>
                         {ADMIN_ALERTS.map((item) => (
-                            <AlertItem key={item.id} item={item} />
+                            <AlertItem
+                                key={item.id}
+                                item={item}
+                                onClick={() => setSelectedAlert(item)}
+                            />
                         ))}
                     </div>
                 </Section>
@@ -292,31 +386,14 @@ const AdminDashboard = () => {
             </div>
 
             {peopleType && (
-                <Modal
+                <DetailListModal
                     title={peopleConfig[peopleType].title}
+                    items={peopleConfig[peopleType].data}
                     onClose={() => setPeopleType(null)}
-                >
-                    <div className={styles.personList}>
-                        {peopleConfig[peopleType].data.map((person) => (
-                            <button
-                                type="button"
-                                className={styles.personRow}
-                                key={person.id}
-                                onClick={() => setSelectedPerson(person)}
-                            >
-                                <div>
-                                    <strong>{person.name}</strong>
-
-                                    <span>
-                                        {person.facility} · {person.detail}
-                                    </span>
-                                </div>
-
-                                <span>→</span>
-                            </button>
-                        ))}
-                    </div>
-                </Modal>
+                    onItemClick={(person) => setSelectedPerson(person)}
+                    renderPrimary={(person) => person.name}
+                    renderSecondary={(person) => `${person.facility} · ${person.detail}`}
+                />
             )}
 
             {selectedPerson && (
@@ -344,6 +421,17 @@ const AdminDashboard = () => {
                         </p>
                     </div>
                 </Modal>
+            )}
+
+            {selectedAlert && (
+                <DetailFieldsModal
+                    title={selectedAlert.title}
+                    onClose={() => setSelectedAlert(null)}
+                    fields={[
+                        { label: "Nội dung", value: selectedAlert.message },
+                        { label: "Thời gian", value: selectedAlert.time },
+                    ]}
+                />
             )}
 
             {showActivities && (
@@ -386,6 +474,10 @@ const ManagerDashboard = () => {
     const [areaFilter, setAreaFilter] = useState("all");
     const [roomStatus, setRoomStatus] = useState("all");
 
+    // { kind: "elders" | "admitted" | "attention" | "appointments" | "staff" | "healthAlert" | "medication" | "room" | "task", payload }
+    const [detail, setDetail] = useState(null);
+    const closeDetail = () => setDetail(null);
+
     const filteredRooms = useMemo(() => {
         return MANAGER_ROOMS.filter((room) => {
             const matchesSearch =
@@ -415,6 +507,7 @@ const ManagerDashboard = () => {
                         value={MANAGER_RESIDENTS.total}
                         icon="👴"
                         color="#2563eb"
+                        onClick={() => setDetail({ kind: "elders" })}
                     />
 
                     <StatCard
@@ -422,6 +515,7 @@ const ManagerDashboard = () => {
                         value={MANAGER_RESIDENTS.admitted}
                         icon="🏥"
                         color="#0891b2"
+                        onClick={() => setDetail({ kind: "admitted" })}
                     />
 
                     <StatCard
@@ -429,6 +523,7 @@ const ManagerDashboard = () => {
                         value={MANAGER_RESIDENTS.attention}
                         icon="⚠️"
                         color="#dc2626"
+                        onClick={() => setDetail({ kind: "attention" })}
                     />
 
                     <StatCard
@@ -436,6 +531,7 @@ const ManagerDashboard = () => {
                         value={MANAGER_RESIDENTS.appointments}
                         icon="📅"
                         color="#7c3aed"
+                        onClick={() => setDetail({ kind: "appointments" })}
                     />
                 </div>
             </Section>
@@ -467,9 +563,11 @@ const ManagerDashboard = () => {
 
                     <div className={styles.staffList}>
                         {MANAGER_STAFF.members.map((staff) => (
-                            <div
-                                className={styles.staffRow}
+                            <button
+                                type="button"
+                                className={`${styles.rowButton} ${styles.staffRow}`}
                                 key={staff.name}
+                                onClick={() => setDetail({ kind: "staff", payload: staff })}
                             >
                                 <div>
                                     <strong>{staff.name}</strong>
@@ -483,7 +581,7 @@ const ManagerDashboard = () => {
                                             : "Không hoạt động"
                                     }
                                 />
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </Section>
@@ -495,9 +593,11 @@ const ManagerDashboard = () => {
 
                     <div className={styles.alertList}>
                         {MANAGER_HEALTH_ALERTS.map((alert) => (
-                            <div
-                                className={styles.healthAlert}
+                            <button
+                                type="button"
+                                className={`${styles.rowButton} ${styles.healthAlert}`}
                                 key={alert.id}
+                                onClick={() => setDetail({ kind: "healthAlert", payload: alert })}
                             >
                                 <div>
                                     <strong>{alert.name}</strong>
@@ -507,7 +607,7 @@ const ManagerDashboard = () => {
                                 <StatusBadge
                                     status={`${alert.value}`}
                                 />
-                            </div>
+                            </button>
                         ))}
                     </div>
 
@@ -517,16 +617,18 @@ const ManagerDashboard = () => {
 
                     <div className={styles.medicationList}>
                         {MANAGER_MEDICATIONS.map((item) => (
-                            <div
-                                className={styles.medicationRow}
+                            <button
+                                type="button"
+                                className={`${styles.rowButton} ${styles.medicationRow}`}
                                 key={`${item.name}-${item.time}`}
+                                onClick={() => setDetail({ kind: "medication", payload: item })}
                             >
                                 <strong>{item.name}</strong>
 
                                 <span>{item.medicine}</span>
 
                                 <time>{item.time}</time>
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </Section>
@@ -575,9 +677,11 @@ const ManagerDashboard = () => {
                     </div>
 
                     {filteredRooms.map((room) => (
-                        <div
-                            className={styles.tableRow}
+                        <button
+                            type="button"
+                            className={`${styles.rowButton} ${styles.tableRow}`}
                             key={`${room.area}-${room.room}`}
+                            onClick={() => setDetail({ kind: "room", payload: room })}
                         >
                             <span>{room.area}</span>
                             <strong>{room.room}</strong>
@@ -585,7 +689,7 @@ const ManagerDashboard = () => {
                             <StatusBadge status={room.status} />
 
                             <span>{room.beds}</span>
-                        </div>
+                        </button>
                     ))}
 
                     {!filteredRooms.length && (
@@ -597,7 +701,12 @@ const ManagerDashboard = () => {
             <Section title="Công việc chưa hoàn thành">
                 <div className={styles.taskList}>
                     {MANAGER_INCOMPLETE_TASKS.map((task) => (
-                        <div className={styles.taskRow} key={task.id}>
+                        <button
+                            type="button"
+                            className={`${styles.rowButton} ${styles.taskRow}`}
+                            key={task.id}
+                            onClick={() => setDetail({ kind: "task", payload: task })}
+                        >
                             <div>
                                 <strong>{task.task}</strong>
 
@@ -609,10 +718,113 @@ const ManagerDashboard = () => {
                             <time>{task.time}</time>
 
                             <StatusBadge status={task.status} />
-                        </div>
+                        </button>
                     ))}
                 </div>
             </Section>
+
+            {detail?.kind === "elders" && (
+                <DetailListModal
+                    title="Danh sách cụ"
+                    items={MANAGER_ELDERS_LIST}
+                    onClose={closeDetail}
+                    renderPrimary={(p) => p.name}
+                    renderSecondary={(p) => `${p.area} · ${p.room} · ${p.note}`}
+                />
+            )}
+
+            {detail?.kind === "admitted" && (
+                <DetailListModal
+                    title="Đang nhập viện"
+                    items={MANAGER_ADMITTED_LIST}
+                    onClose={closeDetail}
+                    renderPrimary={(p) => p.name}
+                    renderSecondary={(p) => `${p.room} · ${p.reason} · từ ${p.since}`}
+                />
+            )}
+
+            {detail?.kind === "attention" && (
+                <DetailListModal
+                    title="Cần chú ý"
+                    items={MANAGER_ATTENTION_LIST}
+                    onClose={closeDetail}
+                    renderPrimary={(p) => p.name}
+                    renderSecondary={(p) => `${p.room} · ${p.condition}`}
+                />
+            )}
+
+            {detail?.kind === "appointments" && (
+                <DetailListModal
+                    title="Có lịch khám"
+                    items={MANAGER_APPOINTMENTS_LIST}
+                    onClose={closeDetail}
+                    renderPrimary={(p) => p.name}
+                    renderSecondary={(p) => `${p.time} · ${p.doctor} · ${p.type}`}
+                />
+            )}
+
+            {detail?.kind === "staff" && (
+                <DetailFieldsModal
+                    title="Hồ sơ nhân viên"
+                    onClose={closeDetail}
+                    avatarLabel={detail.payload.name.charAt(0)}
+                    fields={[
+                        { label: "Vai trò", value: detail.payload.role },
+                        {
+                            label: "Trạng thái",
+                            value: detail.payload.status === "active" ? "Hoạt động" : "Không hoạt động",
+                        },
+                        { label: "Ca trực", value: `${MANAGER_STAFF.shift} (${MANAGER_STAFF.start} - ${MANAGER_STAFF.end})` },
+                    ]}
+                />
+            )}
+
+            {detail?.kind === "healthAlert" && (
+                <DetailFieldsModal
+                    title={detail.payload.name}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Tình trạng", value: detail.payload.condition },
+                        { label: "Chỉ số", value: detail.payload.value },
+                    ]}
+                />
+            )}
+
+            {detail?.kind === "medication" && (
+                <DetailFieldsModal
+                    title={detail.payload.name}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Thuốc", value: detail.payload.medicine },
+                        { label: "Giờ uống", value: detail.payload.time },
+                    ]}
+                />
+            )}
+
+            {detail?.kind === "room" && (
+                <DetailFieldsModal
+                    title={`Phòng ${detail.payload.room}`}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Khu", value: detail.payload.area },
+                        { label: "Trạng thái", value: detail.payload.status },
+                        { label: "Sức chứa", value: detail.payload.beds },
+                    ]}
+                />
+            )}
+
+            {detail?.kind === "task" && (
+                <DetailFieldsModal
+                    title={detail.payload.task}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Cụ", value: detail.payload.elder },
+                        { label: "Phòng", value: detail.payload.room },
+                        { label: "Thời gian", value: detail.payload.time },
+                        { label: "Trạng thái", value: detail.payload.status },
+                    ]}
+                />
+            )}
         </>
     );
 };
@@ -623,6 +835,10 @@ const ManagerDashboard = () => {
 ========================================================= */
 
 const DoctorDashboard = () => {
+    // { kind: "elders" | "notifications" | "alert" | "appointment" | "report", payload }
+    const [detail, setDetail] = useState(null);
+    const closeDetail = () => setDetail(null);
+
     return (
         <>
             <div className={styles.statistics}>
@@ -631,6 +847,7 @@ const DoctorDashboard = () => {
                     value={DOCTOR_STATS.elders}
                     icon="👴"
                     color="#2563eb"
+                    onClick={() => setDetail({ kind: "elders" })}
                 />
 
                 <StatCard
@@ -638,6 +855,7 @@ const DoctorDashboard = () => {
                     value={DOCTOR_STATS.appointments}
                     icon="📅"
                     color="#7c3aed"
+                    onClick={() => setDetail({ kind: "appointmentsList" })}
                 />
 
                 <StatCard
@@ -645,19 +863,22 @@ const DoctorDashboard = () => {
                     value={DOCTOR_STATS.notifications}
                     icon="🔔"
                     color="#ea580c"
+                    onClick={() => setDetail({ kind: "notifications" })}
                 />
             </div>
 
             <Section title="Tình trạng cụ">
                 <div className={styles.healthOverview}>
                     {DOCTOR_ALERTS.map((item) => (
-                        <div
-                            className={`${styles.patientAlert} ${
+                        <button
+                            type="button"
+                            className={`${styles.rowButton} ${styles.patientAlert} ${
                                 item.severity === "danger"
                                     ? styles.patientDanger
                                     : styles.patientWarning
                             }`}
                             key={item.id}
+                            onClick={() => setDetail({ kind: "alert", payload: item })}
                         >
                             <div>
                                 <strong>{item.name}</strong>
@@ -673,7 +894,7 @@ const DoctorDashboard = () => {
                                         : "Cần theo dõi"
                                 }
                             />
-                        </div>
+                        </button>
                     ))}
                 </div>
             </Section>
@@ -682,9 +903,11 @@ const DoctorDashboard = () => {
                 <Section title="Cuộc hẹn hôm nay">
                     <div className={styles.appointmentList}>
                         {DOCTOR_APPOINTMENTS.map((appointment) => (
-                            <div
-                                className={styles.appointmentRow}
+                            <button
+                                type="button"
+                                className={`${styles.rowButton} ${styles.appointmentRow}`}
                                 key={`${appointment.time}-${appointment.elder}`}
+                                onClick={() => setDetail({ kind: "appointment", payload: appointment })}
                             >
                                 <time>{appointment.time}</time>
 
@@ -698,7 +921,7 @@ const DoctorDashboard = () => {
                                         {appointment.type}
                                     </span>
                                 </div>
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </Section>
@@ -706,9 +929,11 @@ const DoctorDashboard = () => {
                 <Section title="Báo cáo từ người chăm sóc">
                     <div className={styles.reportList}>
                         {DOCTOR_CARE_REPORTS.map((report, index) => (
-                            <div
-                                className={styles.reportRow}
+                            <button
+                                type="button"
+                                className={`${styles.rowButton} ${styles.reportRow}`}
                                 key={`${report.caregiver}-${index}`}
+                                onClick={() => setDetail({ kind: "report", payload: report })}
                             >
                                 <div>
                                     <strong>{report.caregiver}</strong>
@@ -720,11 +945,81 @@ const DoctorDashboard = () => {
                                 </div>
 
                                 <time>{report.time}</time>
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </Section>
             </div>
+
+            {detail?.kind === "elders" && (
+                <DetailListModal
+                    title="Danh sách cụ"
+                    items={DOCTOR_ELDERS_LIST}
+                    onClose={closeDetail}
+                    renderPrimary={(p) => p.name}
+                    renderSecondary={(p) => `${p.room} · ${p.note}`}
+                />
+            )}
+
+            {detail?.kind === "notifications" && (
+                <DetailListModal
+                    title="Thông báo"
+                    items={DOCTOR_NOTIFICATIONS}
+                    onClose={closeDetail}
+                    renderPrimary={(n) => n.title}
+                    renderSecondary={(n) => `${n.detail} · ${n.time}`}
+                />
+            )}
+
+            {detail?.kind === "appointmentsList" && (
+                <DetailListModal
+                    title="Cuộc hẹn hôm nay"
+                    items={DOCTOR_APPOINTMENTS}
+                    onClose={closeDetail}
+                    onItemClick={(item) => setDetail({ kind: "appointment", payload: item })}
+                    renderPrimary={(a) => a.elder}
+                    renderSecondary={(a) => `${a.time} · ${a.room} · ${a.type}`}
+                />
+            )}
+
+            {detail?.kind === "alert" && (
+                <DetailFieldsModal
+                    title={detail.payload.name}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Phòng", value: detail.payload.room },
+                        { label: "Tình trạng", value: detail.payload.condition },
+                        {
+                            label: "Mức độ",
+                            value: detail.payload.severity === "danger" ? "Báo động" : "Cần theo dõi",
+                        },
+                    ]}
+                />
+            )}
+
+            {detail?.kind === "appointment" && (
+                <DetailFieldsModal
+                    title={detail.payload.elder}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Giờ hẹn", value: detail.payload.time },
+                        { label: "Phòng", value: detail.payload.room },
+                        { label: "Loại khám", value: detail.payload.type },
+                    ]}
+                />
+            )}
+
+            {detail?.kind === "report" && (
+                <DetailFieldsModal
+                    title={detail.payload.activity}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Người chăm sóc", value: detail.payload.caregiver },
+                        { label: "Cụ", value: detail.payload.elder },
+                        { label: "Thời gian", value: detail.payload.time },
+                    ]}
+                />
+            )}
         </>
     );
 };
@@ -737,6 +1032,10 @@ const DoctorDashboard = () => {
 const CoordinatorDashboard = () => {
     const [showTasks, setShowTasks] = useState(false);
 
+    // { kind: "elders" | "notifications" | "attention" | "schedule" | "task", payload }
+    const [detail, setDetail] = useState(null);
+    const closeDetail = () => setDetail(null);
+
     return (
         <>
             <div className={styles.statistics}>
@@ -745,6 +1044,7 @@ const CoordinatorDashboard = () => {
                     value={COORDINATOR_STATS.elders}
                     icon="👴"
                     color="#2563eb"
+                    onClick={() => setDetail({ kind: "elders" })}
                 />
 
                 <StatCard
@@ -752,6 +1052,7 @@ const CoordinatorDashboard = () => {
                     value={COORDINATOR_STATS.tasks}
                     icon="📋"
                     color="#059669"
+                    onClick={() => setShowTasks(true)}
                 />
 
                 <StatCard
@@ -759,6 +1060,7 @@ const CoordinatorDashboard = () => {
                     value={COORDINATOR_STATS.notifications}
                     icon="🔔"
                     color="#ea580c"
+                    onClick={() => setDetail({ kind: "notifications" })}
                 />
             </div>
 
@@ -816,6 +1118,7 @@ const CoordinatorDashboard = () => {
                             <AlertItem
                                 key={item.id}
                                 item={item}
+                                onClick={() => setDetail({ kind: "attention", payload: item })}
                             />
                         ))}
                     </div>
@@ -824,9 +1127,11 @@ const CoordinatorDashboard = () => {
                 <Section title="Lịch trình hôm nay">
                     <div className={styles.scheduleList}>
                         {COORDINATOR_SCHEDULE.map((item) => (
-                            <div
-                                className={styles.scheduleRow}
+                            <button
+                                type="button"
+                                className={`${styles.rowButton} ${styles.scheduleRow}`}
                                 key={`${item.time}-${item.title}`}
+                                onClick={() => setDetail({ kind: "schedule", payload: item })}
                             >
                                 <time>{item.time}</time>
 
@@ -834,7 +1139,7 @@ const CoordinatorDashboard = () => {
                                     <strong>{item.title}</strong>
                                     <span>{item.location}</span>
                                 </div>
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </Section>
@@ -847,9 +1152,11 @@ const CoordinatorDashboard = () => {
                 >
                     <div className={styles.taskList}>
                         {COORDINATOR_TASKS.map((task) => (
-                            <div
-                                className={styles.taskRow}
+                            <button
+                                type="button"
+                                className={`${styles.rowButton} ${styles.taskRow}`}
                                 key={task.id}
+                                onClick={() => setDetail({ kind: "task", payload: task })}
                             >
                                 <div>
                                     <strong>
@@ -863,10 +1170,64 @@ const CoordinatorDashboard = () => {
                                 </div>
 
                                 <StatusBadge status={task.status} />
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </Modal>
+            )}
+
+            {detail?.kind === "elders" && (
+                <DetailListModal
+                    title="Danh sách cụ"
+                    items={COORDINATOR_ELDERS_LIST}
+                    onClose={closeDetail}
+                    renderPrimary={(p) => p.name}
+                    renderSecondary={(p) => `${p.area} · ${p.room}`}
+                />
+            )}
+
+            {detail?.kind === "notifications" && (
+                <DetailListModal
+                    title="Thông báo"
+                    items={COORDINATOR_NOTIFICATIONS}
+                    onClose={closeDetail}
+                    renderPrimary={(n) => n.title}
+                    renderSecondary={(n) => `${n.detail} · ${n.time}`}
+                />
+            )}
+
+            {detail?.kind === "attention" && (
+                <DetailFieldsModal
+                    title={detail.payload.title}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Chi tiết", value: detail.payload.description },
+                    ]}
+                />
+            )}
+
+            {detail?.kind === "schedule" && (
+                <DetailFieldsModal
+                    title={detail.payload.title}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Thời gian", value: detail.payload.time },
+                        { label: "Địa điểm", value: detail.payload.location },
+                    ]}
+                />
+            )}
+
+            {detail?.kind === "task" && (
+                <DetailFieldsModal
+                    title={`${detail.payload.id} · ${detail.payload.task}`}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Cụ", value: detail.payload.elder },
+                        { label: "Giờ", value: detail.payload.time },
+                        { label: "Ngày", value: detail.payload.date },
+                        { label: "Trạng thái", value: detail.payload.status },
+                    ]}
+                />
             )}
         </>
     );
@@ -878,6 +1239,10 @@ const CoordinatorDashboard = () => {
 ========================================================= */
 
 const CaregiverDashboard = () => {
+    // { kind: "elders" | "notifications" | "task" | "note", payload }
+    const [detail, setDetail] = useState(null);
+    const closeDetail = () => setDetail(null);
+
     return (
         <>
             <div className={styles.statistics}>
@@ -886,6 +1251,7 @@ const CaregiverDashboard = () => {
                     value={CAREGIVER_STATS.elders}
                     icon="👴"
                     color="#2563eb"
+                    onClick={() => setDetail({ kind: "elders" })}
                 />
 
                 <StatCard
@@ -893,6 +1259,7 @@ const CaregiverDashboard = () => {
                     value={CAREGIVER_STATS.tasks}
                     icon="📋"
                     color="#059669"
+                    onClick={() => setDetail({ kind: "tasksList" })}
                 />
 
                 <StatCard
@@ -900,6 +1267,7 @@ const CaregiverDashboard = () => {
                     value={CAREGIVER_STATS.notifications}
                     icon="🔔"
                     color="#ea580c"
+                    onClick={() => setDetail({ kind: "notifications" })}
                 />
             </div>
 
@@ -923,8 +1291,9 @@ const CaregiverDashboard = () => {
             <Section title="Các task hôm nay">
                 <div className={styles.caregiverTaskList}>
                     {CAREGIVER_TASKS.map((task) => (
-                        <div
-                            className={`${styles.caregiverTask} ${
+                        <button
+                            type="button"
+                            className={`${styles.rowButton} ${styles.caregiverTask} ${
                                 task.type === "now"
                                     ? styles.taskNow
                                     : task.type === "next"
@@ -932,6 +1301,7 @@ const CaregiverDashboard = () => {
                                       : ""
                             }`}
                             key={task.id}
+                            onClick={() => setDetail({ kind: "task", payload: task })}
                         >
                             <div className={styles.taskTime}>
                                 {task.time}
@@ -954,7 +1324,7 @@ const CaregiverDashboard = () => {
                                           : "Tiếp theo"
                                 }
                             />
-                        </div>
+                        </button>
                     ))}
                 </div>
             </Section>
@@ -962,9 +1332,11 @@ const CaregiverDashboard = () => {
             <Section title="Lưu ý của Bác sĩ / Manager">
                 <div className={styles.notesList}>
                     {CAREGIVER_NOTES.map((note) => (
-                        <div
-                            className={styles.noteItem}
+                        <button
+                            type="button"
+                            className={`${styles.rowButton} ${styles.noteItem}`}
                             key={note.id}
+                            onClick={() => setDetail({ kind: "note", payload: note })}
                         >
                             <div className={styles.noteTime}>
                                 <strong>{note.time}</strong>
@@ -978,10 +1350,65 @@ const CaregiverDashboard = () => {
 
                                 <p>{note.note}</p>
                             </div>
-                        </div>
+                        </button>
                     ))}
                 </div>
             </Section>
+
+            {detail?.kind === "elders" && (
+                <DetailListModal
+                    title="Danh sách cụ"
+                    items={CAREGIVER_ELDERS_LIST}
+                    onClose={closeDetail}
+                    renderPrimary={(p) => p.name}
+                    renderSecondary={(p) => p.room}
+                />
+            )}
+
+            {detail?.kind === "tasksList" && (
+                <DetailListModal
+                    title="Các task hôm nay"
+                    items={CAREGIVER_TASKS}
+                    onClose={closeDetail}
+                    onItemClick={(item) => setDetail({ kind: "task", payload: item })}
+                    renderPrimary={(t) => t.task}
+                    renderSecondary={(t) => `${t.time} · ${t.elder} · ${t.room}`}
+                />
+            )}
+
+            {detail?.kind === "notifications" && (
+                <DetailListModal
+                    title="Thông báo"
+                    items={CAREGIVER_NOTIFICATIONS}
+                    onClose={closeDetail}
+                    renderPrimary={(n) => n.title}
+                    renderSecondary={(n) => `${n.detail} · ${n.time}`}
+                />
+            )}
+
+            {detail?.kind === "task" && (
+                <DetailFieldsModal
+                    title={detail.payload.task}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Cụ", value: detail.payload.elder },
+                        { label: "Phòng", value: detail.payload.room },
+                        { label: "Giờ", value: detail.payload.time },
+                    ]}
+                />
+            )}
+
+            {detail?.kind === "note" && (
+                <DetailFieldsModal
+                    title={`Lưu ý từ ${detail.payload.author}`}
+                    onClose={closeDetail}
+                    fields={[
+                        { label: "Cụ", value: detail.payload.elder },
+                        { label: "Nội dung", value: detail.payload.note },
+                        { label: "Thời gian", value: `${detail.payload.time} · ${detail.payload.date}` },
+                    ]}
+                />
+            )}
         </>
     );
 };

@@ -66,6 +66,13 @@ export const ADMIN_ALERTS = [
         message: "Role của caregiver.le đã được thay đổi thành Coordinator.",
         time: "2 giờ trước",
     },
+    {
+        id: 6,
+        type: "danger",
+        title: "Tài khoản bị vô hiệu hóa",
+        message: "Tài khoản coordinator.vu đã bị vô hiệu hóa theo yêu cầu quản trị.",
+        time: "3 giờ trước",
+    },
 ];
 
 export const ADMIN_ACTIVITIES = [
@@ -119,6 +126,29 @@ export const MANAGER_RESIDENTS = {
     attention: 7,
     appointments: 9,
 };
+
+export const MANAGER_ELDERS_LIST = [
+    { id: 1, name: "Nguyễn Văn A", area: "Khu A", room: "P.101", note: "Ổn định" },
+    { id: 2, name: "Trần Thị B", area: "Khu A", room: "P.102", note: "Ổn định" },
+    { id: 3, name: "Lê Văn C", area: "Khu B", room: "P.203", note: "Theo dõi SpO₂" },
+    { id: 4, name: "Phạm Văn D", area: "Khu B", room: "P.205", note: "Ổn định" },
+];
+
+export const MANAGER_ADMITTED_LIST = [
+    { id: 1, name: "Nguyễn Văn A", room: "P.101", reason: "Theo dõi huyết áp", since: "05/08/2026" },
+    { id: 2, name: "Lê Văn C", room: "P.203", reason: "Theo dõi SpO₂", since: "07/08/2026" },
+];
+
+export const MANAGER_ATTENTION_LIST = [
+    { id: 1, name: "Nguyễn Văn A", room: "P.101", condition: "Huyết áp cao 160/100 mmHg" },
+    { id: 2, name: "Trần Thị B", room: "P.102", condition: "Nhiệt độ cao 38.1°C" },
+    { id: 3, name: "Lê Văn C", room: "P.203", condition: "SpO₂ thấp 93%" },
+];
+
+export const MANAGER_APPOINTMENTS_LIST = [
+    { id: 1, name: "Nguyễn Văn A", time: "09:30", doctor: "BS. Nguyễn Văn D", type: "Tái khám" },
+    { id: 2, name: "Trần Thị B", time: "14:00", doctor: "BS. Trần Thị E", type: "Theo dõi" },
+];
 
 export const MANAGER_STAFF = {
     shift: "Ca sáng",
@@ -212,6 +242,18 @@ export const DOCTOR_STATS = {
     notifications: 5,
 };
 
+export const DOCTOR_ELDERS_LIST = [
+    { id: 1, name: "Nguyễn Văn A", room: "P.104", note: "Huyết áp cao" },
+    { id: 2, name: "Trần Thị B", room: "P.205", note: "SpO₂ thấp" },
+    { id: 3, name: "Dũng", room: "P.103", note: "Khám định kỳ" },
+];
+
+export const DOCTOR_NOTIFICATIONS = [
+    { id: 1, title: "Kết quả xét nghiệm mới", detail: "Nguyễn Văn A - Xét nghiệm máu", time: "10 phút trước" },
+    { id: 2, title: "Nhắc lịch hẹn", detail: "Cuộc hẹn với Trần Thị B lúc 14:00", time: "30 phút trước" },
+    { id: 3, title: "Báo cáo mới từ caregiver", detail: "Đã cập nhật tình trạng cụ Lê Văn C", time: "1 giờ trước" },
+];
+
 export const DOCTOR_ALERTS = [
     {
         id: 1,
@@ -268,6 +310,17 @@ export const COORDINATOR_STATS = {
     tasks: 86,
     notifications: 8,
 };
+
+export const COORDINATOR_ELDERS_LIST = [
+    { id: 1, name: "Nguyễn Văn A", area: "Khu A", room: "P.101" },
+    { id: 2, name: "Trần Thị B", area: "Khu A", room: "P.102" },
+    { id: 3, name: "Lê Văn C", area: "Khu B", room: "P.203" },
+];
+
+export const COORDINATOR_NOTIFICATIONS = [
+    { id: 1, title: "Task quá hạn", detail: "TASK-003 - Phát thuốc", time: "20 phút trước" },
+    { id: 2, title: "Task mới được giao", detail: "TASK-004 - Kiểm tra phòng", time: "45 phút trước" },
+];
 
 export const COORDINATOR_TASK_STATS = {
     total: 86,
@@ -345,6 +398,18 @@ export const CAREGIVER_STATS = {
     tasks: 18,
     notifications: 2,
 };
+
+export const CAREGIVER_ELDERS_LIST = [
+    { id: 1, name: "Nguyễn Văn C", room: "P.103" },
+    { id: 2, name: "Nguyễn Thị D", room: "P.104" },
+    { id: 3, name: "Trần F", room: "P.205" },
+    { id: 4, name: "Lê G", room: "P.201" },
+];
+
+export const CAREGIVER_NOTIFICATIONS = [
+    { id: 1, title: "Lưu ý mới từ bác sĩ", detail: "Không cho cụ B ăn cá trong 5 ngày", time: "15 phút trước" },
+    { id: 2, title: "Nhắc nhở task", detail: "Đo chỉ số cho cụ D lúc 08:30", time: "40 phút trước" },
+];
 
 export const CAREGIVER_SHIFT = {
     name: "Ca sáng",
