@@ -118,11 +118,11 @@ const VitalPage = lazy(() =>
 );
 
 
-const IncidentPage = lazy(() =>
-    import("./features/incidents/pages/IncidentPage").then((m) => ({
-        default: m.IncidentPage,
-    }))
-);
+// const IncidentPage = lazy(() =>
+//     import("./features/incidents/pages/IncidentPage").then((m) => ({
+//         default: m.IncidentPage,
+//     }))
+// );
 
 const BackupPage = lazy(() =>
     import("./features/backup/pages/BackupPage").then((m) => ({
@@ -200,7 +200,7 @@ function App() {
                             <Route path="/diseases" element={<DiseasePage />} />
                             
                             <Route path="/vitals" element={<VitalPage />} />
-                            <Route path="/incident" element={<IncidentPage />} />
+                            {/* <Route path="/incident" element={<IncidentPage />} /> */}
                             <Route path="/backup" element={<BackupPage />} />
                             <Route path="/settings" element={<SystemSettingsPage />} />
                         </Route>
