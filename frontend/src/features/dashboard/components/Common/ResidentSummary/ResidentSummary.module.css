@@ -1,0 +1,53 @@
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.label {
+    font-size: 14px;
+    color: #6b7280;
+}
+
+.header h2 {
+    margin: 6px 0 0;
+    font-size: 32px;
+    color: #111827;
+}
+
+.icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #eff6ff;
+    font-size: 24px;
+}
+
+.facility {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #eee;
+}
+
+.facility span {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.facility strong {
+    font-size: 14px;
+    color: #2563eb;
+}

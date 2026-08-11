@@ -1,0 +1,42 @@
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #eff6ff;
+    font-size: 25px;
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.label {
+    font-size: 14px;
+    color: #64748b;
+}
+
+.value {
+    font-size: 28px;
+    line-height: 1.2;
+    color: #1e293b;
+}
+
+.facility {
+    font-size: 13px;
+    color: #94a3b8;
+}

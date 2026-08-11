@@ -1,0 +1,81 @@
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.header span {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.header h3 {
+    margin: 4px 0;
+}
+
+.header strong {
+    background: #fee2e2;
+    color: #dc2626;
+    padding: 4px 10px;
+    height: fit-content;
+    border-radius: 20px;
+}
+
+.item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.item:last-child {
+    border-bottom: none;
+}
+
+.icon {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+}
+
+.item strong {
+    font-size: 13px;
+}
+
+.item p {
+    margin: 3px 0;
+    font-size: 13px;
+    color: #4b5563;
+}
+
+.item span {
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+.danger .icon {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.warning .icon {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.info .icon {
+    background: #dbeafe;
+    color: #2563eb;
+}
