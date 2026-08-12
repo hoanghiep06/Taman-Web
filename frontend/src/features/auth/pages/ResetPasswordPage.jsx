@@ -72,13 +72,18 @@ export const ResetPasswordPage = () => {
 
     setIsSubmitting(true);
     try {
-      await authApi.changePassword(oldPassword, newPassword);
-      clearMustChangePasswordFlag();
-      navigate(user.role === 'Staff' ? '/rooms' : '/dashboard');
+        await authApi.changePassword(oldPassword, newPassword);
+
+        clearMustChangePasswordFlag();
+
+        navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Có lỗi xảy ra, vui lòng kiểm tra lại mật khẩu hiện tại.');
+        setError(
+            err.response?.data?.detail ||
+            'Có lỗi xảy ra, vui lòng kiểm tra lại mật khẩu hiện tại.'
+        );
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
   };
 

@@ -1,3 +1,6 @@
+import { ResidentSummary } from "../ResidentSummary/ResidentSummary";
+import { Notification } from "../Notification/Notification";
+
 import styles from "./DashboardHeader.module.css";
 
 export const DashboardHeader = ({
@@ -5,6 +8,7 @@ export const DashboardHeader = ({
     role,
     shift,
     date,
+    facility,
 }) => {
     return (
         <div className={styles.header}>
@@ -19,6 +23,8 @@ export const DashboardHeader = ({
             </div>
 
             <div className={styles.right}>
+                {facility && <ResidentSummary facility={facility} />}
+
                 <div className={styles.shift}>
                     {shift}
                 </div>
@@ -26,6 +32,8 @@ export const DashboardHeader = ({
                 <div className={styles.date}>
                     {date}
                 </div>
+
+                <Notification role={role} />
             </div>
         </div>
     );

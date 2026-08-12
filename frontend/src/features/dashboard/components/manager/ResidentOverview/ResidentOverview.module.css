@@ -1,0 +1,12 @@
+.section {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.section h2 {
+    margin: 0;
+}

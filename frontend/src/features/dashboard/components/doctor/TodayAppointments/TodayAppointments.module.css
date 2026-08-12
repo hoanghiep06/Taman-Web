@@ -1,0 +1,60 @@
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.header {
+    margin-bottom: 12px;
+}
+
+.header h2 {
+    margin: 0;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.item:last-child {
+    border-bottom: none;
+}
+
+.time {
+    color: #2563eb;
+    font-weight: 700;
+    width: 50px;
+    flex-shrink: 0;
+}
+
+.info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.info strong {
+    color: #0f172a;
+}
+
+.info span {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.emptyMessage {
+    color: #64748b;
+    text-align: center;
+    padding: 16px;
+    margin: 0;
+}

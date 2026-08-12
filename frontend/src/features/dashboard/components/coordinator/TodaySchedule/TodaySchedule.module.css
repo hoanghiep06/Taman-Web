@@ -1,0 +1,25 @@
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.card h3 {
+    margin: 0 0 12px;
+}
+
+.item {
+    display: flex;
+    gap: 20px;
+    padding: 13px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.item strong {
+    color: #2563eb;
+    min-width: 50px;
+}
+
+.item span {
+    color: #4b5563;
+}

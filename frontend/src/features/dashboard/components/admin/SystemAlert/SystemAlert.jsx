@@ -1,83 +1,54 @@
-import styles from "./SystemAlert.module.css";
+import { useState } from "react";
 
-const ALERTS = [
-    {
-        id: 1,
-        type: "danger",
-        title: "Tài khoản bị khóa",
-        message: "Nguyễn Văn B đã bị khóa",
-        time: "5 phút trước",
-    },
-    {
-        id: 2,
-        type: "info",
-        title: "Tài khoản mới",
-        message: "Trần Văn C vừa được tạo tài khoản",
-        time: "15 phút trước",
-    },
-    {
-        id: 3,
-        type: "warning",
-        title: "Chưa gán role",
-        message: "Tài khoản user_103 chưa được gán role",
-        time: "25 phút trước",
-    },
-    {
-        id: 4,
-        type: "danger",
-        title: "Đăng nhập bất thường",
-        message: "Tài khoản doctor01 đăng nhập từ nhiều thiết bị",
-        time: "40 phút trước",
-    },
-    {
-        id: 5,
-        type: "warning",
-        title: "Thay đổi role",
-        message: "Tài khoản staff_02 chuyển từ Caregiver → Coordinator",
-        time: "1 giờ trước",
-    },
-];
+import { Section, AlertItem, DetailFieldsModal, DetailListModal, LinkButton, CountBadge } from "../../ui/DashboardUI";
+import { ADMIN_ALERTS } from "../../../mock/dashboardMockData";
+
+import uiStyles from "../../ui/DashboardUI.module.css";
 
 export const SystemAlert = () => {
+    const [selectedAlert, setSelectedAlert] = useState(null);
+    const [showAllList, setShowAllList] = useState(false);
+
     return (
-        <div className={styles.card}>
-
-            <div className={styles.header}>
-                <div>
-                    <span>Cảnh báo</span>
-                    <h3>Cảnh báo hệ thống</h3>
+        <Section
+            title="Cảnh báo hệ thống"
+            onTitleClick={() => setShowAllList(true)}
+            right={
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <CountBadge count={ADMIN_ALERTS.length} />
+                    <LinkButton onClick={() => setShowAllList(true)}>Xem tất cả →</LinkButton>
                 </div>
-
-                <strong>{ALERTS.length}</strong>
-            </div>
-
-            <div className={styles.list}>
-
-                {ALERTS.map((alert) => (
-                    <div
-                        key={alert.id}
-                        className={`${styles.item} ${styles[alert.type]}`}
-                    >
-                        <div className={styles.icon}>
-                            {alert.type === "danger"
-                                ? "!"
-                                : alert.type === "warning"
-                                    ? "⚠"
-                                    : "i"}
-                        </div>
-
-                        <div>
-                            <strong>{alert.title}</strong>
-
-                            <p>{alert.message}</p>
-
-                            <span>{alert.time}</span>
-                        </div>
-                    </div>
+            }
+        >
+            <div className={uiStyles.alertList}>
+                {ADMIN_ALERTS.slice(0, 3).map((item) => (
+                    <AlertItem key={item.id} item={item} onClick={() => setSelectedAlert(item)} />
                 ))}
-
             </div>
 
-        </div>
+            {selectedAlert && (
+                <DetailFieldsModal
+                    title={selectedAlert.title}
+                    onClose={() => setSelectedAlert(null)}
+                    fields={[
+                        { label: "Nội dung", value: selectedAlert.message },
+                        { label: "Thời gian", value: selectedAlert.time },
+                    ]}
+                />
+            )}
+
+            {showAllList && (
+                <DetailListModal
+                    title="Toàn bộ cảnh báo hệ thống"
+                    items={ADMIN_ALERTS}
+                    onClose={() => setShowAllList(false)}
+                    onItemClick={(item) => {
+                        setSelectedAlert(item);
+                    }}
+                    renderPrimary={(item) => item.title}
+                    renderSecondary={(item) => `${item.message} · ${item.time}`}
+                />
+            )}
+        </Section>
     );
 };

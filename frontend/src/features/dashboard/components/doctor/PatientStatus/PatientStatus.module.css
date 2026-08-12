@@ -1,0 +1,107 @@
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.header h2 {
+    margin: 0;
+}
+
+.viewAllButton {
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 0;
+    white-space: nowrap;
+}
+
+.viewAllButton:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.name {
+    border: none;
+    background: transparent;
+    padding: 0;
+    color: #2563eb;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-align: left;
+}
+
+.name:hover {
+    color: #1d4ed8;
+}
+
+.itemRight {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0;
+}
+
+.condition {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.emptyMessage {
+    color: #64748b;
+    text-align: center;
+    padding: 16px;
+    margin: 0;
+}
+
+.profileName {
+    text-align: center;
+    margin: 12px 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .item {
+        align-items: flex-start;
+    }
+
+    .itemRight {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+    }
+
+    .condition {
+        text-align: right;
+    }
+}
+

@@ -1,0 +1,83 @@
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.header h2 {
+    margin: 0;
+}
+
+.viewAllButton {
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 4px 0;
+    white-space: nowrap;
+}
+
+.viewAllButton:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.tableWrapper {
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.table thead tr {
+    background-color: #f8fafc;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.table th,
+.table td {
+    padding: 10px 12px;
+}
+
+.table tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.caregiverCell {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.noteCell {
+    color: #475569;
+    font-size: 13px;
+}
+
+.timeCell {
+    color: #64748b;
+}
+
+.emptyCell {
+    padding: 20px;
+    text-align: center;
+    color: #64748b;
+}
+
+@media (max-width: 768px) {
+    .table {
+        font-size: 13px;
+    }
+}

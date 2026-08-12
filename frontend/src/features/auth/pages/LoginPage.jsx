@@ -31,7 +31,6 @@ export const LoginPage = () => {
       const userSession = login(response);
 
       if (userSession.mustChangePassword) navigate('/force-reset');
-      else if (userSession.role === 'Staff') navigate('/rooms');
       else navigate('/dashboard');
     } catch (err) {
       const newAttempts = failedAttempts + 1;

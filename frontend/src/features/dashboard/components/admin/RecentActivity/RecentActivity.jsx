@@ -1,66 +1,52 @@
+import { useState } from "react";
+
+import { Section, Modal } from "../../ui/DashboardUI";
+import { ADMIN_ACTIVITIES } from "../../../mock/dashboardMockData";
+
+import uiStyles from "../../ui/DashboardUI.module.css";
 import styles from "./RecentActivity.module.css";
 
-const ACTIVITIES = [
-    {
-        id: 1,
-        user: "Admin",
-        action: "Tạo tài khoản",
-        target: "Nguyễn Văn C",
-        time: "10 phút trước",
-    },
-    {
-        id: 2,
-        user: "Manager A",
-        action: "Cập nhật phòng",
-        target: "Phòng A102",
-        time: "25 phút trước",
-    },
-    {
-        id: 3,
-        user: "Doctor A",
-        action: "Cập nhật bệnh án",
-        target: "Nguyễn Văn A",
-        time: "40 phút trước",
-    },
-];
+const ActivityRow = ({ item }) => (
+    <div className={styles.activityItem}>
+        <div>
+            <strong>{item.user}</strong>
+
+            <p>
+                {item.action}: <b>{item.target}</b>
+            </p>
+        </div>
+
+        <time>{item.time}</time>
+    </div>
+);
 
 export const RecentActivity = () => {
+    const [showAll, setShowAll] = useState(false);
+
     return (
-        <div className={styles.card}>
-
-            <div className={styles.header}>
-                <div>
-                    <span>Audit</span>
-                    <h3>Hoạt động gần đây</h3>
-                </div>
-
-                <button>Xem tất cả</button>
-            </div>
-
-            <div>
-                {ACTIVITIES.map((activity) => (
-                    <div
-                        key={activity.id}
-                        className={styles.item}
-                    >
-                        <div className={styles.avatar}>
-                            {activity.user.charAt(0)}
-                        </div>
-
-                        <div>
-                            <strong>{activity.user}</strong>
-
-                            <p>
-                                {activity.action} —{" "}
-                                {activity.target}
-                            </p>
-
-                            <span>{activity.time}</span>
-                        </div>
-                    </div>
+        <Section
+            title="Hoạt động gần đây"
+            right={
+                <button type="button" className={uiStyles.linkButton} onClick={() => setShowAll(true)}>
+                    Xem tất cả →
+                </button>
+            }
+        >
+            <div className={styles.activityList}>
+                {ADMIN_ACTIVITIES.slice(0, 3).map((item) => (
+                    <ActivityRow key={item.id} item={item} />
                 ))}
             </div>
 
-        </div>
+            {showAll && (
+                <Modal title="Toàn bộ hoạt động / audit log" onClose={() => setShowAll(false)}>
+                    <div className={styles.activityList}>
+                        {ADMIN_ACTIVITIES.map((item) => (
+                            <ActivityRow key={item.id} item={item} />
+                        ))}
+                    </div>
+                </Modal>
+            )}
+        </Section>
     );
 };

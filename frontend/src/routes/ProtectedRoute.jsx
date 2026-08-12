@@ -8,23 +8,24 @@ export const ProtectedRoute = ({ children, allowedRoles }) => {
 
     // 1. Chưa đăng nhập => Trang Login
     if (!user) {
-        return <Navigate to="/login" state={{from: location}} replace />;
+        return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    // 2. Buộc đổi mật khẩu lần đầu (Sửa lại tên biến ở đây)
+    // 2. Bắt buộc đổi mật khẩu lần đầu
+    // Áp dụng cho TẤT CẢ role, không phân biệt Admin/Manager/Doctor/...
     if (user.mustChangePassword && location.pathname !== '/force-reset') {
         return <Navigate to="/force-reset" replace />;
     }
 
-    // 3. Đổi mật khẩu và cố tình quay lại trang Reset
+    // 3. Đã đổi mật khẩu nhưng cố truy cập lại trang force-reset
     if (!user.mustChangePassword && location.pathname === '/force-reset') {
-        return <Navigate to={user.role === 'Staff' ? '/rooms' : '/dashboard'} replace />;
+        return <Navigate to="/dashboard" replace />;
     }
 
-    // 4. Kiểm tra quyền hạn có khớp với Route
+    // 4. Kiểm tra quyền hạn
     if (allowedRoles && !allowedRoles.includes(user.role)) {
         return <Navigate to="/unauthorized" replace />;
     }
 
     return children;
-}
+};

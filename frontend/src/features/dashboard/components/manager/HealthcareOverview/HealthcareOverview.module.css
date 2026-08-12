@@ -1,0 +1,80 @@
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.header h2 {
+    margin: 0;
+}
+
+.viewAllButton {
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 4px 0;
+    white-space: nowrap;
+}
+
+.viewAllButton:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+}
+
+.item.danger {
+    border-left: 4px solid #dc2626;
+    background-color: #fef2f2;
+}
+
+.item.warning {
+    border-left: 4px solid #f59e0b;
+    background-color: #fffbeb;
+}
+
+.info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info strong {
+    color: #0f172a;
+}
+
+.info span {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.emptyMessage {
+    color: #64748b;
+    text-align: center;
+    padding: 16px;
+    margin: 0;
+}

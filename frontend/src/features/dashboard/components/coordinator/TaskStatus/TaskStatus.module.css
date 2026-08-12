@@ -1,0 +1,48 @@
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.item:last-child {
+    border-bottom: none;
+}
+
+.mainRow {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mainRow strong {
+    color: #0f172a;
+    font-size: 14px;
+}
+
+.mainRow span {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.subRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.time {
+    color: #2563eb;
+    font-weight: 700;
+    font-size: 13px;
+}

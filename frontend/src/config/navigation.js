@@ -198,7 +198,7 @@ export const SIDEBAR_MENU = {
 
     ],
 
-    [ROLES.CARE_STAFF]: [
+    [ROLES.CAREGIVER]: [
 
         {
             title: "Dashboard",

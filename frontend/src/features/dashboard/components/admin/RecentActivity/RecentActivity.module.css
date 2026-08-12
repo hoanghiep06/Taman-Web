@@ -1,68 +1,34 @@
-.card {
-    background: white;
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+.activityList {
+    display: flex;
+    flex-direction: column;
 }
 
-.header {
+.activityItem {
     display: flex;
+    align-items: flex-start;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
+    gap: 16px;
+    padding: 14px 8px;
+    border-bottom: 1px solid #f1f5f9;
 }
 
-.header span {
-    font-size: 12px;
-    color: #6b7280;
-}
-
-.header h3 {
-    margin: 4px 0;
-}
-
-.header button {
-    border: none;
-    background: transparent;
-    color: #2563eb;
-    cursor: pointer;
-}
-
-.item {
-    display: flex;
-    gap: 12px;
-    padding: 13px 0;
-    border-bottom: 1px solid #eee;
-}
-
-.item:last-child {
+.activityItem:last-child {
     border-bottom: none;
 }
 
-.avatar {
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #eff6ff;
-    color: #2563eb;
-    font-weight: 600;
+.activityItem strong {
+    color: #0f172a;
+    font-size: 14px;
 }
 
-.item strong {
+.activityItem p {
+    margin: 4px 0 0;
+    color: #64748b;
     font-size: 13px;
 }
 
-.item p {
-    margin: 3px 0;
-    font-size: 13px;
-    color: #4b5563;
-}
-
-.item span {
-    font-size: 11px;
-    color: #9ca3af;
+.activityItem time {
+    color: #94a3b8;
+    font-size: 12px;
+    white-space: nowrap;
 }

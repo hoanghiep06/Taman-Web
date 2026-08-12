@@ -19,6 +19,7 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const login = (tokenResponse) => {
+        console.log('DEBUG role từ backend:', JSON.stringify(tokenResponse.role));
         localStorage.setItem('access_token', tokenResponse.access_token);
         localStorage.setItem('user_role', tokenResponse.role);
         localStorage.setItem('must_change_password', String(tokenResponse.must_change_password))
