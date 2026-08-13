@@ -208,6 +208,7 @@ export const DetailListModal = ({
     filterKey = "",
     filterLabel = "",
     filterOptions = null,
+    getFilterLabel = null,
 }) => {
     const [search, setSearch] = useState("");
     const [filterValue, setFilterValue] = useState("all");
@@ -215,7 +216,7 @@ export const DetailListModal = ({
     const derivedFilterOptions =
         enableFilter && filterKey
             ? filterOptions ??
-              Array.from(new Set(items.map((item) => item[filterKey]).filter(Boolean)))
+              Array.from(new Set(items.map((item) => item[filterKey]).filter((v) => v !== undefined && v !== null)))
             : [];
 
     const filteredItems = items.filter((item) => {
@@ -227,7 +228,7 @@ export const DetailListModal = ({
         const matchesSearch = !search || searchTarget.includes(search.toLowerCase());
 
         const matchesFilter =
-            !enableFilter || filterValue === "all" || item[filterKey] === filterValue;
+            !enableFilter || filterValue === "all" || String(item[filterKey]) === String(filterValue);
 
         return matchesSearch && matchesFilter;
     });
@@ -255,7 +256,7 @@ export const DetailListModal = ({
                             <option value="all">Tất cả {filterLabel}</option>
                             {derivedFilterOptions.map((option) => (
                                 <option key={option} value={option}>
-                                    {option}
+                                    {getFilterLabel ? getFilterLabel(option) : option}
                                 </option>
                             ))}
                         </select>
