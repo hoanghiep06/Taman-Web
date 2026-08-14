@@ -1,34 +1,84 @@
-.activityList {
-    display: flex;
-    flex-direction: column;
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
 }
 
-.activityItem {
+.header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 14px 8px;
+    margin-bottom: 14px;
+}
+
+.header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #0f172a;
+}
+
+.viewAllButton {
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 4px 0;
+    white-space: nowrap;
+}
+
+.viewAllButton:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.loadingText,
+.errorText {
+    color: #64748b;
+    padding: 16px 0;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
     border-bottom: 1px solid #f1f5f9;
 }
 
-.activityItem:last-child {
+.item:last-child {
     border-bottom: none;
 }
 
-.activityItem strong {
+.info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.info strong {
     color: #0f172a;
     font-size: 14px;
 }
 
-.activityItem p {
-    margin: 4px 0 0;
+.info span {
     color: #64748b;
     font-size: 13px;
 }
 
-.activityItem time {
+.item small {
     color: #94a3b8;
     font-size: 12px;
     white-space: nowrap;
+    flex-shrink: 0;
 }

@@ -1,0 +1,41 @@
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #0f172a;
+}
+
+.viewAllButton {
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 4px 0;
+    white-space: nowrap;
+}
+
+.viewAllButton:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.loadingText,
+.errorText {
+    color: #64748b;
+    padding: 16px 0;
+}

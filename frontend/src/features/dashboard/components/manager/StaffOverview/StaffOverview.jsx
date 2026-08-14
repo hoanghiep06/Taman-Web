@@ -1,75 +1,89 @@
-import { useState } from "react";
-import { MANAGER_STAFF } from "../../../mock/dashboardMockData";
+import { useEffect, useState } from "react";
+import { dashboardApi } from "../../../api/dashboardApi";
 import { DetailListModal, StatusBadge } from "../../ui/DashboardUI";
 import styles from "./StaffOverview.module.css";
 
+const STAFF_ROLES = ["Doctor", "Caregiver", "Coordinator"];
+
 export const StaffOverview = () => {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [members, setMembers] = useState([]);
     const [showModal, setShowModal] = useState(false);
 
-    const members = MANAGER_STAFF.members || [];
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                const data = await dashboardApi.getUsers();
+                const staff = (data || [])
+                    .filter((u) => STAFF_ROLES.includes(u.role))
+                    .map((u) => ({
+                        ...u,
+                        statusLabel: u.is_active ? "Hoạt động" : "Không hoạt động",
+                    }));
+                setMembers(staff);
+            } catch (err) {
+                setError("Không thể tải danh sách nhân sự.");
+                console.error("StaffOverview fetch error:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
 
-    // Gắn nhãn trạng thái tiếng Việt để hiển thị + tìm kiếm/lọc
-    const membersWithLabel = members.map((m) => ({
-        ...m,
-        statusLabel: m.status === "active" ? "Hoạt động" : "Không hoạt động",
-    }));
+    const activeCount = members.filter((m) => m.is_active).length;
+    const inactiveCount = members.length - activeCount;
 
-    // 3 người đầu tiên theo thứ tự bảng chữ cái tên
-    const visibleMembers = [...membersWithLabel]
-        .sort((a, b) => a.name.localeCompare(b.name, "vi"))
+    const visibleMembers = [...members]
+        .sort((a, b) => a.full_name.localeCompare(b.full_name, "vi"))
         .slice(0, 3);
+
+    if (loading) return <section className={styles.card}><h2>Nhân sự</h2><p>Đang tải...</p></section>;
+    if (error) return <section className={styles.card}><h2>Nhân sự</h2><p>{error}</p></section>;
 
     return (
         <section className={styles.card}>
             <div className={styles.header}>
                 <div>
                     <h2>Nhân sự</h2>
-                    <strong>
-                        {members.length} người trong ca ({MANAGER_STAFF.shift})
-                    </strong>
+                    <strong>{members.length} nhân sự tại cơ sở</strong>
                 </div>
 
-                <button
-                    type="button"
-                    className={styles.viewAllButton}
-                    onClick={() => setShowModal(true)}
-                >
+                <button type="button" className={styles.viewAllButton} onClick={() => setShowModal(true)}>
                     Xem chi tiết
                 </button>
             </div>
 
             <div className={styles.summaryInfo}>
-                <span>Đang hoạt động: <strong>{MANAGER_STAFF.active}</strong></span>
-                <span>Không hoạt động: <strong>{MANAGER_STAFF.inactive}</strong></span>
+                <span>Đang hoạt động: <strong>{activeCount}</strong></span>
+                <span>Không hoạt động: <strong>{inactiveCount}</strong></span>
             </div>
 
             <div className={styles.list}>
-                {visibleMembers.map((m, idx) => (
-                    <div key={m.id ?? idx} className={styles.item}>
+                {visibleMembers.map((m) => (
+                    <div key={m.id} className={styles.item}>
                         <div className={styles.info}>
-                            <strong>{m.name}</strong>
+                            <strong>{m.full_name}</strong>
                             <span>{m.role}</span>
                         </div>
-
                         <StatusBadge status={m.statusLabel} />
                     </div>
                 ))}
-
-                {!visibleMembers.length && (
-                    <p className={styles.emptyMessage}>Không có nhân sự nào.</p>
-                )}
             </div>
 
             {showModal && (
                 <DetailListModal
-                    title={`Chi tiết ca trực: ${MANAGER_STAFF.shift} (${MANAGER_STAFF.start} - ${MANAGER_STAFF.end})`}
-                    items={membersWithLabel}
+                    title="Chi tiết nhân sự"
+                    items={members}
                     onClose={() => setShowModal(false)}
-                    renderPrimary={(m) => m.name}
+                    renderPrimary={(m) => m.full_name}
                     renderSecondary={(m) => `Vai trò: ${m.role}`}
                     renderBadge={(m) => <StatusBadge status={m.statusLabel} />}
                     enableSearch
-                    searchKeys={["statusLabel"]}
+                    searchKeys={["role", "statusLabel"]}
                     enableFilter
                     filterKey="statusLabel"
                     filterLabel="trạng thái"

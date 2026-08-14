@@ -1,102 +1,96 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import {
-    DOCTOR_STATS,
-    DOCTOR_ELDERS_LIST,
-    DOCTOR_APPOINTMENTS,
-    DOCTOR_NOTIFICATIONS,
-} from "../../../mock/dashboardMockData";
+import { dashboardApi } from "../../../api/dashboardApi";
 import { StatCard, DetailListModal, StatusBadge } from "../../ui/DashboardUI";
 
 import styles from "./DoctorOverview.module.css";
 
-/* Thứ tự ưu tiên tình trạng: Báo động -> Cần chú ý -> Ổn định */
-const STATUS_PRIORITY = {
-    "Báo động": 1,
-    "Cần chú ý": 2,
-    "Ổn định": 3,
-};
+const STATUS_PRIORITY = { "Báo động": 1, "Cần chú ý": 2, "Ổn định": 3 };
 
-const sortedElders = [...DOCTOR_ELDERS_LIST].sort(
-    (a, b) => (STATUS_PRIORITY[a.health] ?? 99) - (STATUS_PRIORITY[b.health] ?? 99)
-);
-
-const VIEW_CONFIG = {
-    elders: {
-        title: "Danh sách cụ",
-        data: sortedElders,
-        renderPrimary: (p) => p.name,
-        renderSecondary: (p) => `Phòng ${p.room} · ${p.note}`,
-        renderBadge: (p) => <StatusBadge status={p.health} />,
-        enableSearch: true,
-        searchKeys: ["room", "health"],
-        enableFilter: true,
-        filterKey: "health",
-        filterLabel: "tình trạng",
-        filterOptions: ["Báo động", "Cần chú ý", "Ổn định"],
-    },
-    appointments: {
-        title: "Cuộc hẹn hôm nay",
-        data: DOCTOR_APPOINTMENTS,
-        renderPrimary: (a) => a.elder,
-        renderSecondary: (a) => `${a.time} · Phòng ${a.room} · ${a.type}`,
-    },
-    notifications: {
-        title: "Thông báo",
-        data: DOCTOR_NOTIFICATIONS,
-        renderPrimary: (n) => n.title,
-        renderSecondary: (n) => `${n.detail} · ${n.time}`,
-    },
+const getHealthStatus = (elder) => {
+    if (elder.has_abnormal_vital) return "Báo động";
+    if ((elder.doctor_attention_reasons || []).length > 0) return "Cần chú ý";
+    return "Ổn định";
 };
 
 export const DoctorOverview = () => {
-    // "elders" | "appointments" | "notifications" | null
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [elders, setElders] = useState([]);
     const [activeView, setActiveView] = useState(null);
 
-    const config = activeView ? VIEW_CONFIG[activeView] : null;
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                const data = await dashboardApi.getDoctorDashboard();
+                setElders(data || []);
+            } catch (err) {
+                setError("Không thể tải dữ liệu tổng quan.");
+                console.error("DoctorOverview fetch error:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    const eldersWithStatus = elders
+        .map((e) => ({ ...e, health: getHealthStatus(e) }))
+        .sort((a, b) => STATUS_PRIORITY[a.health] - STATUS_PRIORITY[b.health]);
+
+    const attentionElders = eldersWithStatus.filter((e) => e.health !== "Ổn định");
+
+    if (loading) return <p>Đang tải...</p>;
+    if (error) return <p>{error}</p>;
 
     return (
         <>
             <div className={styles.grid}>
                 <StatCard
                     title="Tổng số cụ"
-                    value={DOCTOR_STATS.elders}
+                    value={elders.length}
                     icon="👴"
                     color="#2563eb"
                     onClick={() => setActiveView("elders")}
                 />
 
                 <StatCard
-                    title="Cuộc hẹn hôm nay"
-                    value={DOCTOR_STATS.appointments}
-                    icon="📅"
-                    color="#059669"
-                    onClick={() => setActiveView("appointments")}
-                />
-
-                <StatCard
-                    title="Thông báo"
-                    value={DOCTOR_STATS.notifications}
+                    title="Cần chú ý"
+                    value={attentionElders.length}
                     icon="🔔"
-                    color="#ea580c"
-                    onClick={() => setActiveView("notifications")}
+                    color="#dc2626"
+                    onClick={() => setActiveView("attention")}
                 />
             </div>
 
-            {config && (
+            {activeView === "elders" && (
                 <DetailListModal
-                    title={config.title}
-                    items={config.data}
+                    title="Danh sách cụ"
+                    items={eldersWithStatus}
                     onClose={() => setActiveView(null)}
-                    renderPrimary={config.renderPrimary}
-                    renderSecondary={config.renderSecondary}
-                    renderBadge={config.renderBadge}
-                    enableSearch={config.enableSearch}
-                    searchKeys={config.searchKeys}
-                    enableFilter={config.enableFilter}
-                    filterKey={config.filterKey}
-                    filterLabel={config.filterLabel}
-                    filterOptions={config.filterOptions}
+                    renderPrimary={(p) => p.elder_name}
+                    renderSecondary={(p) => `Phòng ${p.room_number}`}
+                    renderBadge={(p) => <StatusBadge status={p.health} />}
+                    enableSearch
+                    searchKeys={["room_number", "health"]}
+                    enableFilter
+                    filterKey="health"
+                    filterLabel="tình trạng"
+                    filterOptions={["Báo động", "Cần chú ý", "Ổn định"]}
+                />
+            )}
+
+            {activeView === "attention" && (
+                <DetailListModal
+                    title="Cụ cần chú ý"
+                    items={attentionElders}
+                    onClose={() => setActiveView(null)}
+                    renderPrimary={(p) => p.elder_name}
+                    renderSecondary={(p) => `Phòng ${p.room_number} · ${(p.doctor_attention_reasons || []).join(", ")}`}
+                    renderBadge={(p) => <StatusBadge status={p.health} />}
+                    enableSearch
                 />
             )}
         </>
