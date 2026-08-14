@@ -1,3 +1,4 @@
+# seed_data.py
 import os
 import sys
 from pathlib import Path
@@ -54,7 +55,7 @@ def seed_everything():
             db.refresh(fac2)
             print("✅ 1. Khởi tạo 2 Cơ sở (CS 1 - Thủ Đức & CS 2 - Bình Chánh).")
 
-        # Tạo Phân khu chuẩn "Khu A", "Khu B", "Khu C"
+        # Tạo Phân khu chuẩn "A", "B", "C"
         if db.query(models.Zone).count() == 0:
             zones = [
                 # Cơ sở 1 - Thủ Đức
@@ -94,22 +95,20 @@ def seed_everything():
 
         r101 = db.query(models.Room).filter(models.Room.room_number == "101").first()
         r102 = db.query(models.Room).filter(models.Room.room_number == "102").first()
+        r201 = db.query(models.Room).filter(models.Room.room_number == "201").first()
         r301 = db.query(models.Room).filter(models.Room.room_number == "301").first()
         r401 = db.query(models.Room).filter(models.Room.room_number == "401").first()
 
         # =========================================================================
         # 3. TÀI KHOẢN VAI TRÒ (USERS)
         # =========================================================================
-        # Admin / Bác sĩ Toàn viện (facility_id = None)
         admin = get_or_create_user(db, "admin", "Quản Trị Viên Tối Cao", "Admin")
         doctor_all = get_or_create_user(db, "doctor01", "BS. Nguyễn Minh Đức (Toàn Viện)", "Doctor", facility_id=None)
 
-        # Nhân sự CS 1 - Thủ Đức
         manager_cs1 = get_or_create_user(db, "manager01", "Trần Văn Quản Lý (CS1)", "Manager", fac1.id)
         coordinator_cs1 = get_or_create_user(db, "coordinator01", "Lê Anh Thư (ĐIỀU PHỐI CS1)", "Coordinator", fac1.id)
         caregiver_cs1 = get_or_create_user(db, "caregiver01", "Đình Điều Điều (NVCS CS1)", "Caregiver", fac1.id)
 
-        # Nhân sự CS 2 - Bình Chánh
         manager_cs2 = get_or_create_user(db, "manager02", "Phạm Hoàng Quản Lý (CS2)", "Manager", fac2.id)
         coordinator_cs2 = get_or_create_user(db, "coordinator02", "Nguyễn Văn Điệp (ĐIỀU PHỐI CS2)", "Coordinator", fac2.id)
         caregiver_cs2 = get_or_create_user(db, "caregiver02", "Vũ Thị Trâm (NVCS CS2)", "Caregiver", fac2.id)
@@ -124,31 +123,26 @@ def seed_everything():
         cu_long = db.query(models.Elder).filter(models.Elder.full_name.like("%Long%")).first()
         if not cu_long:
             elders = [
-                # CS 1 - Cụ Long: Báo hiệu CỜ ĐỎ sáng nay (8/8) + Quá hạn cân (10/07/2026)
                 models.Elder(
                     full_name="Cụ Nguyễn Văn Long", room_id=r101.id, gender="Nam",
                     date_of_birth=date(1945, 3, 20), admission_date=date(2025, 1, 10),
                     last_weight_date=date(2026, 7, 10)
                 ),
-                # CS 1 - Cụ Mai: Sức khỏe bình thường
                 models.Elder(
                     full_name="Cụ Lê Thị Mai", room_id=r101.id, gender="Nữ",
                     date_of_birth=date(1950, 8, 15), admission_date=date(2025, 2, 1),
                     last_weight_date=date(2026, 7, 20)
                 ),
-                # CS 1 - Cụ Khánh: Sinh hiệu ổn định
                 models.Elder(
                     full_name="Cụ Trần Bản Khánh", room_id=r102.id, gender="Nam",
                     date_of_birth=date(1942, 11, 5), admission_date=date(2025, 3, 12),
                     last_weight_date=date(2026, 8, 2)
                 ),
-                # CS 2 - Cụ Hà: Khỏe mạnh
                 models.Elder(
                     full_name="Cụ Bùi Thị Hà", room_id=r301.id, gender="Nữ",
                     date_of_birth=date(1948, 5, 12), admission_date=date(2025, 4, 1),
                     last_weight_date=date(2026, 8, 5)
                 ),
-                # CS 2 - Cụ Như: Cụ mới nhập viện chưa từng cân -> Báo đỏ quá hạn cân
                 models.Elder(
                     full_name="Cụ Phạm Quỳnh Như", room_id=r401.id, gender="Nữ",
                     date_of_birth=date(1952, 9, 30), admission_date=date(2026, 8, 1),
@@ -164,7 +158,6 @@ def seed_everything():
         cu_khanh = db.query(models.Elder).filter(models.Elder.full_name.like("%Khánh%")).first()
         cu_ha = db.query(models.Elder).filter(models.Elder.full_name.like("%Hà%")).first()
         cu_nhu = db.query(models.Elder).filter(models.Elder.full_name.like("%Như%")).first()
-        
 
         # Hồ sơ y tế
         if db.query(models.ElderHealthProfile).count() == 0:
@@ -177,19 +170,14 @@ def seed_everything():
             db.commit()
 
         # =========================================================================
-        # 5. SINH HIỆU (VITALS) - 2 NGÀY GẦN NHẤT
+        # 5. SINH HIỆU (VITALS)
         # =========================================================================
         if db.query(models.VitalSignRecord).count() == 0:
             vitals = [
-                # 06/08/2026
                 models.VitalSignRecord(elder_id=cu_long.id, measured_by=caregiver_cs1.id, measured_at=datetime(2026, 8, 6, 8, 30), shift_type="Sang", bp_systolic=130, bp_diastolic=85, pulse=78, spo2=97.0, temperature=36.6, is_abnormal=False),
                 models.VitalSignRecord(elder_id=cu_khanh.id, measured_by=caregiver_cs1.id, measured_at=datetime(2026, 8, 6, 9, 00), shift_type="Sang", bp_systolic=145, bp_diastolic=90, pulse=85, spo2=94.0, temperature=37.6, notes="Cụ hơi sốt nhẹ", is_abnormal=True),
-                
-                # 07/08/2026
                 models.VitalSignRecord(elder_id=cu_long.id, measured_by=caregiver_cs1.id, measured_at=datetime(2026, 8, 7, 8, 15), shift_type="Sang", bp_systolic=135, bp_diastolic=85, pulse=80, spo2=96.0, temperature=36.8, is_abnormal=False),
                 models.VitalSignRecord(elder_id=cu_mai.id, measured_by=caregiver_cs1.id, measured_at=datetime(2026, 8, 7, 8, 30), shift_type="Sang", bp_systolic=120, bp_diastolic=80, pulse=72, spo2=98.0, temperature=36.5, is_abnormal=False),
-
-                # 08/08/2026 (CỜ ĐỎ SÁNG NAY HỒI 7H45)
                 models.VitalSignRecord(
                     elder_id=cu_long.id, measured_by=caregiver_cs1.id, measured_at=datetime(2026, 8, 8, 7, 45), shift_type="Sang",
                     bp_systolic=165, bp_diastolic=98, pulse=92, spo2=93.0, temperature=38.2,
@@ -199,7 +187,6 @@ def seed_everything():
                     elder_id=cu_mai.id, measured_by=caregiver_cs1.id, measured_at=datetime(2026, 8, 8, 7, 50), shift_type="Sang",
                     bp_systolic=118, bp_diastolic=78, pulse=70, spo2=98.5, temperature=36.4, notes="Khỏe mạnh, ăn hết suất", is_abnormal=False
                 ),
-
                 models.VitalSignRecord(
                     elder_id=cu_ha.id, measured_by=caregiver_cs2.id, measured_at=datetime(2026, 8, 8, 8, 10), shift_type="Sang",
                     bp_systolic=125, bp_diastolic=82, pulse=76, spo2=97.5, temperature=36.6, notes="Sức khỏe bình thường", is_abnormal=False
@@ -208,7 +195,6 @@ def seed_everything():
                     elder_id=cu_nhu.id, measured_by=caregiver_cs2.id, measured_at=datetime(2026, 8, 8, 8, 20), shift_type="Sang",
                     bp_systolic=150, bp_diastolic=95, pulse=88, spo2=92.5, temperature=37.9, notes="Mới vào viện, SpO2 hơi thấp", is_abnormal=True
                 )
-
             ]
             db.add_all(vitals)
             db.commit()
@@ -240,8 +226,6 @@ def seed_everything():
                     facility_id=fac1.id, coordinator_id=coordinator_cs1.id, shift_date=date(2026, 8, 7), shift_type="Toi",
                     highlighted_issues="Cụ Long ho hắng về đêm.", elder_descriptions="1. Cụ Long: Ho hắng nhẹ, SpO2 95%.\n2. Cụ Mai: Ngủ ngon.", handover_notes="Dặn ca sáng 08/08 đo SpO2 khẩn cấp cho Cụ Long."
                 ),
-
-
                 models.ShiftReport(
                     facility_id=fac2.id, coordinator_id=coordinator_cs2.id, shift_date=date(2026, 8, 7), shift_type="Sang",
                     highlighted_issues="Tiếp nhận Cụ Như vào phòng 401.", elder_descriptions="1. Cụ Như: Tinh thần tốt nhưng chưa đo cân nặng.", handover_notes="Xếp lịch đo cân nặng và kiểm tra chỉ số ban đầu."
@@ -250,7 +234,6 @@ def seed_everything():
                     facility_id=fac2.id, coordinator_id=coordinator_cs2.id, shift_date=date(2026, 8, 7), shift_type="Toi",
                     highlighted_issues="Tình hình Cơ sở 2 ổn định.", elder_descriptions="1. Cụ Hà: Ngủ ngon.\n2. Cụ Như: Nghỉ ngơi tốt.", handover_notes="Bàn giao ca sáng 08/08 bình thường."
                 )
-
             ]
             db.add_all(reports)
             db.commit()
@@ -263,7 +246,7 @@ def seed_everything():
                     target_id=str(report_last.id).strip(),
                     ip_address="172.18.0.4",
                     created_at=datetime(2026, 8, 7, 23, 15),
-                    payload="Ghi chú cũ: [Cụ Long ho nhẹ] -> Ghi chú mới: [Dặn ca sáng 08/08 đo SpO2 khẩn cấp cho Cụ Long]"
+                    payload='{"old": {"elder_descriptions": "1. Cụ Long ho nhẹ", "handover_notes": "Theo dõi"}, "new": {"elder_descriptions": "1. Cụ Long ho nhiều, SpO2 93%", "handover_notes": "Báo Bác sĩ"}}'
                 )
                 db.add(audit)
                 db.commit()
@@ -275,8 +258,92 @@ def seed_everything():
         # =========================================================================
         existing_shift = db.query(models.Shift).filter(models.Shift.shift_date == ANCHOR_DATE, models.Shift.shift_type == "Sang").first()
         if not existing_shift:
-            db.add(models.Shift(shift_date=ANCHOR_DATE, shift_type="Sang", status="Open"))
+            existing_shift = models.Shift(shift_date=ANCHOR_DATE, shift_type="Sang", status="Open")
+            db.add(existing_shift)
             db.commit()
+            db.refresh(existing_shift)
+
+        # =========================================================================
+        # 8. QUẢN LÝ TÀI SẢN & TƯ TRANG (ASSETS) & NHẬT KÝ KIỂM KÊ PATROL
+        # =========================================================================
+        if db.query(models.Asset).count() == 0:
+            assets = [
+                # ---------------- PHÒNG 101 (CS1 - Khu A: Cụ Long, Cụ Mai) ----------------
+                # Cụ Nguyễn Văn Long
+                models.Asset(asset_name="Xe lăn điện Omron", room_id=r101.id, elder_id=cu_long.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Máy đo đường huyết Omron", room_id=r101.id, elder_id=cu_long.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Kính lão gọng titan", room_id=r101.id, elder_id=cu_long.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Dép xốp đi trong nhà", room_id=r101.id, elder_id=cu_long.id, requires_inspection=False, status="Active"),
+                models.Asset(asset_name="Bàn chải đánh răng cá nhân", room_id=r101.id, elder_id=cu_long.id, requires_inspection=False, status="Active"),
+
+                # Cụ Lê Thị Mai
+                models.Asset(asset_name="Máy trợ thính Phonak", room_id=r101.id, elder_id=cu_mai.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Khung tập đi Inox", room_id=r101.id, elder_id=cu_mai.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Lược chải tóc gốm", room_id=r101.id, elder_id=cu_mai.id, requires_inspection=False, status="Active"),
+
+                # Tài sản chung Phòng 101 (elder_id = None)
+                models.Asset(asset_name="Tivi Samsung 43 inch", room_id=r101.id, elder_id=None, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Tủ lạnh Panasonic 150L", room_id=r101.id, elder_id=None, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Quạt hơi nước Kangtai", room_id=r101.id, elder_id=None, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Bộ ấm trà gốm sứ", room_id=r101.id, elder_id=None, requires_inspection=False, status="Active"),
+
+                # ---------------- PHÒNG 102 (CS1 - Khu A: Cụ Khánh) ----------------
+                models.Asset(asset_name="Máy tạo Oxy họng cắm", room_id=r102.id, elder_id=cu_khanh.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Đồng hồ định vị GPS", room_id=r102.id, elder_id=cu_khanh.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Radio đài cassette nhỏ", room_id=r102.id, elder_id=cu_khanh.id, requires_inspection=False, status="Active"),
+                # Tài sản chung Phòng 102
+                models.Asset(asset_name="Điều hòa Daikin 12000 BTU", room_id=r102.id, elder_id=None, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Thảm lau chân chống trượt", room_id=r102.id, elder_id=None, requires_inspection=False, status="Active"),
+
+                # ---------------- PHÒNG 301 (CS2 - Khu A: Cụ Hà) ----------------
+                models.Asset(asset_name="Xe đẩy tay gấp gọn", room_id=r301.id, elder_id=cu_ha.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Máy massage chân hồng ngoại", room_id=r301.id, elder_id=cu_ha.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Gối ôm thảo dược", room_id=r301.id, elder_id=cu_ha.id, requires_inspection=False, status="Active"),
+                # Tài sản chung Phòng 301
+                models.Asset(asset_name="Tivi Sony 50 inch VIP", room_id=r301.id, elder_id=None, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Tủ lạnh LG Inverter 200L", room_id=r301.id, elder_id=None, requires_inspection=True, status="Active"),
+
+                # ---------------- PHÒNG 401 (CS2 - Khu B: Cụ Như) ----------------
+                models.Asset(asset_name="Đệm khí chống loét", room_id=r401.id, elder_id=cu_nhu.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Máy đo huyết áp bắp tay", room_id=r401.id, elder_id=cu_nhu.id, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Bộ quần áo pijama lụa", room_id=r401.id, elder_id=cu_nhu.id, requires_inspection=False, status="Active"),
+                # Tài sản chung Phòng 401
+                models.Asset(asset_name="Điều hòa Panasonic 9000 BTU", room_id=r401.id, elder_id=None, requires_inspection=True, status="Active"),
+                models.Asset(asset_name="Đèn ngủ cảm ứng", room_id=r401.id, elder_id=None, requires_inspection=False, status="Active"),
+            ]
+            db.add_all(assets)
+            db.commit()
+            print("✅ 8a. Nạp 24 món Tài sản & Tư trang (có đồ kiểm & đồ không kiểm).")
+
+        # Nạp bản ghi mẫu Đi tuần (Inspection Log) cho Ca hiện tại để hiệu ứng nước ngập % tiến độ hiển thị sinh động
+        if db.query(models.InspectionLog).count() == 0 and existing_shift:
+            # Lấy vài tài sản kiểm kê của Phòng 101
+            asset_xelan = db.query(models.Asset).filter(models.Asset.asset_name.like("%Xe lăn%")).first()
+            asset_mayduonghuyet = db.query(models.Asset).filter(models.Asset.asset_name.like("%đường huyết%")).first()
+            asset_tivi101 = db.query(models.Asset).filter(models.Asset.asset_name.like("%Tivi Samsung%")).first()
+            asset_trothinh = db.query(models.Asset).filter(models.Asset.asset_name.like("%trợ thính%")).first()
+
+            inspection_logs = []
+            if asset_xelan:
+                inspection_logs.append(models.InspectionLog(
+                    shift_id=existing_shift.id, user_id=caregiver_cs1.id, asset_id=asset_xelan.id,
+                    status="Xanh", image_url="https://drive.google.com/sample_xelan.jpg", note="Xe lăn sạch sẽ, hoạt động tốt", version=1, is_latest=True
+                ))
+            if asset_mayduonghuyet:
+                inspection_logs.append(models.InspectionLog(
+                    shift_id=existing_shift.id, user_id=caregiver_cs1.id, asset_id=asset_mayduonghuyet.id,
+                    status="Vang", image_url=None, note="Không tìm thấy trong hộc tủ, đã nhờ NVCS hỏi lại người thân", version=1, is_latest=True
+                ))
+            if asset_tivi101:
+                inspection_logs.append(models.InspectionLog(
+                    shift_id=existing_shift.id, user_id=caregiver_cs1.id, asset_id=asset_tivi101.id,
+                    status="Xanh", image_url="https://drive.google.com/sample_tivi.jpg", note="Tivi hoạt động bình thường", version=1, is_latest=True
+                ))
+
+            if inspection_logs:
+                db.add_all(inspection_logs)
+                db.commit()
+                print("✅ 8b. Nạp Nhật ký đi tuần mẫu (InspectionLogs) cho Ca hiện tại.")
 
         print("\n🎉 HỆ THỐNG ĐÃ NẠP XONG DATA MẪU CHUẨN HOÀN HẢO!")
 

@@ -118,6 +118,19 @@ const VitalPage = lazy(() =>
 );
 
 
+const RoomSelectionPage = lazy(() =>
+    import("./features/patrol/pages/RoomSelectionPage").then((m) => ({
+        default: m.RoomSelectionPage,
+    }))
+);
+
+const PatrolSessionPage = lazy(() =>
+    import("./features/patrol/pages/PatrolSessionPage").then((m) => ({
+        default: m.PatrolSessionPage,
+    }))
+);
+
+
 // const IncidentPage = lazy(() =>
 //     import("./features/incidents/pages/IncidentPage").then((m) => ({
 //         default: m.IncidentPage,
@@ -198,6 +211,9 @@ function App() {
                             <Route path="/prescriptions" element={<PrescriptionPage />} />
                             <Route path="/medicines" element={<MedicinePage />} />
                             <Route path="/diseases" element={<DiseasePage />} />
+
+                            <Route path="/patrol" element={<RoomSelectionPage />} />
+                            <Route path="/patrol/room/:roomId" element={<PatrolSessionPage />} />
                             
                             <Route path="/vitals" element={<VitalPage />} />
                             {/* <Route path="/incident" element={<IncidentPage />} /> */}

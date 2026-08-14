@@ -1,0 +1,100 @@
+.imageContainer {
+  width: 100%;
+  min-height: 200px;
+  background: #0F172A; /* Nền tối để làm nổi bật ảnh minh chứng */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-md, 12px);
+  margin: 0;
+  overflow: hidden;
+}
+
+/* ── TRẠNG THÁI LOADING ── */
+.loadingState {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: var(--text-sm, 14px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+/* ── TRẠNG THÁI LỖI ── */
+.errorState {
+  color: #FCA5A5; /* Màu đỏ nhạt cho nền tối */
+  font-size: var(--text-sm, 14px);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+}
+
+/* ── ẢNH HIỂN THỊ ── */
+.previewImage {
+  width: 100%;
+  height: auto;
+  max-height: 400px;
+  object-fit: contain;
+  display: block;
+}
+
+/* ── CỤM NÚT BÊN DƯỚI ── */
+.footerActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  margin-top: 16px;
+}
+
+.copyLinkBtn {
+  width: 100%;
+  padding: var(--space-3, 12px);
+  background: var(--color-primary, #1F6F78);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md, 12px);
+  font-size: var(--text-sm, 14px);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.copyLinkBtn:hover:not(:disabled) {
+  background: var(--color-primary-dark, #163F44);
+}
+
+.copyLinkBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.closeTextBtn {
+  width: 100%;
+  padding: var(--space-3, 12px);
+  background: var(--color-bg, #F4F6F9);
+  color: var(--color-text-heading, #0F172A);
+  border: none;
+  border-radius: var(--radius-md, 12px);
+  font-size: var(--text-sm, 14px);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.closeTextBtn:hover {
+  background: #E2E8F0;
+}

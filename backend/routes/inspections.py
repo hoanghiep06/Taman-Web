@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone, time
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Request, Query, Response
 from fastapi.responses import StreamingResponse
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session, joinedload
@@ -41,7 +41,8 @@ def image_processing_worker(
     log_ids: list,
     user_full_name: str,
     room_number: str,
-    asset_names: list
+    asset_names: list,
+    facility_name: str
 ):
     """
     Worker ngầm chịu lỗi tốt: Nén ảnh, đóng dấu Watermark và upload lên Google Drive.
@@ -109,6 +110,7 @@ def image_processing_worker(
             try:
                 image_url = upload_image_to_drive(
                     file_bytes=processed_image_bytes,
+                    facility_name=facility_name,
                     shift_date=shift_date_str,
                     shift_type=shift_type_str,
                     room_number=room_number,
@@ -435,8 +437,15 @@ async def upload_multi_assets_image(
                 raise HTTPException(status_code=400, detail=f"Tài sản '{asset.asset_name}' vừa chụp. Vui lòng đợi {seconds_left}s.")
 
     first_asset = asset_items[0][0]
-    room = db.query(Room).filter(Room.id == first_asset.room_id).first()
+    room = db.query(Room).options(
+        joinedload(Room.zone).joinedload(Zone.facility)
+    ).filter(Room.id == first_asset.room_id).first()
+
     room_number = room.room_number if room else "Chung"
+
+    facility_name = "Chưa_Xác_Định"
+    if room and getattr(room, "zone", None) and getattr(room.zone, "facility", None):
+        facility_name = room.zone.facility.name
 
     created_log_ids = []
     for asset_id in asset_ids:
@@ -471,7 +480,8 @@ async def upload_multi_assets_image(
         log_ids=created_log_ids,
         user_full_name=current_user.full_name,
         room_number=room_number,
-        asset_names=drive_asset_names
+        asset_names=drive_asset_names,
+        facility_name=facility_name
     )
 
     return {
@@ -613,6 +623,29 @@ def get_shift_progress(
     }
 
 
+def resolve_public_base_url(request: Request) -> str:
+    """
+    Tự động lấy đúng domain public mà client (trình duyệt/điện thoại) đang gọi vào,
+    KHÔNG cần cấu hình tay PUBLIC_API_URL cho từng môi trường (Render, LAN, localhost...).
+
+    Ưu tiên đọc:
+    1. X-Forwarded-Proto / X-Forwarded-Host: chuẩn header mà reverse proxy (Render, Nginx...)
+       dùng để báo lại domain/scheme GỐC mà client thực sự gõ vào, trước khi proxy forward
+       request nội bộ (nên không bị dính hostname nội bộ kiểu 'taman-backend:5000').
+    2. Nếu không có (chạy trực tiếp, không qua proxy) -> dùng header Host chuẩn của HTTP request,
+       đây chính là domain/IP mà client vừa gõ vào thanh địa chỉ / gọi API
+       (VD: điện thoại gọi qua LAN thì Host sẽ tự là '192.168.1.15:5000').
+    3. Fallback cuối cùng: request.url (Starlette tự parse).
+    """
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+
+    scheme = forwarded_proto or request.url.scheme
+    host = forwarded_host or request.headers.get("host") or request.url.netloc
+
+    return f"{scheme}://{host}"
+
+
 # =========================================================================
 # 7. XEM ẢNH MINH CHỨNG (LINK BẢO MẬT TẠM THỜI 15 PHÚT)
 # =========================================================================
@@ -628,46 +661,87 @@ def get_inspection_image(
     current_user: User = Depends(get_current_user)
 ):
     log = db.query(InspectionLog).filter(InspectionLog.id == log_id).first()
-    if not log or not log.image_url:
-        raise HTTPException(status_code=404, detail="Không tìm thấy hình ảnh đính kèm!")
+    if not log:
+        raise HTTPException(status_code=404, detail="Không tìm thấy nhật ký kiểm kê này!")
+
+    # 🌟 NẾU ẢNH ĐANG ĐƯỢC WORKER NGẦM XỬ LÝ -> THÔNG BÁO RÕ RÀNG CHO FE
+    if log.status == "Dang_Xu_Ly":
+        raise HTTPException(
+            status_code=400, 
+            detail="Ảnh đang trong quá trình nén và đẩy lên Google Drive. Vui lòng đợi vài giây và thử lại!"
+        )
+
+    if log.status == "Loi_Upload":
+        raise HTTPException(
+            status_code=400, 
+            detail="Quá trình upload ảnh bị lỗi. Vui lòng chọn tài sản và chụp lại!"
+        )
+
+    if not log.image_url:
+        raise HTTPException(status_code=404, detail="Bản ghi kiểm kê này không có hình ảnh đính kèm!")
 
     expiration = datetime.now(timezone.utc) + timedelta(minutes=TIME_WATCH_IMG)
     token_payload = {"log_id": log.id, "exp": expiration}
     signed_token = jwt.encode(token_payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
-    base_url = str(request.base_url).rstrip("/")
+    # 🌟 Tự động lấy domain public từ chính request, không cần set PUBLIC_API_URL tay
+    # cho từng môi trường -> deploy đâu cũng chạy đúng, không cần đụng config.
+    base_url = resolve_public_base_url(request).rstrip("/")
     temporary_url = f"{base_url}/api/inspections/public-view/{signed_token}"
 
+    # 🔒 KHÔNG trả link Drive gốc (log.image_url) ra ngoài API.
+    # Nếu trả kèm, FE/DevTools sẽ thấy được link Drive thật và có thể mở trực tiếp,
+    # bỏ qua hoàn toàn lớp bảo mật token JWT 15 phút bên dưới.
     return {
         "shareable_url": temporary_url,
-        "expires_in_seconds": TIME_WATCH_IMG * 60,
-        "image_url": log.image_url
+        "expires_in_seconds": TIME_WATCH_IMG * 60
     }
 
 
 @router.get(
     "/public-view/{token}",
     summary="[Public] Stream ảnh minh chứng công khai",
-    description="Endpoint mở hoàn toàn (Không cần Bearer Token) dùng để stream trực tiếp binary ảnh từ Google Drive về thẻ <img> trên giao diện Web/Mobile."
+    description="Endpoint mở hoàn toàn (Không cần Bearer Token) dùng để trả về binary ảnh từ Google Drive về thẻ <img> trên giao diện Web/Mobile."
 )
 def public_stream_inspection_image(token: str, db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
         log_id = payload.get("log_id")
-        if not log_id: raise ValueError()
+        if not log_id: 
+            raise ValueError()
     except JWTError:
-        raise HTTPException(status_code=403, detail="Đường dẫn hết hạn hoặc không hợp lệ!")
+        raise HTTPException(status_code=403, detail="Đường dẫn xem ảnh đã hết hạn hoặc không hợp lệ!")
 
     log = db.query(InspectionLog).filter(InspectionLog.id == log_id).first()
     if not log or not log.image_url:
-        raise HTTPException(status_code=404, detail="Hình ảnh không tồn tại!")
+        raise HTTPException(status_code=404, detail="Hình ảnh không tồn tại trên hệ thống!")
+
+    file_id = extract_file_id_from_url(log.image_url)
+    if not file_id:
+        raise HTTPException(
+            status_code=400, 
+            detail="Liên kết ảnh không tồn tại trên Google Drive thực tế."
+        )
 
     try:
-        file_id = extract_file_id_from_url(log.image_url)
+        # Download byte từ Google Drive
         image_bytes = download_file_bytes_from_drive(file_id)
-        return StreamingResponse(io.BytesIO(image_bytes), media_type="image/jpeg")
+        
+        # 🔥 BẮT BUỘC PHẢI DÙNG Response (Thay vì StreamingResponse) 
+        # Để FastAPI tự đếm Content-Length giúp trình duyệt nhận diện và render được ảnh
+        return Response(
+            content=image_bytes, 
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi trích xuất ảnh bảo mật: {str(e)}")
+        logging.error(f"[STREAM IMAGE ERROR]: Lỗi tải ảnh Drive (file_id={file_id}): {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Không thể kết nối Google Drive để tải ảnh: {str(e)}"
+        )
 
 
 
@@ -733,4 +807,3 @@ def get_inspection_history(
         },
         "history_data": result_list
     }
-

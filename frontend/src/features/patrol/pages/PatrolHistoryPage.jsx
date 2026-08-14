@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { patrolApi } from '../api/patrolApi';
 import { fetchAndBuildImageUrl } from '../../../utils/imageUtils';
-import { ImagePreviewModal } from '../components/ImagePreviewModal';
+import { ImagePreviewModal } from '../components/Modals/ImagePreviewModal';
 import { StatusBadge } from '../../../components/StatusBadge';
 import styles from './PatrolHistoryPage.module.css';
 

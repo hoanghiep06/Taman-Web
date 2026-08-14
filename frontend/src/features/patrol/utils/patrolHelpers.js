@@ -9,7 +9,7 @@ export const groupAssetsByElder = (assets = []) => {
     if (asset.elder_id) {
       if (!elderGroups[asset.elder_id]) {
         elderGroups[asset.elder_id] = {
-          title: `Cụ: ${asset.elder_name || `ID ${asset.elder_id}`}`,
+          title: `${asset.elder_name || `ID ${asset.elder_id}`}`,
           isElder: true,
           assets: []
         };

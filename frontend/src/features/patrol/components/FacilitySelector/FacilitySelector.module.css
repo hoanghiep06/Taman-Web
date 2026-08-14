@@ -1,0 +1,41 @@
+.tabContainer {
+  display: flex;
+  gap: var(--space-2, 8px);
+  overflow-x: auto;
+  padding-bottom: var(--space-2, 8px); /* Tạo khoảng thở phía dưới */
+  margin-top: var(--space-3, 12px);
+  -webkit-overflow-scrolling: touch;
+  
+  /* Ẩn thanh cuộn (scrollbar) để giao diện sạch sẽ trên Mobile */
+  scrollbar-width: none; /* Dành cho Firefox */
+}
+
+.tabContainer::-webkit-scrollbar {
+  display: none; /* Dành cho Chrome, Safari, Edge */
+}
+
+.tabBtn {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill, 999px); /* Bo tròn dạng viên thuốc */
+  border: 1.5px solid var(--color-border, #E2E8F0);
+  background: var(--color-surfaceMuted, #F1F5F9);
+  color: var(--color-text-muted, #64748B);
+  font-size: var(--text-sm, 13px);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tabBtn:hover {
+  background: #E2E8F0;
+}
+
+.tabBtn.active {
+  background: var(--color-primary, #1F6F78);
+  color: #FFFFFF;
+  border-color: var(--color-primary, #1F6F78);
+  box-shadow: 0 4px 10px rgba(31, 111, 120, 0.2);
+} 

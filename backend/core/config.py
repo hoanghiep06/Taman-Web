@@ -1,9 +1,9 @@
-
 from pathlib import Path
 from dotenv import load_dotenv
 import os
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
 
 class Settings:
     # ====================================================
@@ -43,6 +43,8 @@ class Settings:
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "") # Dán chuỗi GOCSPX-... vào .env cho biến này!
     GOOGLE_REFRESH_TOKEN: str = os.getenv("GOOGLE_REFRESH_TOKEN", "")
+
+
 
 # Khởi tạo đối tượng settings toàn cục
 settings = Settings()

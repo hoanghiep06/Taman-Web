@@ -3,7 +3,7 @@ import re
 import pytz
 import logging
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import List, Optional
 
 from core.config import settings
@@ -15,7 +15,6 @@ from googleapiclient.http import MediaIoBaseUpload
 SCOPES = ['https://www.googleapis.com/auth/drive']
 ROOT_FOLDER_ID = settings.GOOGLE_DRIVE_ROOT_FOLDER_ID
 
-# Khởi tạo đối tượng Credentials tĩnh
 creds = Credentials(
     token=None,
     refresh_token=settings.GOOGLE_REFRESH_TOKEN,
@@ -70,7 +69,7 @@ def get_or_create_folder(folder_name: str, parent_id: str) -> str:
 # =========================================================================
 def upload_image_to_drive(
     file_bytes: bytes, 
-    facility_name: str,       # VD: "Co_So_1_Thu_Duc"
+    facility_name: str, 
     shift_date: str, 
     shift_type: str, 
     room_number: str, 
@@ -79,11 +78,10 @@ def upload_image_to_drive(
     """Đẩy ảnh kiểm kê đi tuần vào đúng thư mục Cơ sở / InspectionImage trên Cloud."""
     service = get_drive_service()
 
-    # 1. Định vị Thư mục Cơ sở & Thư mục InspectionImage bên trong
     facility_folder_id = get_or_create_folder(sanitize_filename(facility_name), ROOT_FOLDER_ID)
     inspection_base_id = get_or_create_folder("InspectionImage", facility_folder_id)
 
-    # 2. Xây dựng cấu trúc cây bên trong InspectionImage (Ngày -> Ca -> Phòng)
+    # Đặt tên folder ngày dạng YYYYMMDD (VD: 20260814)
     date_folder_name = str(shift_date).replace("-", "")
     shift_folder_name = f"Ca_{shift_type}"
     room_folder_name = f"Phong_{room_number}"
@@ -92,7 +90,6 @@ def upload_image_to_drive(
     shift_folder_id = get_or_create_folder(shift_folder_name, date_folder_id)
     room_folder_id = get_or_create_folder(room_folder_name, shift_folder_id)
 
-    # 3. Chuẩn hóa tên tệp và Upload
     sanitized_names = [sanitize_filename(name) for name in asset_names]
     assets_prefix = "__".join(sanitized_names)
     if len(assets_prefix) > 150:
@@ -108,10 +105,9 @@ def upload_image_to_drive(
 
 
 # =========================================================================
-# 2. TẢI ẢNH TOA THUỐC (LƯU VĨNH VIỄN VÀO: Tâm An -> [Tên Cơ Sở] -> Health -> Prescriptions)
+# 2. TẢI ẢNH TOA THUỐC & FILE BACKUP
 # =========================================================================
 def upload_prescription_to_drive(file_bytes: bytes, facility_name: str, elder_name: str) -> str:
-    """Đẩy file ảnh Toa thuốc vào thư mục Cơ sở / Health / Prescriptions (KHÔNG BỊ XÓA TỰ ĐỘNG)."""
     service = get_drive_service()
 
     facility_folder_id = get_or_create_folder(sanitize_filename(facility_name), ROOT_FOLDER_ID)
@@ -129,53 +125,39 @@ def upload_prescription_to_drive(file_bytes: bytes, facility_name: str, elder_na
 
 
 def upload_backup_file_to_drive(file_bytes: bytes, filename: str) -> str:
-    """
-    Đẩy các file Excel lưu trữ (AuditLog, InspectionLog, LoginLog) 
-    vào thư mục /tmp trên Google Drive để giải phóng bộ nhớ DB.
-    """
     service = get_drive_service()
-
-    # Tạo hoặc lấy thư mục 'tmp' ở thư mục gốc Google Drive
     tmp_base_id = get_or_create_folder("tmp", ROOT_FOLDER_ID)
     
-    file_metadata = {
-        'name': filename,
-        'parents': [tmp_base_id]
-    }
-    
+    file_metadata = {'name': filename, 'parents': [tmp_base_id]}
     media = MediaIoBaseUpload(
         io.BytesIO(file_bytes), 
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
         resumable=True
     )
-    
-    file = service.files().create(
-        body=file_metadata, 
-        media_body=media, 
-        fields='id, webViewLink'
-    ).execute()
-    
+    file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
     return file.get('webViewLink')
 
 
 # =========================================================================
-# 3. 🔥 DỌN DẸP TỰ ĐỘNG (CHỈ XÓA TRONG /InspectionImage CỦA CÁC CƠ SỞ)
+# 3. 🌟 DỌN DẸP TỰ ĐỘNG CHUẨN XÁC (PARSE TRỰC TIẾP TÊN THƯ MỤC YYYYMMDD)
 # =========================================================================
 def cleanup_old_drive_folders(days: int = 7):
     """
-    CRONJOB DỌN DẸP BỘ NHỚ AN TOÀN:
-    - CHỈ QUÉT VÀ XÓA các thư mục con trong 'InspectionImage' cũ hơn X ngày.
-    - TỰ ĐỘNG BỎ QUA toàn bộ các thư mục 'Health', 'Prescriptions', Excel, Backup, v.v.
+    CRONJOB DỌN DẸP AN TOÀN TUYỆT ĐỐI:
+    - Parse tên thư mục 'YYYYMMDD' thành đối tượng Date thực tế để so sánh.
+    - Không phụ thuộc vào modifiedTime của Google Drive -> Triệt tiêu 100% lỗi xóa nhầm / sót rác.
+    - Tự động bỏ qua các thư mục hệ thống: 'backup', 'tmp', 'Health'...
     """
     try:
         service = get_drive_service()
         tz = pytz.timezone('Asia/Ho_Chi_Minh')
-        cutoff_date = datetime.now(tz) - timedelta(days=days)
-        cutoff_date_str = cutoff_date.isoformat()
+        
+        # Mốc ngày hết hạn (Ví dụ: Hôm nay 14/08/2026 -> Cutoff là ngày 07/08/2026)
+        cutoff_date = (datetime.now(tz) - timedelta(days=days)).date()
 
-        logging.info(f"[DRIVE CLEANUP]: Bắt đầu quét dẹp ảnh kiểm kê cũ hơn {days} ngày (trước {cutoff_date_str})...")
+        logging.info(f"[DRIVE CLEANUP]: Bắt đầu quét dẹp ảnh kiểm kê tạo trước ngày {cutoff_date.strftime('%Y-%m-%d')}...")
 
-        # 1. Truy vấn lấy tất cả các thư mục con trong Root (Danh sách các Cơ sở)
+        # 1. Lấy tất cả thư mục ở Root (Bỏ qua 'backup' và 'tmp')
         facility_query = f"'{ROOT_FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
         facility_results = service.files().list(q=facility_query, fields="files(id, name)").execute()
         facilities = facility_results.get('files', [])
@@ -183,31 +165,41 @@ def cleanup_old_drive_folders(days: int = 7):
         deleted_count = 0
 
         for fac in facilities:
-            if fac['name'] == "backup":
-                # Bỏ qua thư mục backup vĩnh viễn ở gốc
+            # Bỏ qua các thư mục không phải Cơ sở
+            if fac['name'] in ["backup", "tmp"]:
                 continue
 
-            # 2. Tìm thư mục 'InspectionImage' bên trong Cơ sở này
+            # 2. Tìm TẤT CẢ các thư mục 'InspectionImage' trong Cơ sở này
             insp_query = f"name='InspectionImage' and '{fac['id']}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
             insp_results = service.files().list(q=insp_query, fields="files(id, name)").execute()
             insp_folders = insp_results.get('files', [])
 
-            if not insp_folders:
-                continue
+            for insp_folder in insp_folders:
+                insp_folder_id = insp_folder['id']
 
-            insp_folder_id = insp_folders[0]['id']
+                # 3. Lấy tất cả thư mục con (các thư mục ngày dạng YYYYMMDD) trong InspectionImage
+                date_folders_query = f"'{insp_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+                date_results = service.files().list(q=date_folders_query, fields="files(id, name)").execute()
+                date_folders = date_results.get('files', [])
 
-            # 3. Tìm các thư mục ngày (YYYYMMDD) bên trong InspectionImage cũ hơn cutoff_date
-            old_folders_query = f"modifiedTime < '{cutoff_date_str}' and '{insp_folder_id}' in parents and trashed=false"
-            old_results = service.files().list(q=old_folders_query, fields="files(id, name)").execute()
-            old_items = old_results.get('files', [])
+                for df in date_folders:
+                    folder_name = df['name']
 
-            for item in old_items:
-                service.files().delete(fileId=item['id']).execute()
-                deleted_count += 1
-                logging.info(f"[DRIVE CLEANUP SUCCESS]: Đã xóa thư mục ảnh kiểm kê cũ: {fac['name']}/InspectionImage/{item['name']}")
+                    # Kiểm tra nếu tên thư mục khớp định dạng YYYYMMDD (8 chữ số)
+                    if len(folder_name) == 8 and folder_name.isdigit():
+                        try:
+                            # Parse chuỗi "20260806" -> date(2026, 8, 6)
+                            folder_date = datetime.strptime(folder_name, "%Y%m%d").date()
 
-        logging.info(f"[DRIVE CLEANUP COMPLETE]: Hoàn tất. Tổng số thư mục InspectionImage đã dọn dẹp: {deleted_count}")
+                            # So sánh trực tiếp mốc ngày
+                            if folder_date < cutoff_date:
+                                service.files().delete(fileId=df['id']).execute()
+                                deleted_count += 1
+                                logging.info(f"[DRIVE CLEANUP SUCCESS]: Đã xóa thư mục ảnh quá hạn: {fac['name']}/InspectionImage/{folder_name}")
+                        except ValueError:
+                            continue
+
+        logging.info(f"[DRIVE CLEANUP COMPLETE]: Hoàn tất dọn dẹp. Tổng số thư mục ngày đã xóa: {deleted_count}")
 
     except Exception as e:
         logging.error(f"[DRIVE CLEANUP ERROR]: Lỗi khi dọn dẹp ảnh kiểm kê: {e}")
@@ -217,10 +209,31 @@ def cleanup_old_drive_folders(days: int = 7):
 # 4. TRUY XUẤT & XỬ LÝ FILE PHỤ TRỢ (PUBLIC VIEW & BACKUP)
 # =========================================================================
 def extract_file_id_from_url(url: str) -> Optional[str]:
-    match = re.search(r'/d/([^/]+)', url)
-    if match: return match.group(1)
-    match = re.search(r'id=([^&]+)', url)
-    if match: return match.group(1)
+    """
+    TRÍCH XUẤT GOOGLE DRIVE FILE ID THÔNG MINH & AN TOÀN:
+    - Hỗ trợ URL dạng /d/FILE_ID/view
+    - Hỗ trợ URL dạng id=FILE_ID
+    - Hỗ trợ chuỗi File ID trực tiếp (không chứa http/slashes)
+    """
+    if not url:
+        return None
+    
+    url_str = str(url).strip()
+
+    # 1. Trường hợp lưu trực tiếp File ID (ví dụ: '1a2b3c4d5e6f7g...')
+    if re.match(r'^[a-zA-Z0-9_-]{20,}$', url_str):
+        return url_str
+
+    # 2. Định dạng chuẩn: .../file/d/FILE_ID/view...
+    match = re.search(r'/d/([a-zA-Z0-9_-]+)', url_str)
+    if match:
+        return match.group(1)
+
+    # 3. Định dạng query parameter: ...?id=FILE_ID...
+    match = re.search(r'id=([a-zA-Z0-9_-]+)', url_str)
+    if match:
+        return match.group(1)
+
     return None
 
 
@@ -230,22 +243,16 @@ def download_file_bytes_from_drive(file_id: str) -> bytes:
 
 
 def upload_db_backup_to_drive(file_bytes: bytes, filename: str) -> str:
-    """Đẩy file sao lưu SQL (.sql) bảo mật vào thư mục /backup vĩnh viễn ở Root."""
     service = get_drive_service()
-
     backup_base_id = get_or_create_folder("backup", ROOT_FOLDER_ID)
-    file_metadata = {
-        'name': filename,
-        'parents': [backup_base_id]
-    }
+    file_metadata = {'name': filename, 'parents': [backup_base_id]}
     
     media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype='text/plain', resumable=True)
     file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
     return file.get('webViewLink')
 
 
-def cleanup_old_db_backups(keep_count: int = 10 ):
-    """Chính sách giữ lại đúng N bản sao lưu Database SQL mới nhất trong thư mục /backup."""
+def cleanup_old_db_backups(keep_count: int = 10):
     try:
         service = get_drive_service()
         backup_base_id = get_or_create_folder("backup", ROOT_FOLDER_ID)
@@ -275,7 +282,6 @@ def cleanup_old_db_backups(keep_count: int = 10 ):
 
 
 def list_db_backups_from_drive():
-    """Truy vấn danh sách toàn bộ file backup (.sql) trên Cloud[cite: 10]."""
     service = get_drive_service()
     backup_base_id = get_or_create_folder("backup", ROOT_FOLDER_ID)
     query = f"'{backup_base_id}' in parents and trashed = false"

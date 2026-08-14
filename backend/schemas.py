@@ -459,6 +459,11 @@ class AssetResponse(AssetBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+class AssetStatsResponse(BaseModel):
+    scope: dict                         # Ngữ cảnh lọc (facility_id, zone_id, room_id, elder_id)
+    active_shift: Optional[dict] = None # Thông tin ca trực live hiện tại (shift_id, date, type)
+    counts: dict                        # Bảng tổng hợp số lượng sản phẩm
+    progress: dict                      # Bảng tính % tiến độ hoàn thành
 
 # ==========================================
 # NGHIỆP VỤ KIỂM KÊ (SHIFTS & LOGS)
@@ -497,6 +502,26 @@ class RoomPatrolProgressResponse(BaseModel):
     total_assets: int
     inspected_count: int
     is_completed: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RoomPatrolProgressResponse(BaseModel):
+    room_id: int
+    room_number: str
+    description: Optional[str] = None
+    zone_id: int
+    zone_name: str
+    facility_id: int
+    facility_name: str
+    
+    total_assets: int                   # Tổng số món đồ Active trong phòng
+    total_required_inspection: int      # Số đồ BẮT BUỘC kiểm kê (cần chụp ảnh/báo mất)
+    total_optional_inspection: int      # Số đồ dùng lặt vặt (không bắt buộc kiểm)
+    inspected_count: int                # Số đồ bắt buộc ĐÃ KIỂM KÊ trong ca live
+    uninspected_count: int              # Số đồ bắt buộc CHƯA KIỂM KÊ
+    progress_percentage: float          # % Tiến độ (% nước ngập cho UI)
+    is_completed: bool                  # True nếu phòng đã kiểm kê xong 100%
 
     model_config = ConfigDict(from_attributes=True)
 

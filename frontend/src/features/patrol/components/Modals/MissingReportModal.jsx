@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Modal } from '../../../components/Modal';
+import { Modal } from '../../../../components/Modal';
 import styles from './MissingReportModal.module.css';
 
 export const MissingReportModal = ({ isOpen, onClose, onSubmit }) => {

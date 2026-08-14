@@ -1,14 +1,24 @@
 import React from 'react';
 import { AssetItemCard } from './AssetItemCard';
-import { getFinalStatus } from '../utils/patrolHelpers';
 import styles from './ElderSection.module.css';
 
-export const ElderSection = ({ group, selectedAssetIds, uploadStatus, onToggleSelect, onOpenMissing, onOpenPreview }) => {
+export const ElderSection = ({ 
+  group, 
+  selectedAssetIds, 
+  uploadStatus, 
+  onToggleSelect, 
+  onOpenMissing, 
+  onOpenPreview 
+}) => {
   const total = group.assets.length;
+  
+  // Tính toán số lượng đã kiểm kê xong (Màu Xanh: Đã nộp ảnh, Màu Vàng: Đã báo mất)
   const done = group.assets.filter((a) => {
-    const s = getFinalStatus(a, uploadStatus);
-    return s === 'Success' || s === 'Missing';
+    // Ưu tiên trạng thái upload local trước (Optimistic UI), nếu không có thì lấy status gốc từ BE
+    const finalStatus = uploadStatus[a.asset_id] || a.current_status;
+    return ['Xanh', 'Success', 'Vang', 'Missing'].includes(finalStatus);
   }).length;
+  
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
   const isDone = total > 0 && done === total;
 

@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session, joinedload
 from openpyxl import load_workbook
 
 from database import get_db
-from models import Asset, Elder, Room, Zone, Facility, User
-from schemas import AssetCreate, AssetResponse, RoleType
+from models import Asset, Elder, Room, Zone, Facility, User, Shift, InspectionLog
+from schemas import AssetCreate, AssetResponse, RoleType, AssetStatsResponse, RoomPatrolProgressResponse
 from core.dependencies import require_care_team, get_current_user
 
 router = APIRouter(prefix="/api/admin/assets", tags=["5. [Quản lý] Danh Mục Tư Trang & Tài Sản"])
@@ -82,6 +82,228 @@ def get_all_assets(
         )
 
     return results
+
+
+
+
+
+# assets.py
+from models import Shift, InspectionLog # Nhớ import thêm 2 model này ở đầu file nếu chưa có
+
+@router.get(
+    "/stats",
+    response_model=AssetStatsResponse,
+    summary="Thống kê Số lượng & Tiến độ Kiểm kê Tài sản (Cơ sở / Phân khu / Phòng)",
+    description="""
+    **API THÔNG MINH LẤY TỔNG SỐ LƯỢNG & TIẾN ĐỘ KIỂM KÊ:**
+    - Cho phép truyền linh hoạt bộ lọc: `facility_id`, `zone_id`, `room_id`, `elder_id`.
+    - Trả về chi tiết:
+      + `total_assets`: Tổng số đồ active.
+      + `total_required_inspection`: Tổng đồ BẮT BUỘC kiểm kê (cần chụp ảnh/báo mất).
+      + `total_optional`: Tổng đồ dùng lặt vặt (không bắt buộc kiểm kê).
+      + `inspected_required`: Số đồ bắt buộc ĐÃ KIỂM KÊ trong ca live hiện tại.
+      + `inspected_total`: Tổng số đồ ĐÃ KIỂM KÊ trong ca live.
+      + `required_percentage`: % tiến độ đi tuần ca trực (% nước ngập).
+      + `is_completed`: `True` nếu đã kiểm kê xong 100% đồ bắt buộc.
+    """
+)
+def get_asset_stats_and_progress(
+    facility_id: Optional[int] = Query(None, description="Lọc theo ID Cơ sở"),
+    zone_id: Optional[int] = Query(None, description="Lọc theo ID Phân khu (Khu A, B, C...)"),
+    room_id: Optional[int] = Query(None, description="Lọc theo ID Phòng đích danh"),
+    elder_id: Optional[int] = Query(None, description="Lọc theo ID Cụ già sở hữu"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 1. Phân quyền đa cơ sở
+    target_facility_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+
+    # 2. Base Query danh mục Tài sản Active
+    asset_query = db.query(Asset).join(Room).join(Zone)
+
+    if target_facility_id is not None:
+        asset_query = asset_query.filter(Zone.facility_id == target_facility_id)
+    if zone_id:
+        asset_query = asset_query.filter(Room.zone_id == zone_id)
+    if room_id:
+        asset_query = asset_query.filter(Asset.room_id == room_id)
+    if elder_id:
+        asset_query = asset_query.filter(Asset.elder_id == elder_id)
+
+    all_assets = asset_query.filter(Asset.status == "Active").all()
+    all_asset_ids = [a.id for a in all_assets]
+
+    # Phân loại tổng sản phẩm
+    total_assets = len(all_assets)
+    required_assets = [a for a in all_assets if a.requires_inspection]
+    optional_assets = [a for a in all_assets if not a.requires_inspection]
+
+    total_required = len(required_assets)
+    total_optional = len(optional_assets)
+    required_asset_ids = set(a.id for a in required_assets)
+
+    # 3. Xác định Ca trực Live đang Mở (Shift.status == 'Open')
+    active_shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.id.desc()).first()
+
+    inspected_required_count = 0
+    inspected_total_count = 0
+    shift_info = None
+
+    if active_shift:
+        shift_info = {
+            "shift_id": active_shift.id,
+            "shift_date": str(active_shift.shift_date),
+            "shift_type": active_shift.shift_type
+        }
+
+        # Query các log kiểm kê mới nhất trong ca này có trạng thái hợp lệ ('Xanh' - Đã nộp, 'Vang' - Báo mất)
+        logs = db.query(InspectionLog).filter(
+            InspectionLog.shift_id == active_shift.id,
+            InspectionLog.is_latest == True,
+            InspectionLog.asset_id.in_(all_asset_ids),
+            InspectionLog.status.in_(["Xanh", "Vang", "Success", "Missing"])
+        ).all()
+
+        inspected_asset_ids = set(l.asset_id for l in logs)
+        inspected_total_count = len(inspected_asset_ids)
+        
+        # Đếm số đồ BẮT BUỘC kiểm kê đã hoàn thành
+        inspected_required_count = len(inspected_asset_ids.intersection(required_asset_ids))
+
+    # 4. Tính toán phần trăm tiến độ
+    uninspected_required = max(0, total_required - inspected_required_count)
+    
+    if total_required > 0:
+        required_pct = min(100.0, round((inspected_required_count / total_required) * 100, 1))
+        is_completed = (inspected_required_count >= total_required)
+    else:
+        # Nếu phòng không có đồ bắt buộc kiểm kê -> Coi như hoàn thành 100%
+        required_pct = 100.0
+        is_completed = True
+
+    total_pct = min(100.0, round((inspected_total_count / total_assets) * 100, 1)) if total_assets > 0 else 100.0
+
+    return {
+        "scope": {
+            "facility_id": target_facility_id,
+            "zone_id": zone_id,
+            "room_id": room_id,
+            "elder_id": elder_id
+        },
+        "active_shift": shift_info,
+        "counts": {
+            "total_assets": total_assets,                         # Tổng toàn bộ đồ
+            "total_required_inspection": total_required,          # Tổng đồ BẮT BUỘC kiểm
+            "total_optional_inspection": total_optional,          # Tổng đồ KHÔNG BẮT BUỘC kiểm
+            "inspected_required": inspected_required_count,       # Đồ bắt buộc ĐÃ KIỂM KÊ
+            "uninspected_required": uninspected_required,         # Đồ bắt buộc CHƯA KIỂM KÊ
+            "inspected_total": inspected_total_count              # Tổng đồ đã kiểm kê (cả 2 loại)
+        },
+        "progress": {
+            "required_percentage": required_pct,                  # % tiến độ đồ cần kiểm (Dùng cho hũ nước ngập UI)
+            "total_percentage": total_pct,                        # % tiến độ toàn bộ đồ
+            "is_completed": is_completed                          # True khi đã xong 100%
+        }
+    }
+
+
+
+
+@router.get(
+    "/rooms-progress",
+    response_model=List[RoomPatrolProgressResponse],
+    summary="Lấy danh sách Tất cả các Phòng kèm Tiến độ Kiểm kê (Cấp Cơ sở / Phân khu)",
+    description="""
+    **ENDPOINT TỔNG HỢP TIẾN ĐỘ ĐI TUẦN CHO TỪNG PHÒNG:**
+    - Trả về danh sách từng Phòng trong Cơ sở.
+    - Mỗi phòng đính kèm chi tiết: `total_required_inspection`, `inspected_count`, `% tiến độ nước ngập`, `is_completed`.
+    - **Phân quyền Đa cơ sở:** Nhân viên/Manager thuộc Cơ sở nào sẽ tự động lấy danh sách phòng của Cơ sở đó. Admin/Manager Vùng có thể truyền `facility_id` hoặc `zone_id` tùy chọn.
+    """
+)
+def get_rooms_patrol_progress(
+    facility_id: Optional[int] = Query(None, description="ID Cơ sở (Dành cho Admin/Manager Vùng)"),
+    zone_id: Optional[int] = Query(None, description="Lọc riêng theo Phân khu (Khu A, Khu B...)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 1. Phân quyền truy cập Cơ sở
+    target_facility_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+
+    # 2. Query danh sách Phòng kèm Phân khu và Cơ sở
+    room_query = db.query(Room).join(Zone, Room.zone_id == Zone.id).join(Facility, Zone.facility_id == Facility.id)
+
+    if target_facility_id is not None:
+        room_query = room_query.filter(Zone.facility_id == target_facility_id)
+    if zone_id:
+        room_query = room_query.filter(Room.zone_id == zone_id)
+
+    rooms = room_query.order_by(Facility.id, Zone.name, Room.room_number).all()
+
+    # 3. Lấy Ca trực Live đang Mở (Shift.status == 'Open')
+    active_shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.id.desc()).first()
+
+    # 4. Tính toán số liệu từng phòng
+    results = []
+
+    for room in rooms:
+        zone = room.zone
+        facility = zone.facility if zone else None
+
+        # Lấy toàn bộ tài sản Active trong phòng
+        assets = db.query(Asset).filter(Asset.room_id == room.id, Asset.status == "Active").all()
+        
+        total_assets = len(assets)
+        required_assets = [a for a in assets if a.requires_inspection]
+        optional_assets = [a for a in assets if not a.requires_inspection]
+
+        total_required = len(required_assets)
+        total_optional = len(optional_assets)
+        required_asset_ids = set(a.id for a in required_assets)
+
+        inspected_count = 0
+
+        # Nếu có ca trực live đang Mở -> Đếm số đồ bắt buộc đã được chụp ảnh/báo mất
+        if active_shift and total_required > 0:
+            logs = db.query(InspectionLog).filter(
+                InspectionLog.shift_id == active_shift.id,
+                InspectionLog.is_latest == True,
+                InspectionLog.asset_id.in_(list(required_asset_ids)),
+                InspectionLog.status.in_(["Xanh", "Vang", "Success", "Missing"])
+            ).all()
+
+            inspected_count = len(set(l.asset_id for l in logs))
+
+        uninspected_count = max(0, total_required - inspected_count)
+
+        # Tính phần trăm % nước ngập
+        if total_required > 0:
+            progress_pct = min(100.0, round((inspected_count / total_required) * 100, 1))
+            is_completed = (inspected_count >= total_required)
+        else:
+            progress_pct = 100.0
+            is_completed = True  # Phòng trống hoặc không có đồ bắt buộc kiểm kê -> Coi như Xong
+
+        results.append(
+            RoomPatrolProgressResponse(
+                room_id=room.id,
+                room_number=room.room_number,
+                description=room.description,
+                zone_id=zone.id if zone else 0,
+                zone_name=zone.name if zone else "N/A",
+                facility_id=facility.id if facility else 0,
+                facility_name=facility.name if facility else "N/A",
+                total_assets=total_assets,
+                total_required_inspection=total_required,
+                total_optional_inspection=total_optional,
+                inspected_count=inspected_count,
+                uninspected_count=uninspected_count,
+                progress_percentage=progress_pct,
+                is_completed=is_completed
+            )
+        )
+
+    return results
+
 
 # =========================================================================
 # 2. CREATE: KHAI BÁO TƯ TRANG / TÀI SẢN MỚI

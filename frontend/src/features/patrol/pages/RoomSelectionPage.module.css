@@ -1,0 +1,327 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background: var(--color-bg, #F4F6F9);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* ── HEADER & FACILITY SELECTOR ── */
+.header {
+  padding: var(--space-5, 20px) var(--space-5, 20px) var(--space-3, 12px);
+  flex-shrink: 0;
+  background: var(--color-surface, #FFFFFF);
+  border-bottom: 1px solid var(--color-border, #E2E8F0);
+}
+
+.title {
+  font-size: var(--text-xl, 20px);
+  font-weight: 800;
+  color: var(--color-text-heading, #0F172A);
+  margin: 0 0 2px;
+}
+
+.subtitle {
+  font-size: var(--text-sm, 14px);
+  color: var(--color-text-muted, #64748B);
+  margin: 0 0 12px;
+}
+
+/* ── SCROLL AREA ── */
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4, 16px);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── GRID ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3, 12px);
+}
+
+/* ── ROOM CARD ── */
+.roomCard {
+  position: relative;
+  background: var(--color-surface, #FFFFFF);
+  border-radius: var(--radius-lg, 14px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.05));
+  overflow: hidden;
+  border: 1.5px solid var(--color-border, #E2E8F0);
+  aspect-ratio: 1 / 0.9;
+  min-height: 110px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.roomCard:active {
+  transform: scale(0.97);
+}
+
+.roomCard:hover {
+  box-shadow: var(--shadow-md, 0 2px 10px rgba(15, 23, 42, 0.06));
+  border-color: #BAE6FD;
+}
+
+/* ── WATER FILL EFFECT ── */
+.waterFill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  transition: height 0.7s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s;
+  z-index: 1;
+  opacity: 0.45;
+}
+
+/* ── CARD CONTENT ── */
+.cardContent {
+  position: absolute;
+  inset: 0;
+  padding: var(--space-3, 12px) var(--space-2, 8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 2;
+}
+
+.roomBadge {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.zoneDesc {
+  font-size: 11px;
+  color: #475569;
+  margin: 0;
+  text-align: center;
+  font-weight: 600;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 var(--space-1, 4px);
+}
+
+.progressText {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 999px;
+  color: var(--color-text-heading, #0F172A);
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
+
+/* ── LOADING / EMPTY STATES ── */
+.loadingState,
+.emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-muted, #64748B);
+  font-size: var(--text-sm, 14px);
+  font-weight: 500;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+/* ── TABLET & LARGER SCREENS ── */
+@media (min-width: 640px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+
+/* ── FACILITY GROUPING ── */
+.facilityGroup {
+  margin-bottom: var(--space-6, 24px);
+}
+
+.facilityTitle {
+  font-size: var(--text-base, 16px);
+  font-weight: 800;
+  color: var(--color-primary-dark, #163F44);
+  margin-bottom: var(--space-3, 12px);
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--color-border, #E2E8F0);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── CARD TYPOGRAPHY ── */
+.roomBadge {
+  font-size: 26px; /* Chỉnh to lên một chút để nổi bật C102 */
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.roomDesc {
+  font-size: 12px;
+  color: var(--color-text-muted, #64748B);
+  margin: 0;
+  text-align: center;
+  font-weight: 500;
+  width: 100%;
+  
+  /* Cắt chữ nếu mô tả quá dài (hiện tối đa 2 dòng) */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding: 0 var(--space-1, 4px);
+  line-height: 1.4;
+}
+
+.progressText {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  color: var(--color-text-heading, #0F172A);
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); /* Thêm bóng đổ nhẹ để chữ nổi bật trên nền nước */
+}
+
+
+.stickyTop {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-surface, #FFFFFF);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* ── TOOLBAR (SEARCH & FILTER) ── */
+.toolbar {
+  padding: 0 var(--space-5, 20px) var(--space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.searchWrapper {
+  display: flex;
+  align-items: center;
+  background: var(--color-bg, #F4F6F9);
+  border: 1px solid var(--color-border, #E2E8F0);
+  border-radius: var(--radius-md, 12px);
+  padding: 8px 12px;
+  transition: border-color 0.2s;
+}
+
+.searchWrapper:focus-within {
+  border-color: var(--color-primary, #1F6F78);
+  box-shadow: 0 0 0 2px rgba(31, 111, 120, 0.1);
+}
+
+.searchIcon {
+  font-size: 16px;
+  color: var(--color-text-muted, #64748B);
+  margin-right: 8px;
+}
+
+.searchInput {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: var(--color-text-heading, #0F172A);
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-muted, #94A3B8);
+}
+
+.clearBtn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted, #94A3B8);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.clearBtn:hover {
+  background: var(--color-border, #E2E8F0);
+}
+
+/* ── FILTER PILLS ── */
+.filterPills {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none; /* Hide scrollbar Firefox */
+}
+
+.filterPills::-webkit-scrollbar {
+  display: none; /* Hide scrollbar Chrome/Safari */
+}
+
+.pill {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-border, #E2E8F0);
+  background: var(--color-surface, #FFFFFF);
+  color: var(--color-text-muted, #64748B);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.pillActive {
+  background: var(--color-text-heading, #0F172A);
+  color: #fff;
+  border-color: var(--color-text-heading, #0F172A);
+}
+
+.pillPending {
+  background: var(--color-primary, #1F6F78);
+  color: #fff;
+  border-color: var(--color-primary, #1F6F78);
+}
+
+.pillCompleted {
+  background: var(--color-success, #22C55E);
+  color: #fff;
+  border-color: var(--color-success, #22C55E);
+}
+
+/* ── EMPTY STATE ENHANCEMENT ── */
+.resetFilterBtn {
+  margin-top: 12px;
+  padding: 8px 16px;
+  background: var(--color-primary-light, #E0F2FE);
+  color: var(--color-primary-dark, #0369A1);
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
