@@ -12,11 +12,12 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Request, Query, Response
 from fastapi.responses import StreamingResponse
 from jose import jwt, JWTError
+from sqlalchemy import func 
 from sqlalchemy.orm import Session, joinedload
 from pillow_heif import register_heif_opener
 
 from database import get_db, SessionLocal
-from models import User, Shift, Room, Zone, Asset, InspectionLog, Nonce, AuditLog, Elder, ShiftSetting
+from models import User, Shift, Room, Zone, Asset, InspectionLog, Nonce, AuditLog, Elder, ShiftSetting, Facility
 from schemas import AssetMissingRequest, RoleType, RoomPatrolProgressResponse
 from core.config import settings
 from core.dependencies import get_current_user, require_care_team, PermissionChecker
@@ -807,3 +808,91 @@ def get_inspection_history(
         },
         "history_data": result_list
     }
+
+
+
+@router.get(
+    "/random-images",
+    summary="[Admin/Manager] Lấy ngẫu nhiên ảnh kiểm kê trong ca để Audit",
+    description="""
+    **ENDPOINT AUDIT ẢNH NGẪU NHIÊN TRONG CA TRỰC LIVE:**
+    - Lấy ngẫu nhiên `limit` ảnh chụp hợp lệ (`status == 'Xanh'`, `is_latest == True`) trong ca trực đang mở.
+    - Hỗ trợ lọc theo `facility_id` hoặc lấy toàn viện (đối với Admin/Doctor)[cite: 3].
+    - **Tự sinh `shareable_url` sẵn:** Frontend chỉ cần gán thẳng vào `<img src={item.shareable_url} />`[cite: 7].
+    """
+)
+def get_random_inspection_images(
+    request: Request,
+    limit: int = Query(8, ge=1, le=30, description="Số lượng ảnh ngẫu nhiên cần lấy (1 - 30)"),
+    facility_id: Optional[int] = Query(None, description="Lọc theo ID Cơ sở (Dành cho Admin/Manager Vùng)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 1. Tìm Ca trực Live đang mở (Shift.status == 'Open')
+    shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.created_at.desc()).first()
+    if not shift:
+        return []
+
+    # 2. Base Query ảnh kiểm kê hợp lệ kèm thông tin Cụ / Phòng / Phân khu / Cơ sở
+    query = db.query(
+        InspectionLog.id.label("log_id"),
+        InspectionLog.image_url,
+        InspectionLog.note,
+        Asset.asset_name,
+        Elder.full_name.label("elder_name"),
+        Room.room_number,
+        Zone.name.label("zone_name"),
+        Facility.id.label("facility_id"),
+        Facility.name.label("facility_name"),
+        User.full_name.label("inspected_by"),
+        InspectionLog.created_at
+    ).join(Asset, InspectionLog.asset_id == Asset.id)\
+     .outerjoin(Elder, Asset.elder_id == Elder.id)\
+     .join(Room, Asset.room_id == Room.id)\
+     .join(Zone, Room.zone_id == Zone.id)\
+     .join(Facility, Zone.facility_id == Facility.id)\
+     .join(User, InspectionLog.user_id == User.id)\
+     .filter(
+        InspectionLog.shift_id == shift.id,
+        InspectionLog.status == "Xanh",
+        InspectionLog.image_url.isnot(None),
+        InspectionLog.is_latest == True
+     )
+
+    # 3. Phân quyền đa cơ sở
+    if current_user.facility_id is not None:
+        query = query.filter(Facility.id == current_user.facility_id)
+    elif facility_id:
+        query = query.filter(Facility.id == facility_id)
+
+    # 4. Lấy ngẫu nhiên theo số lượng limit
+    logs = query.order_by(func.random()).limit(limit).all()
+
+    # 5. Đóng gói Response kèm JWT Public Stream URL cho từng ảnh
+    base_url = str(request.base_url).rstrip("/")
+    expiration = datetime.now(timezone.utc) + timedelta(minutes=TIME_WATCH_IMG)
+    results = []
+
+    for item in logs:
+        # Tạo Signed JWT Token xem ảnh 15 phút cho từng ảnh
+        token_payload = {"log_id": item.log_id, "exp": expiration}
+        signed_token = jwt.encode(token_payload, settings.JWT_SECRET, algorithm=ALGORITHM)
+        temporary_url = f"{base_url}/api/inspections/public-view/{signed_token}"
+
+        log_time_str = item.created_at.astimezone(tz).strftime("%H:%M:%S") if item.created_at else None
+
+        results.append({
+            "log_id": item.log_id,
+            "asset_name": item.asset_name,
+            "elder_name": item.elder_name or "Tài sản chung của phòng",
+            "room_number": item.room_number,
+            "zone_name": item.zone_name,
+            "facility_id": item.facility_id,
+            "facility_name": item.facility_name,
+            "inspected_by": item.inspected_by,
+            "inspected_at": log_time_str,
+            "note": item.note,
+            "shareable_url": temporary_url 
+        })
+
+    return results
