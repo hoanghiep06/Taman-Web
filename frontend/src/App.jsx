@@ -68,7 +68,6 @@ const AssignmentPage = lazy(() =>
     }))
 );
 
-
 const HealthDashboardPage = lazy(() =>
     import("./features/medical/pages/HealthDashboardPage").then((m) => ({
         default: m.HealthDashboardPage,
@@ -117,6 +116,12 @@ const VitalPage = lazy(() =>
     }))
 );
 
+/* ── PATROL PAGES (ĐIỀU HƯỚNG THEO ROLE) ── */
+const PatrolRouter = lazy(() =>
+    import("./features/patrol/PatrolRouter").then((m) => ({
+        default: m.PatrolRouter,
+    }))
+);
 
 const RoomSelectionPage = lazy(() =>
     import("./features/patrol/pages/RoomSelectionPage").then((m) => ({
@@ -129,13 +134,6 @@ const PatrolSessionPage = lazy(() =>
         default: m.PatrolSessionPage,
     }))
 );
-
-
-// const IncidentPage = lazy(() =>
-//     import("./features/incidents/pages/IncidentPage").then((m) => ({
-//         default: m.IncidentPage,
-//     }))
-// );
 
 const BackupPage = lazy(() =>
     import("./features/backup/pages/BackupPage").then((m) => ({
@@ -178,6 +176,7 @@ function App() {
                             }
                         />
 
+                        {/* ROUTE CHÍNH CÓ LAYOUT */}
                         <Route
                             element={
                                 <ProtectedRoute
@@ -199,7 +198,7 @@ function App() {
                             {/* Modules */}
                             <Route path="/vitals" element={<VitalSignsPage />} />
                             <Route path="/shifts" element={<ShiftHandoverPage />} />
-                            <Route path="/reports" element={<ShiftHandoverPage />} />
+                            <Route path="/reports" element={<ReportPage />} />
 
                             <Route path="/users" element={<UserManagementPage />} />
                             <Route path="/elders" element={<ElderListPage />} />
@@ -212,11 +211,15 @@ function App() {
                             <Route path="/medicines" element={<MedicinePage />} />
                             <Route path="/diseases" element={<DiseasePage />} />
 
-                            <Route path="/patrol" element={<RoomSelectionPage />} />
+                            {/* ── ROUTE ĐIỀU HƯỚNG ĐI TUẦN THEO VAI TRÒ ── */}
+                            <Route path="/patrol" element={<PatrolRouter />} />
+                            
+                            {/* Đường dẫn phụ nếu Admin muốn bấm "Vào chế độ đi tuần" */}
+                            <Route path="/patrol/rooms" element={<RoomSelectionPage />} />
+                            
+                            {/* Chi tiết bên trong 1 phòng */}
                             <Route path="/patrol/room/:roomId" element={<PatrolSessionPage />} />
                             
-                            <Route path="/vitals" element={<VitalPage />} />
-                            {/* <Route path="/incident" element={<IncidentPage />} /> */}
                             <Route path="/backup" element={<BackupPage />} />
                             <Route path="/settings" element={<SystemSettingsPage />} />
                         </Route>

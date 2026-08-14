@@ -6,29 +6,33 @@ export const FacilitySelector = ({ selectedId, onChange }) => {
   const [facilities, setFacilities] = useState([]);
 
   useEffect(() => {
-    // API lấy danh sách cơ sở (Backend đã có sẵn ở /api/admin/facilities)
-    axiosClient.get('/api/admin/facilities')
-      .then((res) => setFacilities(res))
-      .catch(console.error);
-  }, []);
 
-  if (facilities.length === 0) return null;
+    axiosClient.get('/admin/facilities')
+      .then((res) => {
+        setFacilities(Array.isArray(res) ? res : (res?.data || []));
+      })
+      .catch((err) => {
+        console.error("Lỗi lấy danh sách cơ sở:", err);
+      });
+  }, []);
 
   return (
     <div className={styles.tabContainer}>
       <button
+        type="button"
         className={`${styles.tabBtn} ${selectedId === null ? styles.active : ''}`}
         onClick={() => onChange(null)}
       >
-        Toàn bộ cơ sở
+        🌐 Toàn bộ cơ sở
       </button>
       {facilities.map((fac) => (
         <button
           key={fac.id}
+          type="button"
           className={`${styles.tabBtn} ${selectedId === fac.id ? styles.active : ''}`}
           onClick={() => onChange(fac.id)}
         >
-          {fac.name}
+          🏢 {fac.name}
         </button>
       ))}
     </div>

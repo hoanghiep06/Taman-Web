@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -11,18 +12,20 @@ export const RoomSelectionPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+
+  const isAdminOrManager = ['Admin', 'Manager'].includes(user?.role);
+
   const [activeFacilityId, setActiveFacilityId] = useState(user?.facility_id || null);
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('All'); // 'All', 'Pending', 'Completed'
+  const [filterStatus, setFilterStatus] = useState('All');
 
-  // Sử dụng useCallback để đóng gói hàm fetch, tránh tạo lại hàm vô ích
   const fetchRooms = useCallback(async (isSilent = false) => {
     try {
       const data = await patrolApi.getRooms({ facility_id: activeFacilityId });
-      setRooms(data);
+      setRooms(data || []);
     } catch (err) {
       console.error('Lỗi tải danh sách phòng', err);
     } finally {
@@ -30,28 +33,20 @@ export const RoomSelectionPage = () => {
     }
   }, [activeFacilityId]);
 
-  // Quản lý cơ chế gọi API tự động (Polling) 5 giây/lần an toàn
   useEffect(() => {
     setLoading(true);
-    fetchRooms(); // Gọi lần đầu khi activeFacilityId thay đổi
-
-    const id = setInterval(() => {
-      fetchRooms(true); // Tự động cập nhật ngầm (silent)
-    }, 5000);
-
-    return () => clearInterval(id); // Dọn dẹp interval cũ khi unmount hoặc đổi Id cơ sở
+    fetchRooms();
+    const id = setInterval(() => fetchRooms(true), 5000);
+    return () => clearInterval(id);
   }, [fetchRooms]);
 
-  // TỐI ƯU: Sử dụng useMemo để chỉ tính toán lại bộ lọc khi dữ liệu thực sự thay đổi
   const filteredRooms = useMemo(() => {
     return rooms.filter((room) => {
       const matchSearch = 
-        room.room_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (room.room_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (room.description || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-      const total = room.total_assets || 0;
-      const inspected = room.inspected_count || 0;
-      const isFinished = total === 0 || inspected >= total;
+      const isFinished = Boolean(room.is_completed);
 
       let matchStatus = true;
       if (filterStatus === 'Pending') matchStatus = !isFinished;
@@ -61,7 +56,6 @@ export const RoomSelectionPage = () => {
     });
   }, [rooms, searchTerm, filterStatus]);
 
-  // TỐI ƯU: Nhóm phòng theo Cơ sở bằng useMemo
   const groupedRooms = useMemo(() => {
     return filteredRooms.reduce((acc, room) => {
       const facName = room.facility_name || 'Chưa xác định Cơ sở';
@@ -71,16 +65,25 @@ export const RoomSelectionPage = () => {
     }, {});
   }, [filteredRooms]);
 
-  // Hàm tiện ích để xóa nhanh bộ lọc
-  const handleResetFilters = () => {
-    setSearchTerm('');
-    setFilterStatus('All');
-  };
-
   return (
     <div className={styles.container}>
       <div className={styles.stickyTop}>
         <div className={styles.header}>
+          {/* NÚT QUAY LẠI BẢNG GIÁM SÁT DÀNH CHO ADMIN / MANAGER */}
+          {isAdminOrManager && (
+            <button
+              onClick={() => navigate('/patrol')}
+              style={{
+                marginBottom: '10px', padding: '6px 12px', background: '#F1F5F9',
+                border: '1.5px solid #CBD5E1', borderRadius: '8px', color: '#1F6F78',
+                fontSize: '13px', fontWeight: 800, cursor: 'pointer', display: 'inline-flex',
+                alignItems: 'center', gap: '4px'
+              }}
+            >
+              ‹ Quay lại Bảng Giám Sát
+            </button>
+          )}
+
           <h2 className={styles.title}>Khu Vực Tuần Tra</h2>
           <p className={styles.subtitle}>Kiểm kê tư trang và tài sản cố định</p>
           
@@ -137,7 +140,7 @@ export const RoomSelectionPage = () => {
           <div className={styles.emptyState}>
             <span>📭</span>
             <p>Không có phòng nào khớp với tìm kiếm.</p>
-            <button className={styles.resetFilterBtn} onClick={handleResetFilters}>
+            <button className={styles.resetFilterBtn} onClick={() => { setSearchTerm(''); setFilterStatus('All'); }}>
               Xóa bộ lọc
             </button>
           </div>
@@ -151,20 +154,24 @@ export const RoomSelectionPage = () => {
                 
                 <div className={styles.grid}>
                   {facRooms.map((room) => {
+                    // CÚ PHÁP PHÒNG: Tên Khu + Số phòng (VD: A101, B201)
                     const zoneLetter = room.zone_name ? room.zone_name.replace(/Khu\s*/i, '').trim() : '';
                     const roomDisplayName = `${zoneLetter}${room.room_number}`; 
 
-                    // 1. Hứng trực tiếp data cực xịn từ Backend
-                    const total = room.total_required_inspection;
-                    const inspected = room.inspected_count;
-                    const percent = room.progress_percentage;
-                    const isFinished = room.is_completed;
+                    const totalRequired = room.total_required_inspection ?? 0;
+                    const inspected = room.inspected_count ?? 0;
+                    const isFinished = Boolean(room.is_completed);
+
+                    let percent = 0;
+                    if (isFinished || totalRequired === 0) {
+                      percent = 100;
+                    } else if (totalRequired > 0) {
+                      percent = Math.min(Math.floor((inspected / totalRequired) * 100), 100);
+                    }
                     
-                    // 2. Logic màu sắc
                     const waterColor = isFinished ? '#86EFAC' : '#BAE6FD';
                     const textPrimaryColor = isFinished ? '#14532D' : '#0369A1';
-                    
-                    const currentRoomId = room.room_id;
+                    const currentRoomId = room.room_id || room.id;
 
                     return (
                       <div
@@ -185,11 +192,10 @@ export const RoomSelectionPage = () => {
                             {room.description || 'Chưa có mô tả'}
                           </p>
                           
-                          {/* 3. Render Text trực tiếp không cần check undefined nữa */}
                           <div className={styles.progressText}>
-                            {total === 0 
+                            {totalRequired === 0 
                               ? 'Không có đồ' 
-                              : (isFinished ? '✅ Hoàn tất' : `${inspected}/${total} đồ`)
+                              : (isFinished ? '✅ Hoàn tất' : `${inspected}/${totalRequired} đồ`)
                             }
                           </div>
                         </div>

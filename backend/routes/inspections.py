@@ -9,23 +9,33 @@ from datetime import datetime, timedelta, timezone, time
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Request, Query, Response
-from fastapi.responses import StreamingResponse
+from fastapi import (
+    APIRouter, Depends, HTTPException, status, UploadFile, 
+    File, Form, BackgroundTasks, Request, Query, Response
+)
 from jose import jwt, JWTError
-from sqlalchemy import func 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from pillow_heif import register_heif_opener
 
 from database import get_db, SessionLocal
-from models import User, Shift, Room, Zone, Asset, InspectionLog, Nonce, AuditLog, Elder, ShiftSetting, Facility
+from models import (
+    User, Shift, Room, Zone, Asset, InspectionLog, 
+    Nonce, AuditLog, Elder, ShiftSetting, Facility
+)
 from schemas import AssetMissingRequest, RoleType, RoomPatrolProgressResponse
 from core.config import settings
 from core.dependencies import get_current_user, require_care_team, PermissionChecker
 from core.security import ALGORITHM
 from core.limiter import limiter
-from core.constants import DELAY_SECONDS, MAX_RETRY, UPLOAD_IMG_EXPIRE_TIMES, MAX_SIZE_MB, TIME_WATCH_IMG, TIME_DELAY_SUBMIT, DAY_OF_RESEEING
+from core.constants import (
+    DELAY_SECONDS, MAX_RETRY, UPLOAD_IMG_EXPIRE_TIMES, 
+    MAX_SIZE_MB, TIME_WATCH_IMG, TIME_DELAY_SUBMIT, DAY_OF_RESEEING
+)
 from services.image_service import process_and_compress_image
-from services.drive_service import upload_image_to_drive, extract_file_id_from_url, download_file_bytes_from_drive
+from services.drive_service import (
+    upload_image_to_drive, extract_file_id_from_url, download_file_bytes_from_drive
+)
 from services.email_service import send_realtime_missing_alert
 
 register_heif_opener()
@@ -34,9 +44,41 @@ tz = ZoneInfo("Asia/Ho_Chi_Minh")
 
 router = APIRouter(prefix="/api/inspections", tags=["6. [NVCS / Đi Tuần] Trực Ca & Kiểm Kê Tư Trang"])
 
-# ====================================================
-# WORKER NGẦM THÔNG MINH (CÓ RETRY LOGIC & TRACKING STATE)
-# ====================================================
+
+# =========================================================================
+# HELPER: TỰ ĐỘNG LẤY DOMAIN PUBLIC (DÙNG CHO CLOUD / LAN / LOCALHOST)
+# =========================================================================
+def resolve_public_base_url(request: Request) -> str:
+    """
+    Tự động lấy đúng domain public mà client đang gọi vào,
+    không cần cấu hình thủ công PUBLIC_API_URL.
+    """
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+
+    scheme = forwarded_proto or request.url.scheme
+    host = forwarded_host or request.headers.get("host") or request.url.netloc
+
+    return f"{scheme}://{host}"
+
+
+def validate_live_camera_image(file_contents: bytes, max_size_mb: int = 15):
+    """Kiểm tra chữ ký tệp tin (JPEG/PNG/HEIC iPhone) và chống DoS."""
+    if len(file_contents) > max_size_mb * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"Dung lượng ảnh quá lớn (> {max_size_mb}MB)")
+
+    header = file_contents[:12]
+    is_jpeg = header.startswith(b'\xff\xd8\xff')
+    is_png = header.startswith(b'\x89PNG')
+    is_heic = len(header) >= 12 and header[4:12] in (b'ftypheic', b'ftypmif1', b'ftypmsf1', b'ftyphevc')
+
+    if not (is_jpeg or is_png or is_heic):
+        raise HTTPException(status_code=400, detail="Định dạng không hỗ trợ. Chỉ chấp nhận JPG, PNG, HEIC từ camera.")
+
+
+# =========================================================================
+# WORKER NGẦM XỬ LÝ ẢNH (COMPRESS, WATERMARK, UPLOAD DRIVE)
+# =========================================================================
 def image_processing_worker(
     file_contents: bytes,
     log_ids: list,
@@ -48,7 +90,6 @@ def image_processing_worker(
     """
     Worker ngầm chịu lỗi tốt: Nén ảnh, đóng dấu Watermark và upload lên Google Drive.
     Tự động thử lại tối đa 3 lần nếu đứt mạng. Thành công -> 'Xanh', Thất bại -> 'Loi_Upload'.
-    Xử lý chuẩn xác Ca Tối vắt qua đêm (20:00 -> 07:00 hôm sau).
     """
     db: Session = SessionLocal()
     max_retries = MAX_RETRY
@@ -64,7 +105,6 @@ def image_processing_worker(
         current_date = now_local.date()
         current_time = now_local.time()
 
-        # Truy vấn khung giờ thực tế từ Database (Sáng: 08:00 - 19:00, Tối: 20:00 - 07:00)
         setting = db.query(ShiftSetting).first()
         m_start_str = setting.morning_start if (setting and setting.morning_start) else "08:00"
         m_end_str = setting.morning_end if (setting and setting.morning_end) else "19:00"
@@ -78,12 +118,10 @@ def image_processing_worker(
             m_start, m_end = time(8, 0), time(19, 0)
             e_start, e_end = time(20, 0), time(7, 0)
 
-        # 🌟 HÀM TRỢ LÝ KIỂM TRA KHUNG GIỜ (HỖ TRỢ KHUNG GIỜ VẮT QUAN ĐÊM)
         def is_time_in_range(start: time, end: time, current: time) -> bool:
             if start <= end:
                 return start <= current <= end
             else:
-                # Xử lý khi start > end (VD: 20:00 tối tới 07:00 sáng hôm sau)
                 return current >= start or current <= end
 
         shift_type_str = "Sang"
@@ -95,7 +133,6 @@ def image_processing_worker(
                 shift_date_str = str(current_date - timedelta(days=1))
         elif is_time_in_range(e_start, e_end, current_time):
             shift_type_str = "Toi"
-            # 🔥 NẾU CHỤP VÀO RẠNG SÁNG (VD: 02:00 sáng) -> LÙI NGÀY CA TRỰC VỀ HÔM QUA
             if e_start > e_end and current_time <= e_end:
                 shift_date_str = str(current_date - timedelta(days=1))
         else:
@@ -143,20 +180,6 @@ def image_processing_worker(
         db.close()
 
 
-def validate_live_camera_image(file_contents: bytes, max_size_mb: int = 15):
-    """Kiểm tra chữ ký tệp tin (JPEG/PNG/HEIC iPhone) và chống DoS"""
-    if len(file_contents) > max_size_mb * 1024 * 1024:
-        raise HTTPException(status_code=400, detail=f"Dung lượng ảnh quá lớn (> {max_size_mb}MB)")
-
-    header = file_contents[:12]
-    is_jpeg = header.startswith(b'\xff\xd8\xff')
-    is_png = header.startswith(b'\x89PNG')
-    is_heic = len(header) >= 12 and header[4:12] in (b'ftypheic', b'ftypmif1', b'ftypmsf1', b'ftyphevc')
-
-    if not (is_jpeg or is_png or is_heic):
-        raise HTTPException(status_code=400, detail="Định dạng không hỗ trợ. Chỉ chấp nhận JPG, PNG, HEIC từ camera.")
-    
-
 # =========================================================================
 # 1. MÀN HÌNH SẢNH: CẤP DANH SÁCH PHÒNG KÈM TIẾN ĐỘ ĐI TUẦN LIVE
 # =========================================================================
@@ -167,19 +190,22 @@ def validate_live_camera_image(file_contents: bytes, max_size_mb: int = 15):
     description="""
     **Dành cho Frontend vẽ màn hình Sảnh Đi Tuần của App NVCS:**
     - Trả về danh sách các Phòng thuộc Cơ sở của NVCS đang trực.
-    - Hỗ trợ lọc theo `zone_id` (Khu A, Khu B...).
-    - **Tính toán tiến độ live:** `total_assets` (chỉ đếm món đồ `requires_inspection == True`), `inspected_count` (số đồ đã chụp trong ca), và cờ `is_completed` (True nếu hoàn thành 100% phòng).
+    - Hỗ trợ lọc theo `zone_id` (Khu A, Khu B...) hoặc `facility_id` (Admin/Manager).
+    - Tính toán chi tiết tiến độ live: % nước ngập, số đồ bắt buộc, số đồ đã kiểm, trạng thái hoàn tất.
     """
 )
 def get_patrol_rooms_progress(
+    facility_id: Optional[int] = Query(None, description="Lọc theo ID Cơ sở (Dành cho Admin/Manager)"),
     zone_id: Optional[int] = Query(None, description="Lọc theo Phân khu (Khu A, Khu B...)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     query = db.query(Room).options(joinedload(Room.zone).joinedload(Zone.facility))
 
-    if current_user.facility_id is not None:
-        query = query.join(Zone).filter(Zone.facility_id == current_user.facility_id)
+    # 1. Phân quyền đa cơ sở linh hoạt
+    target_facility_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+    if target_facility_id is not None:
+        query = query.join(Zone).filter(Zone.facility_id == target_facility_id)
 
     if zone_id:
         query = query.filter(Room.zone_id == zone_id)
@@ -192,43 +218,61 @@ def get_patrol_rooms_progress(
         zone_obj = room.zone
         facility_obj = zone_obj.facility if zone_obj else None
 
-        # Chỉ đếm tư trang BẮT BUỘC KIỂM TRÀ (requires_inspection == True)
-        total_assets = db.query(Asset).filter(
-            Asset.room_id == room.id,
-            Asset.status == "Active",
-            Asset.requires_inspection == True
-        ).count()
+        # 2. Lấy toàn bộ danh mục tài sản Active trong phòng
+        assets = db.query(Asset).filter(Asset.room_id == room.id, Asset.status == "Active").all()
+        
+        total_assets = len(assets)
+        required_assets = [a for a in assets if a.requires_inspection]
+        optional_assets = [a for a in assets if not a.requires_inspection]
 
+        total_required = len(required_assets)
+        total_optional = len(optional_assets)
+        required_asset_ids = set(a.id for a in required_assets)
+
+        # 3. Đếm số món đồ BẮT BUỘC đã kiểm kê trong ca hiện tại
         inspected_count = 0
-        if shift and total_assets > 0:
-            room_asset_ids = db.query(Asset.id).filter(
-                Asset.room_id == room.id,
-                Asset.status == "Active",
-                Asset.requires_inspection == True
-            ).subquery()
-
-            inspected_count = db.query(InspectionLog).filter(
+        if shift and total_required > 0:
+            logs = db.query(InspectionLog).filter(
                 InspectionLog.shift_id == shift.id,
-                InspectionLog.asset_id.in_(room_asset_ids),
-                InspectionLog.is_latest == True
-            ).count()
+                InspectionLog.asset_id.in_(list(required_asset_ids)),
+                InspectionLog.is_latest == True,
+                InspectionLog.status.in_(["Xanh", "Vang", "Success", "Missing"])
+            ).all()
 
-        is_completed = (total_assets > 0) and (inspected_count >= total_assets)
+            inspected_count = len(set(l.asset_id for l in logs))
 
+        uninspected_count = max(0, total_required - inspected_count)
+
+        # 4. Tính % tiến độ và trạng thái hoàn thành
+        if total_required > 0:
+            progress_pct = min(100.0, round((inspected_count / total_required) * 100, 1))
+            is_completed = (inspected_count >= total_required)
+        else:
+            progress_pct = 100.0
+            is_completed = True
+
+        # 5. Đóng gói đầy đủ các trường khớp 100% với Schema
         results.append(
             RoomPatrolProgressResponse(
                 room_id=room.id,
                 room_number=room.room_number,
                 description=room.description,
+                zone_id=zone_obj.id if zone_obj else 0,
                 zone_name=zone_obj.name if zone_obj else "N/A",
+                facility_id=facility_obj.id if facility_obj else 0,
                 facility_name=facility_obj.name if facility_obj else "N/A",
                 total_assets=total_assets,
+                total_required_inspection=total_required,
+                total_optional_inspection=total_optional,
                 inspected_count=inspected_count,
+                uninspected_count=uninspected_count,
+                progress_percentage=progress_pct,
                 is_completed=is_completed
             )
         )
 
     return results
+
 
 # =========================================================================
 # 2. MÀN HÌNH BÊN TRONG PHÒNG: LẤY MÓN ĐỒ CẦN CHỤP CHIA THEO CỤ
@@ -240,7 +284,6 @@ def get_patrol_rooms_progress(
     **Dành cho Frontend khi NVCS chọn bước vào 1 Phòng:**
     - Trả về danh sách tất cả các món tư trang cần chụp ảnh (`requires_inspection == True`).
     - Gom nhóm đồ đạc gắn đích danh với từng Cụ (hoặc đồ dùng chung của phòng).
-    - Trả về `current_status`: `Xanh` (Đã chụp), `Vang` (Báo mất), `Dang_Xu_Ly` (Đang nén/upload), `Loi_Upload` (Cần chụp lại), `Unchecked` (Chưa chụp).
     """
 )
 def get_assets_for_patrol_by_room(
@@ -302,18 +345,14 @@ def get_assets_for_patrol_by_room(
         "assets": assets_list
     }
 
+
 # =========================================================================
 # 3. XIN MÃ NONCE BẢO MẬT 1 LẦN TRƯỚC BẬT CAMERA
 # =========================================================================
 @router.post(
     "/request-nonce",
     status_code=status.HTTP_201_CREATED,
-    summary="[Bảo mật] Xin mã Nonce dùng 1 lần trước khi chụp ảnh",
-    description="""
-    **Frontend gọi API này khi NVCS bấm nút Bật Camera trên App:**
-    - Sinh mã UUID ngầm gắn với IP và Thiết bị, có hiệu lực trong 5 phút.
-    - Bắt buộc phải truyền `nonce_id` này vào Form khi gọi API `upload-multi`.
-    """
+    summary="[Bảo mật] Xin mã Nonce dùng 1 lần trước khi chụp ảnh"
 )
 @limiter.limit("10/minute")
 def request_checkin_nonce(
@@ -321,11 +360,6 @@ def request_checkin_nonce(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    API Cấp mã 1 lần khi upload ảnh
-    FE gọi API khi nhân viên kích hoạt máy ảnh trên thiết bị 
-    Mã sinh ra trong 3p gắn với IP và thiết bị này
-    """
     client_ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
     client_ua = request.headers.get("user-agent", "Unknown Device")
     expiration_time = datetime.now(timezone.utc) + timedelta(minutes=UPLOAD_IMG_EXPIRE_TIMES)
@@ -363,13 +397,7 @@ def request_checkin_nonce(
 @router.post(
     "/upload-multi",
     status_code=status.HTTP_202_ACCEPTED,
-    summary="[NVCS] Nộp ảnh chụp kiểm kê tư trang",
-    description="""
-    **NVCS chọn 1 hoặc nhiều món đồ (cùng nằm trong 1 góc chụp) -> Bấm Nộp ảnh:**
-    - Truyền `file` (Binary ảnh), `asset_ids_str` (VD: `"[1, 2, 3]"`), và `nonce_id`.
-    - Hệ thống vô hiệu mã Nonce lập tức (chống gửi trùng/double submit).
-    - Tạo bản ghi `Dang_Xu_Ly` và đẩy Worker ngầm xử lý nén + đẩy Drive mà không làm treo App di động.
-    """
+    summary="[NVCS] Nộp ảnh chụp kiểm kê tư trang"
 )
 async def upload_multi_assets_image(
     request: Request,
@@ -380,9 +408,6 @@ async def upload_multi_assets_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    client_ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
-    client_ua = request.headers.get("user-agent", "Unknown Device")
-
     # 1. Xác thực Mã Nonce
     nonce_record = db.query(Nonce).filter(
         Nonce.id == nonce_id,
@@ -407,7 +432,8 @@ async def upload_multi_assets_image(
     # 3. Parse Asset IDs
     try:
         asset_ids = json.loads(asset_ids_str.strip())
-        if not isinstance(asset_ids, list) or len(asset_ids) == 0: raise ValueError()
+        if not isinstance(asset_ids, list) or len(asset_ids) == 0:
+            raise ValueError()
     except Exception:
         raise HTTPException(status_code=400, detail="Định dạng mảng asset_ids_str không hợp lệ!")
 
@@ -421,7 +447,7 @@ async def upload_multi_assets_image(
 
     drive_asset_names = [f"{asset.asset_name}_{elder_name}" if elder_name else asset.asset_name for asset, elder_name in asset_items]
 
-    # 4. Anti-spam Rate Limit (Chống chụp liên tục cùng 1 món đồ)
+    # 4. Anti-spam Rate Limit
     current_time_utc = datetime.now(timezone.utc)
     for asset, _ in asset_items:
         latest_log = db.query(InspectionLog).filter(
@@ -457,7 +483,8 @@ async def upload_multi_assets_image(
         ).first()
 
         new_version = old_log.version + 1 if old_log else 1
-        if old_log: old_log.is_latest = False
+        if old_log:
+            old_log.is_latest = False
 
         new_log = InspectionLog(
             shift_id=shift.id,
@@ -498,8 +525,7 @@ async def upload_multi_assets_image(
 @router.post(
     "/report-missing",
     status_code=status.HTTP_201_CREATED,
-    summary="[NVCS] Báo mất đồ đạc không tìm thấy trong phòng",
-    description="Chuyển trạng thái tư trang sang **Vàng** (Báo mất), lưu lý do và gửi Email cảnh báo khẩn cấp cho Quản lý."
+    summary="[NVCS] Báo mất đồ đạc không tìm thấy trong phòng"
 )
 def report_missing_asset(
     payload: AssetMissingRequest,
@@ -525,7 +551,8 @@ def report_missing_asset(
     ).first()
 
     new_version = old_log.version + 1 if old_log else 1
-    if old_log: old_log.is_latest = False
+    if old_log:
+        old_log.is_latest = False
 
     new_log = InspectionLog(
         shift_id=shift.id,
@@ -559,9 +586,10 @@ def report_missing_asset(
 @router.get(
     "/shift-progress",
     summary="[Tổng quan] Xem tiến độ đi tuần của ca trực live",
-    description="Gom nhóm toàn bộ danh mục tài sản theo 5 trạng thái: Xanh (Đã xong), Vàng (Báo mất), Xám (Đang xử lý), Đỏ đậm (Lỗi upload), Đỏ tươi (Chưa chụp)."
+    description="Gom nhóm toàn bộ danh mục tài sản kèm thông tin Cơ sở & Phân khu theo 5 trạng thái kiểm kê trong ca."
 )
 def get_shift_progress(
+    facility_id: Optional[int] = Query(None, description="Lọc theo ID Cơ sở (Dành cho Admin/Manager)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -569,11 +597,30 @@ def get_shift_progress(
     if not shift:
         raise HTTPException(status_code=400, detail="Hiện tại chưa có ca trực nào đang mở.")
 
-    active_assets = db.query(Asset, Room.room_number, Elder.full_name).\
-        join(Room, Asset.room_id == Room.id).\
-        outerjoin(Elder, Asset.elder_id == Elder.id).\
-        filter(Asset.status == "Active", Asset.requires_inspection == True).all()
+    # Phân quyền đa cơ sở linh hoạt
+    target_facility_id = current_user.facility_id if current_user.facility_id is not None else facility_id
 
+    # Join thêm Zone & Facility để lấy đầy đủ ngữ cảnh địa điểm của từng món đồ
+    query = db.query(
+        Asset, 
+        Room.room_number, 
+        Zone.name.label("zone_name"),
+        Facility.id.label("facility_id"),
+        Facility.name.label("facility_name"),
+        Elder.full_name.label("elder_name")
+    ).\
+        join(Room, Asset.room_id == Room.id).\
+        join(Zone, Room.zone_id == Zone.id).\
+        join(Facility, Zone.facility_id == Facility.id).\
+        outerjoin(Elder, Asset.elder_id == Elder.id).\
+        filter(Asset.status == "Active", Asset.requires_inspection == True)
+
+    if target_facility_id is not None:
+        query = query.filter(Zone.facility_id == target_facility_id)
+
+    active_assets = query.all()
+
+    # Lấy các log kiểm kê mới nhất trong ca live
     latest_logs = db.query(InspectionLog).filter(
         InspectionLog.shift_id == shift.id,
         InspectionLog.is_latest == True
@@ -583,12 +630,17 @@ def get_shift_progress(
 
     checked, reported_missing, processing, failed_upload, unchecked = [], [], [], [], []
 
-    for asset, room_number, elder_name in active_assets:
+    for asset, room_number, zone_name, f_id, f_name, elder_name in active_assets:
         log = log_dict.get(asset.id)
+        
+        # Đóng gói thông tin món đồ kèm Cơ sở và Phân khu
         asset_info = {
             "asset_id": asset.id,
             "asset_name": asset.asset_name,
             "room_number": room_number,
+            "zone_name": zone_name,
+            "facility_id": f_id,
+            "facility_name": f_name,
             "elder_name": elder_name if elder_name else "Tài sản chung của phòng"
         }
 
@@ -607,7 +659,11 @@ def get_shift_progress(
             unchecked.append(asset_info)
 
     return {
-        "shift_info": {"id": shift.id, "shift_date": str(shift.shift_date), "shift_type": shift.shift_type},
+        "shift_info": {
+            "id": shift.id, 
+            "shift_date": str(shift.shift_date), 
+            "shift_type": shift.shift_type
+        },
         "summary": {
             "total_assets": len(active_assets),
             "checked_count": len(checked),
@@ -622,30 +678,6 @@ def get_shift_progress(
         "failed_upload": failed_upload,
         "unchecked": unchecked
     }
-
-
-def resolve_public_base_url(request: Request) -> str:
-    """
-    Tự động lấy đúng domain public mà client (trình duyệt/điện thoại) đang gọi vào,
-    KHÔNG cần cấu hình tay PUBLIC_API_URL cho từng môi trường (Render, LAN, localhost...).
-
-    Ưu tiên đọc:
-    1. X-Forwarded-Proto / X-Forwarded-Host: chuẩn header mà reverse proxy (Render, Nginx...)
-       dùng để báo lại domain/scheme GỐC mà client thực sự gõ vào, trước khi proxy forward
-       request nội bộ (nên không bị dính hostname nội bộ kiểu 'taman-backend:5000').
-    2. Nếu không có (chạy trực tiếp, không qua proxy) -> dùng header Host chuẩn của HTTP request,
-       đây chính là domain/IP mà client vừa gõ vào thanh địa chỉ / gọi API
-       (VD: điện thoại gọi qua LAN thì Host sẽ tự là '192.168.1.15:5000').
-    3. Fallback cuối cùng: request.url (Starlette tự parse).
-    """
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    forwarded_host = request.headers.get("x-forwarded-host")
-
-    scheme = forwarded_proto or request.url.scheme
-    host = forwarded_host or request.headers.get("host") or request.url.netloc
-
-    return f"{scheme}://{host}"
-
 
 # =========================================================================
 # 7. XEM ẢNH MINH CHỨNG (LINK BẢO MẬT TẠM THỜI 15 PHÚT)
@@ -665,7 +697,6 @@ def get_inspection_image(
     if not log:
         raise HTTPException(status_code=404, detail="Không tìm thấy nhật ký kiểm kê này!")
 
-    # 🌟 NẾU ẢNH ĐANG ĐƯỢC WORKER NGẦM XỬ LÝ -> THÔNG BÁO RÕ RÀNG CHO FE
     if log.status == "Dang_Xu_Ly":
         raise HTTPException(
             status_code=400, 
@@ -685,14 +716,9 @@ def get_inspection_image(
     token_payload = {"log_id": log.id, "exp": expiration}
     signed_token = jwt.encode(token_payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
-    # 🌟 Tự động lấy domain public từ chính request, không cần set PUBLIC_API_URL tay
-    # cho từng môi trường -> deploy đâu cũng chạy đúng, không cần đụng config.
     base_url = resolve_public_base_url(request).rstrip("/")
     temporary_url = f"{base_url}/api/inspections/public-view/{signed_token}"
 
-    # 🔒 KHÔNG trả link Drive gốc (log.image_url) ra ngoài API.
-    # Nếu trả kèm, FE/DevTools sẽ thấy được link Drive thật và có thể mở trực tiếp,
-    # bỏ qua hoàn toàn lớp bảo mật token JWT 15 phút bên dưới.
     return {
         "shareable_url": temporary_url,
         "expires_in_seconds": TIME_WATCH_IMG * 60
@@ -725,11 +751,8 @@ def public_stream_inspection_image(token: str, db: Session = Depends(get_db)):
         )
 
     try:
-        # Download byte từ Google Drive
         image_bytes = download_file_bytes_from_drive(file_id)
         
-        # 🔥 BẮT BUỘC PHẢI DÙNG Response (Thay vì StreamingResponse) 
-        # Để FastAPI tự đếm Content-Length giúp trình duyệt nhận diện và render được ảnh
         return Response(
             content=image_bytes, 
             media_type="image/jpeg",
@@ -745,7 +768,6 @@ def public_stream_inspection_image(token: str, db: Session = Depends(get_db)):
         )
 
 
-
 # =========================================================================
 # 8. TRA CỨU LỊCH SỬ ĐI TUẦN DÀI HẠN (PHÂN TRANG & BỘ LỌC)
 # =========================================================================
@@ -757,6 +779,7 @@ def public_stream_inspection_image(token: str, db: Session = Depends(get_db)):
 def get_inspection_history(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    facility_id: Optional[int] = Query(None, description="Lọc theo ID Cơ sở (Dành cho Admin)"),
     room_number: Optional[str] = Query(None, description="Lọc theo Số phòng"),
     status_filter: Optional[str] = Query(None, description="Lọc trạng thái: 'Xanh', 'Vang', 'Loi_Upload'"),
     db: Session = Depends(get_db),
@@ -766,8 +789,13 @@ def get_inspection_history(
         InspectionLog, Asset.asset_name, Room.room_number, User.full_name, Shift.shift_date, Shift.shift_type
     ).join(Asset, InspectionLog.asset_id == Asset.id)\
      .join(Room, Asset.room_id == Room.id)\
+     .join(Zone, Room.zone_id == Zone.id)\
      .join(User, InspectionLog.user_id == User.id)\
      .join(Shift, InspectionLog.shift_id == Shift.id)
+
+    target_facility_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+    if target_facility_id is not None:
+        query = query.filter(Zone.facility_id == target_facility_id)
 
     if current_user.role == RoleType.Caregiver:
         query = query.filter(InspectionLog.user_id == current_user.id)
@@ -810,21 +838,25 @@ def get_inspection_history(
     }
 
 
-
+# =========================================================================
+# 9. LẤY NGẪU NHIÊN ẢNH KIỂM KÊ TRONG CA ĐỂ AUDIT (ĐA CƠ SỞ LINH ĐỘNG)
+# =========================================================================
 @router.get(
     "/random-images",
     summary="[Admin/Manager] Lấy ngẫu nhiên ảnh kiểm kê trong ca để Audit",
     description="""
     **ENDPOINT AUDIT ẢNH NGẪU NHIÊN TRONG CA TRỰC LIVE:**
     - Lấy ngẫu nhiên `limit` ảnh chụp hợp lệ (`status == 'Xanh'`, `is_latest == True`) trong ca trực đang mở.
-    - Hỗ trợ lọc theo `facility_id` hoặc lấy toàn viện (đối với Admin/Doctor)[cite: 3].
-    - **Tự sinh `shareable_url` sẵn:** Frontend chỉ cần gán thẳng vào `<img src={item.shareable_url} />`[cite: 7].
+    - **Linh động Đa cơ sở:**
+      + NVCS / Quản lý cơ sở: Luôn tự động giới hạn trong cơ sở của mình.
+      + Admin / Bác sĩ: Mặc định lấy ngẫu nhiên TOÀN VIỆN (nếu `facility_id` là null), hoặc lọc theo từng Cơ sở mong muốn[cite: 3].
+    - **Tự động sinh URL:** Trả về `shareable_url` (JWT 15 phút) sẵn sàng hiển thị trên thẻ <img>.
     """
 )
 def get_random_inspection_images(
     request: Request,
     limit: int = Query(8, ge=1, le=30, description="Số lượng ảnh ngẫu nhiên cần lấy (1 - 30)"),
-    facility_id: Optional[int] = Query(None, description="Lọc theo ID Cơ sở (Dành cho Admin/Manager Vùng)"),
+    facility_id: Optional[int] = Query(None, description="Lọc theo ID Cơ sở (Dành cho Admin/Manager Toàn Viện)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -859,22 +891,20 @@ def get_random_inspection_images(
         InspectionLog.is_latest == True
      )
 
-    # 3. Phân quyền đa cơ sở
-    if current_user.facility_id is not None:
-        query = query.filter(Facility.id == current_user.facility_id)
-    elif facility_id:
-        query = query.filter(Facility.id == facility_id)
+    # 3. Phân quyền đa cơ sở linh hoạt
+    target_facility_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+    if target_facility_id is not None:
+        query = query.filter(Facility.id == target_facility_id)
 
     # 4. Lấy ngẫu nhiên theo số lượng limit
     logs = query.order_by(func.random()).limit(limit).all()
 
     # 5. Đóng gói Response kèm JWT Public Stream URL cho từng ảnh
-    base_url = str(request.base_url).rstrip("/")
+    base_url = resolve_public_base_url(request).rstrip("/")
     expiration = datetime.now(timezone.utc) + timedelta(minutes=TIME_WATCH_IMG)
     results = []
 
     for item in logs:
-        # Tạo Signed JWT Token xem ảnh 15 phút cho từng ảnh
         token_payload = {"log_id": item.log_id, "exp": expiration}
         signed_token = jwt.encode(token_payload, settings.JWT_SECRET, algorithm=ALGORITHM)
         temporary_url = f"{base_url}/api/inspections/public-view/{signed_token}"
