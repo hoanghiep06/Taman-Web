@@ -1,100 +1,221 @@
 .card {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
-  border: 1.5px solid var(--color-border);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-  transition: all 0.15s ease;
-  position: relative;
-  gap: var(--space-2);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: #FFFFFF;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 14px;
   cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-sizing: border-box;
 }
-.cardSelected {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light);
+
+.card:hover {
+  border-color: #CBD5E1;
+  transform: translateY(-1px);
 }
-.cardMissing {
-  background: var(--color-warning-bg);
+
+/* ── TRẠNG THÁI CARD ── */
+.selected {
+  border-color: #1F6F78;
+  background: #F2F8F8;
+  box-shadow: 0 0 0 1px #1F6F78, 0 2px 6px rgba(31, 111, 120, 0.08);
 }
-.cardProcessing {
-  opacity: 0.6;
+
+.missing {
+  background: #FEFCE8;
+  border-color: #FEF08A;
+}
+
+.success {
+  background: #F0FDF4;
+  border-color: #BBF7D0;
+}
+
+.processing {
+  opacity: 0.7;
   cursor: not-allowed;
 }
 
-.mainInfo {
+/* ── KHỐI BÊN TRÁI ── */
+.leftContent {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 12px;
   flex: 1;
-  min-width: 0; /* bắt buộc để flex-child co lại dưới kích thước content */
+  min-width: 0; /* Chống vỡ font trên mobile */
 }
+
 .checkbox {
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-sm);
-  border: 2px solid var(--color-border);
-  background: var(--color-surface);
+  border-radius: 7px;
+  border: 2px solid #CBD5E1;
+  background: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.15s ease;
 }
-.checkboxSelected {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-}
-.checkMark {
-  color: #fff;
-  font-size: var(--text-sm);
-  font-weight: bold;
+
+.checkboxChecked {
+  background: #1F6F78;
+  border-color: #1F6F78;
 }
 
-.textDetails {
+.checkbox svg {
+  width: 14px;
+  height: 14px;
+  stroke: #FFFFFF;
+}
+
+.processingSpinner {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid #E2E8F0;
+  border-top-color: #1F6F78;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.metaBlock {
   display: flex;
   flex-direction: column;
   gap: 2px;
   flex: 1;
   min-width: 0;
 }
+
 .assetName {
-  font-size: var(--text-base);
+  font-size: 14.5px;
   font-weight: 700;
-  color: var(--color-text-heading);
+  color: #0F172A;
+  line-height: 1.35;
   word-break: break-word;
-  overflow-wrap: break-word;
 }
-.metaInfoRow {
+
+.timeTag {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #16A34A;
+}
+
+.errorTag {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #DC2626;
+}
+
+/* ── KHỐI BÊN PHẢI (BUTTONS) ── */
+.rightActions {
   display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  margin-top: 2px;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
-.idSubtext {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-weight: 500;
+
+.viewImgBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1F6F78;
+  background: #FFFFFF;
+  border: 1.5px solid #A7F3D0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
-.noteSubtext {
-  font-size: var(--text-xs);
-  color: var(--color-warning);
-  font-weight: 500;
-  max-width: 100%;
+
+.viewImgBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.viewImgBtn:hover {
+  background: #ECFDF5;
+  border-color: #34D399;
+}
+
+.missingWrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.missingBadge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #854D0E;
+  background: #FEF9C3;
+  padding: 4px 8px;
+  border-radius: 6px;
+  max-width: 140px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.badgeRow {
-  margin-top: var(--space-1);
+
+.editMissingBtn {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #854D0E;
+  background: #FFFFFF;
+  border: 1px solid #FDE047;
+  border-radius: 8px;
+  cursor: pointer;
 }
 
-.actionRightBlock {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  z-index: 10;
-  flex-shrink: 0;
+.reportMissingBtn {
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #E11D48;
+  background: #FFFFFF;
+  border: 1px solid #FECDD3;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reportMissingBtn:hover {
+  background: #FFF1F2;
+}
+
+.statusPillInfo {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+}
+
+/* ── RESPONSIVE MOBILE FIX ── */
+@media (max-width: 540px) {
+  .card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .rightActions {
+    justify-content: flex-end;
+    padding-top: 6px;
+    border-top: 1px dashed #F1F5F9;
+  }
+  
+  .missingBadge {
+    max-width: 180px;
+  }
 }

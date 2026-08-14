@@ -15,6 +15,7 @@ export const PatrolSessionPage = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
 
+  const [allRooms, setAllRooms] = useState([]); // Danh sách toàn bộ phòng để điều hướng
   const [roomInfo, setRoomInfo] = useState(null);
   const [assets, setAssets] = useState([]);
   const [selectedAssetIds, setSelectedAssetIds] = useState([]);
@@ -24,6 +25,13 @@ export const PatrolSessionPage = () => {
   const [previewModal, setPreviewModal] = useState({ isOpen: false, logId: null, assetName: '' });
 
   const { uploadStatus, processUploadInBackground, setUploadStatus } = useBackgroundQueue();
+
+  // 1. Tải danh sách phòng để phục vụ nút Chuyển phòng
+  useEffect(() => {
+    patrolApi.getRooms()
+      .then((data) => setAllRooms(data || []))
+      .catch(console.error);
+  }, []);
 
   const fetchRoomAssets = async (isSilent = false) => {
     try {
@@ -45,13 +53,31 @@ export const PatrolSessionPage = () => {
 
   const groupedData = groupAssetsByElder(assets);
 
+  // 2. Tính toán vị trí phòng hiện tại, phòng trước và phòng tiếp theo
+  const currentRoomIndex = allRooms.findIndex((r) => String(r.room_id || r.id) === String(roomId));
+  const hasPrev = currentRoomIndex > 0;
+  const hasNext = currentRoomIndex >= 0 && currentRoomIndex < allRooms.length - 1;
+
+  const handlePrevRoom = () => {
+    if (hasPrev) {
+      const prevId = allRooms[currentRoomIndex - 1].room_id || allRooms[currentRoomIndex - 1].id;
+      navigate(`/patrol/room/${prevId}`);
+    }
+  };
+
+  const handleNextRoom = () => {
+    if (hasNext) {
+      const nextId = allRooms[currentRoomIndex + 1].room_id || allRooms[currentRoomIndex + 1].id;
+      navigate(`/patrol/room/${nextId}`);
+    }
+  };
+
   const handleToggleSelect = (assetId) => {
     setSelectedAssetIds((prev) =>
       prev.includes(assetId) ? prev.filter((id) => id !== assetId) : [...prev, assetId]
     );
   };
 
-  // 1. Hàm mở Modal xem ảnh (Modal sẽ tự lo việc fetch link 15p)
   const handleOpenPreview = (logId, assetName) => {
     setPreviewModal({ isOpen: true, logId, assetName });
   };
@@ -68,17 +94,12 @@ export const PatrolSessionPage = () => {
     }
   };
 
-  // 2. Thêm hàm xử lý khi nhân viên submit báo mất đồ
   const handleReportMissingSubmit = async (note) => {
     try {
       await patrolApi.reportMissing(missingModal.assetId, note);
-      
-      // Update UI ngay lập tức (Optimistic UI)
       setUploadStatus((prev) => ({ ...prev, [missingModal.assetId]: 'Vang' }));
       setMissingModal({ isOpen: false, assetId: null });
       setSelectedAssetIds((prev) => prev.filter((id) => id !== missingModal.assetId));
-      
-      // Fetch lại để đồng bộ với BE
       fetchRoomAssets(true);
     } catch {
       alert('Lỗi gửi báo cáo mất!');
@@ -92,8 +113,11 @@ export const PatrolSessionPage = () => {
       <div className={styles.stickyTop}>
         <PatrolHeader 
           roomNumber={roomInfo?.room_number} 
-          zoneName={roomInfo?.zone_name}
-          onBack={() => navigate('/patrol')} 
+          onBack={() => navigate('/patrol')}
+          onPrevRoom={handlePrevRoom}
+          onNextRoom={handleNextRoom}
+          hasPrev={hasPrev}
+          hasNext={hasNext}
         />
       </div>
 
@@ -107,7 +131,7 @@ export const PatrolSessionPage = () => {
               uploadStatus={uploadStatus}
               onToggleSelect={handleToggleSelect}
               onOpenMissing={(assetId) => setMissingModal({ isOpen: true, assetId })}
-              onOpenPreview={handleOpenPreview} // Đã sửa thành handleOpenPreview
+              onOpenPreview={handleOpenPreview}
             />
           ))
         ) : (
@@ -133,7 +157,6 @@ export const PatrolSessionPage = () => {
         </div>
       )}
 
-      {/* Render đầy đủ các Modals */}
       <ImagePreviewModal
         isOpen={previewModal.isOpen}
         logId={previewModal.logId}
