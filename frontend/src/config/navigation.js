@@ -87,6 +87,12 @@ export const SIDEBAR_MENU = {
         },
 
         {
+            title: "Quản lý tài khoản",
+            icon: "👤",
+            path: "/users"
+        },
+
+        {
             title: "Nhân sự",
             icon: "👨‍⚕️",
             path: "/staffs"

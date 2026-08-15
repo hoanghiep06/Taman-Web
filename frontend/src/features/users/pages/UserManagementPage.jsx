@@ -12,11 +12,22 @@ export const UserManagementPage = () => {
   const [usersList, setUsersList]       = useState([]);
   const [loading, setLoading]           = useState(true);
   const [searchQuery, setSearchQuery]   = useState('');
+  const [selectedIds, setSelectedIds]   = useState([]);
+  const [bulkLoading, setBulkLoading]   = useState(false);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isExcelModalOpen, setIsExcelModalOpen]   = useState(false);
   const [selectedHistoryUser, setSelectedHistoryUser] = useState(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen]   = useState(false);
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const ROLE_FILTER_OPTIONS = [
+      { value: 'ALL',              label: 'Tất cả chức vụ' },
+      { value: ROLES.ADMIN,        label: 'Quản trị viên (Admin)' },
+      { value: ROLES.MANAGER,      label: 'Quản lý (Manager)' },
+      { value: ROLES.DOCTOR,       label: 'Bác sĩ (Doctor)' },
+      { value: ROLES.COORDINATOR,  label: 'Điều phối viên (Coordinator)' },
+      { value: ROLES.STAFF,        label: 'Nhân viên chăm sóc (Caregiver)' },
+    ];
 
   const loadUsers = async () => {
     try {
@@ -27,8 +38,9 @@ export const UserManagementPage = () => {
       setLoading(false);
     }
   };
-
+  useEffect(() => { setSelectedIds([]); }, [searchQuery, roleFilter]);
   useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { setSelectedIds([]); }, [searchQuery]); // reset chọn khi đổi từ khóa tìm kiếm
 
   const handleCreateUser = async (data) => {
     try {
@@ -66,8 +78,64 @@ export const UserManagementPage = () => {
 
   const filteredUsers = usersList.filter(({ full_name, username, role }) => {
     const q = searchQuery.toLowerCase();
-    return full_name.toLowerCase().includes(q) || username.toLowerCase().includes(q) || role.toLowerCase().includes(q);
+    const matchesSearch =
+      full_name.toLowerCase().includes(q) ||
+      username.toLowerCase().includes(q) ||
+      role.toLowerCase().includes(q);
+    const matchesRole = roleFilter === 'ALL' || role === roleFilter;
+    return matchesSearch && matchesRole;
   });
+
+  // Chỉ những user KHÔNG bị khóa chỉnh sửa (không phải admin gốc, không phải Admin dưới quyền Manager) mới được chọn
+  const isSelectable = (targetUser) =>
+    targetUser.username !== 'admin' &&
+    !(user?.role === ROLES.MANAGER && targetUser.role === ROLES.ADMIN);
+
+  const selectableUsers = filteredUsers.filter(isSelectable);
+  const selectableIds = selectableUsers.map((u) => u.id);
+  const isAllSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds(isAllSelected ? [] : selectableIds);
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  // Bulk lock: chỉ toggle những user đang active (đang mở) trong danh sách đã chọn
+  const handleBulkLock = async () => {
+    const targets = usersList.filter((u) => selectedIds.includes(u.id) && u.is_active);
+    if (targets.length === 0) { alert('Các tài khoản đã chọn đều đang bị khóa sẵn.'); return; }
+    if (!window.confirm(`Khóa ${targets.length} tài khoản đã chọn?`)) return;
+    setBulkLoading(true);
+    try {
+      await Promise.all(targets.map((u) => usersApi.toggleLockUser(u.id)));
+      setSelectedIds([]);
+      await loadUsers();
+    } catch {
+      alert('Có lỗi xảy ra khi khóa hàng loạt, vui lòng thử lại!');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  // Bulk unlock: chỉ toggle những user đang bị khóa trong danh sách đã chọn
+  const handleBulkUnlock = async () => {
+    const targets = usersList.filter((u) => selectedIds.includes(u.id) && !u.is_active);
+    if (targets.length === 0) { alert('Các tài khoản đã chọn đều đang hoạt động sẵn.'); return; }
+    if (!window.confirm(`Mở khóa ${targets.length} tài khoản đã chọn?`)) return;
+    setBulkLoading(true);
+    try {
+      await Promise.all(targets.map((u) => usersApi.toggleLockUser(u.id)));
+      setSelectedIds([]);
+      await loadUsers();
+    } catch {
+      alert('Có lỗi xảy ra khi mở khóa hàng loạt, vui lòng thử lại!');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   // Helper: role badge className
   const roleBadgeClass = (role) => {
@@ -88,21 +156,51 @@ export const UserManagementPage = () => {
         </div>
 
         <div className={styles.actionRight}>
-          <div className={styles.searchWrapper}>
-            <span className={styles.searchIcon}>🔍</span>
-            <input
-              type="text"
-              placeholder="Tìm theo tên, tài khoản, chức vụ..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={styles.searchInput}
-              aria-label="Tìm kiếm nhân sự"
-            />
-          </div>
-          <button onClick={() => setIsExcelModalOpen(true)} className={styles.importBtn}>📥 Import Excel</button>
-          <button onClick={() => setIsCreateModalOpen(true)} className={styles.addBtn}>➕ Thêm Nhân Sự</button>
-        </div>
+              <div className={styles.searchWrapper}>
+                <span className={styles.searchIcon}>🔍</span>
+                <input
+                  type="text"
+                  placeholder="Tìm theo tên, tài khoản, chức vụ..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={styles.searchInput}
+                  aria-label="Tìm kiếm nhân sự"
+                />
+              </div>
+
+              <select
+                className={styles.roleFilterSelect}
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                aria-label="Lọc theo chức vụ"
+              >
+                {ROLE_FILTER_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+
+              <button onClick={() => setIsExcelModalOpen(true)} className={styles.importBtn}>📥 Import Excel</button>
+              <button onClick={() => setIsCreateModalOpen(true)} className={styles.addBtn}>➕ Thêm Nhân Sự</button>
+            </div>
       </div>
+
+      {/* Thanh hành động hàng loạt - chỉ hiện khi có chọn */}
+      {selectedIds.length > 0 && (
+        <div className={styles.bulkActionBar}>
+          <span className={styles.bulkCount}>Đã chọn {selectedIds.length} tài khoản</span>
+          <div className={styles.bulkButtons}>
+            <button className={styles.bulkLockBtn} onClick={handleBulkLock} disabled={bulkLoading}>
+              🔒 Khóa hàng loạt
+            </button>
+            <button className={styles.bulkUnlockBtn} onClick={handleBulkUnlock} disabled={bulkLoading}>
+              🔓 Mở khóa hàng loạt
+            </button>
+            <button className={styles.bulkClearBtn} onClick={() => setSelectedIds([])} disabled={bulkLoading}>
+              Bỏ chọn
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Bảng dữ liệu */}
       <div className={styles.tableCard}>
@@ -110,6 +208,14 @@ export const UserManagementPage = () => {
           <table className={styles.table}>
             <thead className={styles.thead}>
               <tr>
+                <th className={styles.thCheckbox}>
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={toggleSelectAll}
+                    disabled={selectableUsers.length === 0}
+                  />
+                </th>
                 <th className={styles.th}>Họ và Tên</th>
                 <th className={styles.th}>Tên Đăng Nhập</th>
                 <th className={styles.th}>Chức Vụ</th>
@@ -120,10 +226,19 @@ export const UserManagementPage = () => {
             <tbody>
               {filteredUsers.length > 0 ? (
                 filteredUsers.map((targetUser) => {
-                  const isActionBlocked = user?.role === ROLES.MANAGER && targetUser.role === ROLES.ADMIN;
+                  const isActionBlocked = !isSelectable(targetUser);
 
                   return (
                     <tr key={targetUser.id} className={styles.tr}>
+                      <td className={styles.tdCheckbox}>
+                        {!isActionBlocked && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(targetUser.id)}
+                            onChange={() => toggleSelectOne(targetUser.id)}
+                          />
+                        )}
+                      </td>
                       <td className={styles.tdBold}>{targetUser.full_name}</td>
                       <td className={styles.td}><span className={styles.username}>{targetUser.username}</span></td>
                       <td className={styles.td}>
@@ -163,7 +278,7 @@ export const UserManagementPage = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={5} className={styles.emptyState}>
+                  <td colSpan={6} className={styles.emptyState}>
                     Không tìm thấy nhân sự nào khớp với từ khóa "{searchQuery}"
                   </td>
                 </tr>
