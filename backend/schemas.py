@@ -59,9 +59,29 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: int
     created_at: datetime
+    facility_name: Optional[str] = None
+    must_change_password: bool = False
     
     model_config = ConfigDict(from_attributes=True)
 
+class UserResetPassword(BaseModel):
+    new_password: Optional[str] = None # Nếu để trống, hệ thống sẽ reset về chính username/SĐT của tài khoản
+
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    role: Optional[RoleType] = None
+    facility_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class BulkActionRequest(BaseModel):
+    user_ids: List[int]
+
+class BulkLockRequest(BaseModel):
+    user_ids: List[int]
+    is_active: bool  # False để khóa hàng loạt, True để mở khóa hàng loạt
+    
 
 class PasswordChange(BaseModel):
     old_password: str
@@ -364,6 +384,16 @@ class ShiftReportAuditResponse(BaseModel):
 
 class ShiftMedicalReportDetailResponse(ShiftMedicalReportResponse):
     edit_history: List[ShiftReportAuditResponse] = []  # Chỉ Admin/Manager thấy nếu truyền include_history=True
+
+
+class CurrentShiftResponse(BaseModel):
+    shift_id: Optional[int] = None
+    shift_date: date
+    shift_type: str
+    status: str
+    start_time: str
+    end_time: str
+    is_active: bool
 
 # ==========================================
 # QUẢN LÝ VẬN HÀNH: BÁO CÁO, KHO, BẾP, BẢO VỆ

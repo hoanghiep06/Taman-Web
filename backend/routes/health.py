@@ -12,7 +12,7 @@ from database import get_db
 from models import (
     Elder, VitalSignRecord, Prescription, PrescriptionLog, 
     TreatmentDiary, ShiftReport, User, Room, Zone, Facility, AuditLog,
-    WeightRecord , Shift, VitalSignRecord
+    WeightRecord , Shift, VitalSignRecord, ShiftSetting, User
 )
 from schemas import (
     VitalSignCreate, VitalSignResponse, VitalSignUpdate,
@@ -20,12 +20,11 @@ from schemas import (
     TreatmentDiaryCreate, TreatmentDiaryResponse,
     ElderHealthSummaryCard, ElderShiftNoteInput,
     ShiftMedicalReportCreate, ShiftMedicalReportResponse,
-    RoleType, ShiftType, WeightRecordCreate, WeightRecordResponse, 
+    RoleType, ShiftType, WeightRecordCreate, WeightRecordResponse, CurrentShiftResponse,
     ElderWeightDueResponse, WeightRecordUpdate, ShiftMedicalReportDetailResponse, ShiftReportAuditResponse, ShiftMedicalReportUpdate
 )
 from core.dependencies import PermissionChecker, get_current_user, require_care_team, require_medical_team
 from core.constants import VITAL_LIMITS, max_allowed_days_for_staff, max_allowed_days_max
-
 import json 
 import logging
 
@@ -933,3 +932,56 @@ def build_health_dashboard_cards(db: Session, current_user: User, facility_id: O
         })
 
     return result
+
+
+
+@router.get("/current-shift", response_model=CurrentShiftResponse)
+def get_current_active_shift(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Lấy thông tin ca trực hiện tại:
+    - Tự động kích hoạt JIT Sync kiểm tra / mở / đóng ca theo giờ thực tế.
+    - Trả về ngày, loại ca (Sáng/Tối), trạng thái và mốc giờ bắt đầu - kết thúc.
+    """
+    # 1. Tự động refresh / đồng bộ ca JIT
+    try:
+        check_and_sync_shift_jit(db)
+    except Exception as jit_err:
+        db.rollback()
+        logging.error(f"[JIT SHIFT ERROR]: Lỗi khi đồng bộ ca: {str(jit_err)}")
+
+    # 2. Lấy cấu hình khung giờ ca
+    setting = db.query(ShiftSetting).first()
+    morning_start = setting.morning_start if setting else "08:00"
+    morning_end = setting.morning_end if setting else "19:00"
+    evening_start = setting.evening_start if setting else "20:00"
+    evening_end = setting.evening_end if setting else "07:00"
+
+    # 3. Lấy ca đang Mở ("Open") gần nhất
+    active_shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.id.desc()).first()
+
+    if active_shift:
+        is_morning = active_shift.shift_type == "Sang"
+        return CurrentShiftResponse(
+            shift_id=active_shift.id,
+            shift_date=active_shift.shift_date,
+            shift_type=active_shift.shift_type,
+            status=active_shift.status,
+            start_time=morning_start if is_morning else evening_start,
+            end_time=morning_end if is_morning else evening_end,
+            is_active=True
+        )
+
+    # Trường hợp ngoài giờ trực (không có ca nào đang Open)
+    latest_shift = db.query(Shift).order_by(Shift.id.desc()).first()
+    return CurrentShiftResponse(
+        shift_id=latest_shift.id if latest_shift else None,
+        shift_date=latest_shift.shift_date if latest_shift else date.today(),
+        shift_type=latest_shift.shift_type if latest_shift else "Sang",
+        status="Closed",
+        start_time=morning_start,
+        end_time=morning_end,
+        is_active=False
+    )
