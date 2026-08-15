@@ -1,6 +1,11 @@
 import axiosClient from '../../../api/axiosClient';
 
 export const shiftHandoverApi = {
+
+    // 0. Lấy danh sách cơ sở của tài khoản
+    getAllFacilities: async () => {
+        return await axiosClient.get('/admin/facilities');
+    },
     // 1. Tạo báo cáo giao ca
     createShiftReport: async (payload) => {
         return await axiosClient.post('/health/shift-reports', payload);

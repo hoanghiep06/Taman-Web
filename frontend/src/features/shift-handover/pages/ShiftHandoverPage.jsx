@@ -14,15 +14,22 @@ export const ShiftHandoverPage = () => {
   const isDesktop = useIsDesktop();
   const currentRole = (user?.role || '').toUpperCase();
 
-  // 1. Chỉ COORDINATOR mới có quyền nhập/sửa báo cáo giao ca
-  const canEdit = currentRole.includes('COORDINATOR') || currentRole.includes('ADMIN');
+  // 1. Phân quyền đầy đủ cho các vai trò được phép nhập/sửa đơn
+  const canEdit = 
+    currentRole.includes('COORDINATOR') || 
+    currentRole.includes('ADMIN') || 
+    currentRole.includes('MANAGER');
 
-  // 2. Lọc phạm vi cơ sở dựa trực tiếp vào user.facility_id
-  // Nếu facility_id là null/undefined -> Xem TOÀN BỘ cơ sở (facilityParam = null)
   const hasSpecificFacility = user?.facility_id !== null && user?.facility_id !== undefined;
   const targetFacilityId = hasSpecificFacility ? Number(user.facility_id) : null;
 
-  const { eldersList, alerts, loading } = useVitalSignsData(targetFacilityId);
+  // Danh sách cơ sở từ backend & cơ sở đang chọn trên form
+  const [facilities, setFacilities] = useState([]);
+  const [selectedFormFacilityId, setSelectedFormFacilityId] = useState(targetFacilityId || null);
+
+  // Facility ID dùng để nạp danh sách NCT & cảnh báo vào Form
+  const activeDataFacilityId = hasSpecificFacility ? targetFacilityId : (selectedFormFacilityId || null);
+  const { eldersList, alerts, loading } = useVitalSignsData(activeDataFacilityId);
 
   const [reportData, setReportData] = useState([]);
   const [isReportSubmitted, setIsReportSubmitted] = useState(false);
@@ -32,11 +39,32 @@ export const ShiftHandoverPage = () => {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const formRef = useRef(null);
 
+  // 2. Chỉ gọi API facilities nếu người dùng CÓ QUYỀN LÀM ĐƠN
+  useEffect(() => {
+    const fetchFacilities = async () => {
+      if (!canEdit) return; // Nhân viên chỉ xem -> Bỏ qua, tránh lỗi 403
+
+      try {
+        const res = await shiftHandoverApi.getAllFacilities();
+        const facList = res?.data || res || [];
+        setFacilities(facList);
+
+        // Mặc định chọn cơ sở đầu tiên nếu là tài khoản quản lý đa cơ sở chưa chọn
+        if (!hasSpecificFacility && facList.length > 0 && !selectedFormFacilityId) {
+          setSelectedFormFacilityId(Number(facList[0].id));
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải danh sách cơ sở:', err);
+      }
+    };
+    fetchFacilities();
+  }, [canEdit, hasSpecificFacility]);
+
+  // 3. Tải dữ liệu báo cáo giao ca
   const fetchShiftReportData = async () => {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
 
-      // Tải báo cáo hôm nay và báo cáo quá khứ (7 ngày)
       const [todayRes, archiveRes] = await Promise.all([
         shiftHandoverApi.getArchivedShiftReports({
           facility_id: targetFacilityId,
@@ -52,12 +80,8 @@ export const ShiftHandoverPage = () => {
       const archiveReports = archiveRes?.data || archiveRes || [];
 
       if (!hasSpecificFacility) {
-        // =========================================================
-        // TRƯỜNG HỢP 1: facility_id LÀ NULL / UNDEFINED -> XEM TẤT CẢ CƠ SỞ
-        // =========================================================
         const facilityMap = new Map();
 
-        // Nạp báo cáo quá khứ vào Map (mỗi cơ sở lấy 1 báo cáo mới nhất)
         archiveReports.forEach((report) => {
           const facId = String(report.facility_id);
           if (!facilityMap.has(facId)) {
@@ -65,7 +89,6 @@ export const ShiftHandoverPage = () => {
           }
         });
 
-        // Nạp / Ghi đè bằng báo cáo HÔM NAY nếu cơ sở đó đã có báo cáo
         todayReports.forEach((report) => {
           const facId = String(report.facility_id);
           facilityMap.set(facId, { ...report, isPrevious: false });
@@ -77,17 +100,12 @@ export const ShiftHandoverPage = () => {
         const hasFallback = combinedReports.some((r) => r.isPrevious);
         setIsPreviousReportShown(hasFallback);
         setIsReportSubmitted(todayReports.length > 0);
-
       } else {
-        // =========================================================
-        // TRƯỜNG HỢP 2: facility_id CÓ ID CỤ THỂ -> CHỈ XEM 1 CƠ SỞ ĐÓ
-        // =========================================================
         if (todayReports.length > 0) {
           setReportData(todayReports.map((r) => ({ ...r, isPrevious: false })));
           setIsReportSubmitted(true);
           setIsPreviousReportShown(false);
         } else if (archiveReports.length > 0) {
-          // Lấy 1 báo cáo ca mới nhất của đúng cơ sở này trong quá khứ
           setReportData([{ ...archiveReports[0], isPrevious: true }]);
           setIsReportSubmitted(false);
           setIsPreviousReportShown(true);
@@ -109,6 +127,9 @@ export const ShiftHandoverPage = () => {
   const handleStartEditReport = (targetReport) => {
     if (!canEdit) return;
     setEditingReportItem(targetReport);
+    if (targetReport.facility_id) {
+      setSelectedFormFacilityId(Number(targetReport.facility_id));
+    }
     setIsEditingReport(true);
     setTimeout(() => {
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -145,7 +166,7 @@ export const ShiftHandoverPage = () => {
 
   const Layout = isDesktop ? ShiftHandoverWebLayout : ShiftHandoverMobileLayout;
 
-  if (loading) {
+  if (loading && facilities.length === 0) {
     return (
       <div style={{ padding: '40px', textAlign: 'center', fontWeight: 'bold' }}>
         Đang tải dữ liệu bàn giao ca...
@@ -156,7 +177,6 @@ export const ShiftHandoverPage = () => {
   return (
     <Layout>
       <div style={{ paddingBottom: '140px' }}>
-        {/* Header trang Giao ca */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', margin: 0 }}>
             QUẢN LÝ BÁO CÁO BÀN GIAO CA TRỰC
@@ -178,7 +198,6 @@ export const ShiftHandoverPage = () => {
           </button>
         </div>
 
-        {/* THÔNG BÁO BỔ SUNG KHI HIỂN THỊ BÁO CÁO CA TRƯỚC */}
         {isPreviousReportShown && (
           <div
             style={{
@@ -196,7 +215,7 @@ export const ShiftHandoverPage = () => {
           </div>
         )}
 
-        {/* 1. HIỂN THỊ BÁO CÁO GIAO CA */}
+        {/* HIỂN THỊ BÁO CÁO GIAO CA */}
         {reportData.length > 0 && !isEditingReport && (
           <ShiftReportView
             reports={reportData}
@@ -206,11 +225,14 @@ export const ShiftHandoverPage = () => {
           />
         )}
 
-        {/* 2. FORM TẠO/SỬA BÁO CÁO GIAO CA (CHỈ COORDINATOR) */}
+        {/* FORM BÁO CÁO GIAO CA */}
         <div ref={formRef}>
           {canEdit && (!isReportSubmitted || isEditingReport) && (
             <HandoverReportForm
               facilityId={user?.facility_id}
+              facilitiesList={facilities}
+              selectedFacilityId={selectedFormFacilityId}
+              onChangeFacility={(newFacId) => setSelectedFormFacilityId(newFacId)}
               eldersList={eldersList}
               existingReport={isEditingReport ? editingReportItem : null}
               onSubmitReport={handleSubmitHandover}
@@ -222,7 +244,6 @@ export const ShiftHandoverPage = () => {
           )}
         </div>
 
-        {/* MODAL TRA CỨU LỊCH SỬ BÀN GIAO CA QUÁ KHỨ */}
         <ShiftReportHistoryModal
           isOpen={isHistoryModalOpen}
           onClose={() => setIsHistoryModalOpen(false)}

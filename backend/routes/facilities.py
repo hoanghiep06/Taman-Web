@@ -9,7 +9,7 @@ from schemas import (
     ZoneCreate, ZoneResponse, 
     RoleType
 )
-from core.dependencies import require_management
+from core.dependencies import require_management, require_medical_team
 
 router = APIRouter(prefix="/api/admin/facilities", tags=["[Admin/Manager] Quản lý Cơ Sở & Phân Khu"])
 
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/admin/facilities", tags=["[Admin/Manager] Quản
 @router.get("", response_model=List[FacilityResponse])
 def get_all_facilities(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_management)
+    current_user: User = Depends(require_medical_team)
 ):
     """
     Lấy danh sách các Cơ sở:

@@ -8,13 +8,12 @@ const SearchableElderSelect = ({ eldersList, selectedElderId, selectedElderIds =
 
   const selectedElder = eldersList.find((e) => e.id === selectedElderId);
 
-  // LỌC BỎ CÁC CỤ ĐÃ ĐƯỢC CHỌN Ở DÒNG KHÁC
   const filteredElders = eldersList.filter((e) => {
     const isAlreadySelectedInOtherRow = selectedElderIds.includes(e.id) && e.id !== selectedElderId;
     if (isAlreadySelectedInOtherRow) return false;
 
     const kw = searchTerm.toLowerCase().trim();
-    return e.fullName.toLowerCase().includes(kw) || e.roomNumber.toString().includes(kw);
+    return (e.fullName?.toLowerCase() || '').includes(kw) || (e.roomNumber?.toString() || '').includes(kw);
   });
 
   return (
@@ -68,7 +67,16 @@ const SearchableElderSelect = ({ eldersList, selectedElderId, selectedElderIds =
   );
 };
 
-export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport = null, onSubmitReport, onCancelEdit }) => {
+export const HandoverReportForm = ({
+  facilityId,
+  facilitiesList = [],
+  selectedFacilityId,
+  onChangeFacility,
+  eldersList = [],
+  existingReport = null,
+  onSubmitReport,
+  onCancelEdit
+}) => {
   const { user } = useContext(AuthContext);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [elderEvents, setElderEvents] = useState([{ elder_id: '', note: '' }]);
@@ -76,17 +84,30 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
   const [recordingIndex, setRecordingIndex] = useState(null);
   const [isRecordingHandover, setIsRecordingHandover] = useState(false);
   
-  // STATE QUẢN LÝ LỖI FIELD & LỖI TỔNG THỂ
   const [errorMessage, setErrorMessage] = useState('');
-  const [fieldErrors, setFieldErrors] = useState([]); // Mảng chứa cờ lỗi cho từng dòng: [{ elder_id: true/false, note: true/false }]
+  const [fieldErrors, setFieldErrors] = useState([]);
+
+  // Kiểm tra quyền đa cơ sở
+  const isMultiFacility = user?.facility_id === null || user?.facility_id === undefined;
+  
+  const [currentFacId, setCurrentFacId] = useState(
+    existingReport?.facility_id || selectedFacilityId || user?.facility_id || (facilitiesList[0]?.id ?? 1)
+  );
 
   const recognitionRef = useRef(null);
-
-  // TỔNG HỢP TẤT CẢ ID NGƯỜI CAO TUỔI ĐANG ĐƯỢC CHỌN TRONG FORM
   const allSelectedElderIds = elderEvents.map((item) => item.elder_id).filter(Boolean);
 
   useEffect(() => {
+    if (selectedFacilityId) {
+      setCurrentFacId(selectedFacilityId);
+    }
+  }, [selectedFacilityId]);
+
+  useEffect(() => {
     if (existingReport) {
+      if (existingReport.facility_id) {
+        setCurrentFacId(existingReport.facility_id);
+      }
       setHandoverNotes(existingReport.handover_notes || '');
       if (existingReport.formatted_elder_descriptions) {
         const lines = existingReport.formatted_elder_descriptions.split('\n');
@@ -109,6 +130,17 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
       }
     }
   }, [existingReport, eldersList]);
+
+  const handleFacilitySelect = (newId) => {
+    const numericId = Number(newId);
+    setCurrentFacId(numericId);
+    // Reset danh sách sự cố về trắng khi đổi cơ sở vì danh sách NCT khác nhau
+    setElderEvents([{ elder_id: '', note: '' }]);
+    setFieldErrors([{ elder_id: false, note: false }]);
+    if (onChangeFacility) {
+      onChangeFacility(numericId);
+    }
+  };
 
   const toggleVoiceRecording = (targetType, index = null) => {
     setErrorMessage('');
@@ -185,7 +217,6 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
     updated[index][field] = value;
     setElderEvents(updated);
 
-    // TỰ ĐỘNG XÓA VẾT ĐỎ BÁO LỖI KHI NGUỜI DÙNG BẮT ĐẦU CHỌN / NHẬP VÀO Ô ĐÓ
     if (fieldErrors[index] && fieldErrors[index][field]) {
       const updatedErrors = [...fieldErrors];
       updatedErrors[index] = { ...updatedErrors[index], [field]: false };
@@ -212,7 +243,6 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
       };
     });
 
-    // NẾU CÓ BẤT KỲ DÒNG NÀO THIẾU TÊN CỤ HOẶC THIẾU MÔ TẢ
     if (hasValidationError) {
       setFieldErrors(errorsList);
       setErrorMessage('Vui lòng chọn tên NCT và nhập mô tả đầy đủ cho tất cả các dòng!');
@@ -221,18 +251,9 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
 
     setFieldErrors([]);
 
-    const firstSelectedElder = eldersList.find((e) => e.id === elderEvents[0]?.elder_id);
-    const rawFacilityId =
-      existingReport?.facility_id ||
-      facilityId ||
-      user?.facility_id ||
-      user?.facilityId ||
-      firstSelectedElder?.facilityId ||
-      1;
-
     onSubmitReport(
       {
-        facility_id: Number(rawFacilityId),
+        facility_id: Number(currentFacId),
         shift_date: new Date().toISOString().split('T')[0],
         shift_type: 'Sang',
         elder_events: elderEvents,
@@ -242,10 +263,12 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
     );
   };
 
+  // Lấy tên cơ sở hiện tại từ danh sách trả về của API
+  const currentFacilityObj = facilitiesList.find((f) => Number(f.id) === Number(currentFacId));
+  const currentFacilityName = currentFacilityObj ? currentFacilityObj.name : `Cơ sở ${currentFacId || ''}`;
+
   return (
     <div className={styles.box} style={{ position: 'relative', border: existingReport ? '2px solid #d97706' : '2px solid #10b981' }}>
-      
-      {/* KHỐI THÔNG BÁO LỖI BÁO CÁO Ở GÓC TRÊN CỦA FORM */}
       {errorMessage && (
         <div
           style={{
@@ -263,7 +286,6 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            animation: 'fadeIn 0.2s ease-in-out',
           }}
         >
           <span>⚠️ {errorMessage}</span>
@@ -277,11 +299,62 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
         </div>
       )}
 
-      <div className={styles.headerToggle} onClick={() => setIsCollapsed(!isCollapsed)}>
-        <h2 className={styles.title} style={{ color: existingReport ? '#b45309' : '#065f46' }}>
-          {existingReport ? 'HIỆU CHỈNH BÁO CÁO GIAO CA' : 'TẠO BÁO CÁO GIAO CA (ĐIỀU PHỐI)'}
-        </h2>
-        <button type="button" style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: 'bold' }}>
+      {/* HEADER FORM + CHỌN/HIỂN THỊ CƠ SỞ */}
+      <div className={styles.headerToggle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <h2 className={styles.title} style={{ color: existingReport ? '#b45309' : '#065f46' }}>
+            {existingReport ? 'HIỆU CHỈNH BÁO CÁO GIAO CA' : 'TẠO BÁO CÁO GIAO CA (ĐIỀU PHỐI)'}
+          </h2>
+
+          {/* VÙNG CHỌN HOẶC HIỂN THỊ CƠ SỞ TỪ BACKEND */}
+          {isMultiFacility ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+              <label style={{ fontSize: '12px', fontWeight: '800', color: '#475569' }}>🏢 Cơ sở:</label>
+              <select
+                value={currentFacId || ''}
+                onChange={(e) => handleFacilitySelect(e.target.value)}
+                disabled={Boolean(existingReport)} // Khóa chọn cơ sở nếu đang trong chế độ chỉnh sửa báo cáo cũ
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  border: '1.5px solid #0284c7',
+                  background: '#f0f9ff',
+                  color: '#0369a1',
+                  fontWeight: '800',
+                  fontSize: '12px',
+                  outline: 'none',
+                  cursor: existingReport ? 'not-allowed' : 'pointer',
+                  opacity: existingReport ? 0.7 : 1,
+                }}
+              >
+                {facilitiesList.map((fac) => (
+                  <option key={fac.id} value={fac.id}>
+                    🏢 {fac.name} {fac.total_elders ? `(${fac.total_elders} Cụ)` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <span
+              style={{
+                background: '#e0f2fe',
+                color: '#0369a1',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '800',
+              }}
+            >
+              🏢 {currentFacilityName}
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', color: '#64748b' }}
+        >
           {isCollapsed ? 'Mở' : 'Thu gọn'}
         </button>
       </div>
@@ -307,7 +380,6 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
                   </button>
                 )}
 
-                {/* SELECT CHỌN NCT - CÓ NỔI BẬT LỖI KHI CHƯA CHỌN */}
                 <SearchableElderSelect
                   eldersList={eldersList}
                   selectedElderId={item.elder_id}
@@ -316,7 +388,6 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
                   hasError={rowError.elder_id}
                 />
 
-                {/* Ô NHẬP MÔ TẢ - CÓ NỔI BẬT LỖI VIỀN ĐỎ VÀ NỀN HỒNG KHI ĐỂ TRỐNG */}
                 <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
                   <input
                     type="text"
@@ -422,4 +493,4 @@ export const HandoverReportForm = ({ facilityId, eldersList = [], existingReport
       )}
     </div>
   );
-};
+}; 
