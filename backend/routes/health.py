@@ -827,7 +827,7 @@ def calculate_abnormal_flag(spo2, bp_sys, bp_dia, temp, pulse) -> bool:
     return False
 
 
-def build_health_dashboard_cards(db: Session, current_user: User, facility_id: Optional[int] = None):
+def build_health_dashboard_cards(db: Session, current_user: User, facility_id: Optional[int] = None, is_doctor_view: bool = False):
     # 1. Lấy thông tin Ca đang Mở ("Open") thực tế trong DB do JIT vừa đồng bộ
     active_shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.id.desc()).first()
     
@@ -902,6 +902,7 @@ def build_health_dashboard_cards(db: Session, current_user: User, facility_id: O
                 "status_tag": status_tag,
                 "is_abnormal": is_abnormal,
                 "is_edited": is_edited,
+                "has_abnormal_vital": is_abnormal, # Thêm trường này cho Doctor Dashboard
                 "latest_vital": {
                     "vital_id": latest_vital.id,
                     "bp": f"{latest_vital.bp_systolic}/{latest_vital.bp_diastolic}",
@@ -915,12 +916,11 @@ def build_health_dashboard_cards(db: Session, current_user: User, facility_id: O
 
         facility_map[facility.id]["zones"][zone.id]["rooms"].append({
             "room_id": room.id,
-            "room_number": room.room_number, # "101", "102"
+            "room_number": room.room_number,
             "elder_count": len(elders),
             "elders": elder_cards
         })
 
-    # Đóng gói Response đa Cơ sở
     result = []
     for f_id, f_data in facility_map.items():
         zone_list = [z_data for z_id, z_data in f_data["zones"].items()]
