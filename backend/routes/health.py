@@ -1,9 +1,10 @@
 # backend/routes/health.py
 from typing import List, Optional
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
+from services.maintenance_service import run_system_maintenance_jit
 
 
 from services.shift_service import check_and_sync_shift_jit 
@@ -259,6 +260,7 @@ def create_shift_medical_report(
 # =========================================================================
 @router.get("/dashboard-live", response_model=List[dict])
 def get_live_shift_dashboard_for_all(
+    background_tasks: BackgroundTasks,
     facility_id: Optional[int] = Query(None, description="Lọc theo Cơ sở (Nếu là Admin/Doctor)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
@@ -270,11 +272,7 @@ def get_live_shift_dashboard_for_all(
     - Lọc đúng dữ liệu sinh hiệu của CA TRỰC LIVE HIỆN TẠI.
     """
     # 1. KÍCH HOẠT JIT REFRESH CA TỰ ĐỘNG DỰA TRÊN SHIFT_SETTING
-    try:
-            check_and_sync_shift_jit(db)
-    except Exception as jit_err:
-        db.rollback()
-        logging.error(f"[JIT SHIFT FATAL_ERROR]: Lỗi tiến trình đồng bộ ca trực lúc đăng nhập: {str(jit_err)}")
+    run_system_maintenance_jit(db, background_tasks)
 
     return build_health_dashboard_cards(db, current_user, facility_id, is_doctor_view=False)
 

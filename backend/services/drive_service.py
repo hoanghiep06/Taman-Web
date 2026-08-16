@@ -238,11 +238,12 @@ def extract_file_id_from_url(url: str) -> Optional[str]:
 
 
 def download_file_bytes_from_drive(file_id: str) -> bytes:
+    """Tải nội dung nhị phân file từ Google Drive theo file_id."""
     service = get_drive_service()
     return service.files().get_media(fileId=file_id).execute()
 
-
 def upload_db_backup_to_drive(file_bytes: bytes, filename: str) -> str:
+    """Đẩy file lõi sao lưu SQL (.sql) vào thư mục /backup trên Drive."""
     service = get_drive_service()
     backup_base_id = get_or_create_folder("backup", ROOT_FOLDER_ID)
     file_metadata = {'name': filename, 'parents': [backup_base_id]}
@@ -253,10 +254,10 @@ def upload_db_backup_to_drive(file_bytes: bytes, filename: str) -> str:
 
 
 def cleanup_old_db_backups(keep_count: int = 10):
+    """Xóa các bản backup cũ vượt quá ngưỡng keep_count."""
     try:
         service = get_drive_service()
         backup_base_id = get_or_create_folder("backup", ROOT_FOLDER_ID)
-        
         query = f"'{backup_base_id}' in parents and trashed = false"
         results = service.files().list(
             q=query,
@@ -266,22 +267,16 @@ def cleanup_old_db_backups(keep_count: int = 10):
         ).execute()
         
         files = results.get('files', [])
-        
         if len(files) > keep_count:
             files_to_delete = files[keep_count:]
-            logging.warning(f"[DRIVE RETENTION]: Phát hiện {len(files)} bản backup. Tiến hành xóa các bản cũ...")
-            
             for old_file in files_to_delete:
                 service.files().delete(fileId=old_file['id']).execute()
-                logging.info(f"[DRIVE RETENTION SUCCESS]: Đã xóa bản sao lưu SQL cũ: {old_file['name']}")
-        else:
-            logging.info(f"[DRIVE RETENTION]: Hiện có {len(files)} bản backup SQL, nằm trong ngưỡng an toàn.")
-            
+                logging.info(f"[DRIVE RETENTION]: Đã xóa bản backup cũ: {old_file['name']}")
     except Exception as e:
-        logging.error(f"[DRIVE RETENTION ERROR]: Lỗi dọn dẹp bản backup cũ: {e}")
-
+        logging.error(f"[DRIVE RETENTION ERROR]: {str(e)}")
 
 def list_db_backups_from_drive():
+    """Truy vấn danh sách toàn bộ các file backup (.sql) trên Drive."""
     service = get_drive_service()
     backup_base_id = get_or_create_folder("backup", ROOT_FOLDER_ID)
     query = f"'{backup_base_id}' in parents and trashed = false"
@@ -294,3 +289,39 @@ def list_db_backups_from_drive():
     ).execute()
     
     return results.get('files', [])
+
+
+
+
+def upload_archive_file_to_drive(
+    file_bytes: bytes, 
+    filename: str, 
+    facility_name: Optional[str],
+    subfolder_path: List[str]
+) -> str:
+    """
+    Tải file lưu trữ lên Drive theo cây thư mục đa cơ sở:
+    ROOT -> [Tên_Cơ_Sở / System_Global] -> Archives -> [Category] -> [Year] -> filename
+    """
+    service = get_drive_service()
+    
+    # 1. Thư mục Cơ sở (Nếu không thuộc cơ sở nào thì gom vào System_Global)
+    root_subfolder_name = sanitize_filename(facility_name) if facility_name else "System_Global"
+    facility_folder_id = get_or_create_folder(root_subfolder_name, ROOT_FOLDER_ID)
+    
+    # 2. Thư mục Archives bên trong Cơ sở đó
+    archives_folder_id = get_or_create_folder("Archives", facility_folder_id)
+    
+    # 3. Tạo các tầng con (Category: Inspection_Logs / Medical_Vitals... -> Năm)
+    current_parent_id = archives_folder_id
+    for folder_name in subfolder_path:
+        current_parent_id = get_or_create_folder(folder_name, current_parent_id)
+        
+    file_metadata = {'name': filename, 'parents': [current_parent_id]}
+    media = MediaIoBaseUpload(
+        io.BytesIO(file_bytes),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        resumable=True
+    )
+    file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+    return file.get('webViewLink')

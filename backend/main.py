@@ -3,13 +3,13 @@ import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-
-from database import engine
+from services.maintenance_service import run_system_maintenance_jit
+from database import engine, get_db
 import models
 from models import User, ShiftSetting
 from core.scheduler import init_scheduler
@@ -131,7 +131,13 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # API PING / HEALTH CHECK
 # ==========================================
 @app.get("/api/health", tags=["0. System Health"])
-def system_health_check():
+def system_health_check(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+
+    run_system_maintenance_jit(db, background_tasks)
+    
     return {
         "status": "online",
         "system": "Viện Dưỡng Lão Tâm An System API",

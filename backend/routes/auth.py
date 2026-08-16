@@ -1,5 +1,6 @@
 # routes/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
+from services.maintenance_service import run_system_maintenance_jit
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from database import get_db
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api/auth", tags=["1. [Xác thực] Đăng Nhập & H
 @limiter.limit("5/minute")
 def login(
     request: Request, 
+    background_tasks: BackgroundTasks,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -28,12 +30,7 @@ def login(
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tài khoản đã bị khóa")
 
-    # Kích hoạt đồng bộ JIT ca trực
-    try:
-        check_and_sync_shift_jit(db)
-    except Exception as jit_err:
-        db.rollback()
-        logging.error(f"[JIT SHIFT FATAL_ERROR]: Lỗi tiến trình đồng bộ ca trực lúc đăng nhập: {str(jit_err)}")
+    run_system_maintenance_jit(db, background_tasks)
 
     # Ghi nhận log đăng nhập
     log = LoginLog(
@@ -56,7 +53,12 @@ def login(
 
 
 @router.get("/users/me", response_model=UserResponse)
-def get_my_profile(current_user: User = Depends(get_current_user)):
+def get_my_profile(
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(get_db),      
+    current_user: User = Depends(get_current_user)
+):
+    run_system_maintenance_jit(db, background_tasks)
     return current_user
 
 
