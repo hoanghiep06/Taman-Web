@@ -353,3 +353,4 @@
 @media (max-width: 768px) {
   .roleFilterSelect { width: 100%; }
 }
+.btnEdit { composes: actionBtn; background: #9B59B6; }

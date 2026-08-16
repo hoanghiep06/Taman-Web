@@ -1,27 +1,34 @@
 import axiosClient from '../../../api/axiosClient';
 
 export const usersApi = {
-  // 1. Lấy danh sách toàn bộ người dùng hệ thống -> Trả về List[UserResponse]
   getAllUsers: () => {
     return axiosClient.get('/admin/users');
   },
 
-  // 2. Khởi tạo tài khoản mới -> Truyền vào UserCreate, trả về UserResponse
   createUser: (userData) => {
     return axiosClient.post('/admin/users', userData);
   },
 
-  // 3. Khóa/Mở khóa hoạt động tài khoản -> Trả về UserResponse đã cập nhật
+  // MỚI: Sửa thông tin tài khoản (full_name, phone_number, role, facility_id, is_active)
+  updateUser: (userId, userData) => {
+    return axiosClient.put(`/admin/users/${userId}`, userData);
+  },
+
   toggleLockUser: (userId) => {
     return axiosClient.put(`/admin/users/${userId}/toggle-lock`);
   },
 
-  // 4. Xóa vĩnh viễn tài khoản -> Trả về trạng thái 204 No Content
+  // MỚI: Reset mật khẩu về mặc định, hoặc đặt mật khẩu mới cụ thể
+  resetPassword: (userId, newPassword = null) => {
+    return axiosClient.put(`/admin/users/${userId}/reset-password`, {
+      new_password: newPassword,
+    });
+  },
+
   deleteUser: (userId) => {
     return axiosClient.delete(`/admin/users/${userId}`);
   },
 
-  // 5. IMPORT EXCEL: Nạp danh sách nhân sự hàng loạt
   importUsersExcel: (file) => {
     const formData = new FormData();
     formData.append('file', file);

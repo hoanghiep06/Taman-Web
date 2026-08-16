@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { usersApi } from '../api/usersApi';
 import { AuthContext } from '../../../contexts/AuthContext';
 import { CreateUserModal } from '../components/CreateUserModal';
+import { UserEditModal } from '../components/UserEditModal';
 import { ImportDataModal } from '../../../components/ImportDataModal';
 import { UserHistoryModal } from '../components/UserHistoryModal';
 import { ROLES } from '../../../utils/constants';
@@ -12,22 +13,26 @@ export const UserManagementPage = () => {
   const [usersList, setUsersList]       = useState([]);
   const [loading, setLoading]           = useState(true);
   const [searchQuery, setSearchQuery]   = useState('');
+  const [roleFilter, setRoleFilter]     = useState('ALL');
+  const [facilityFilter, setFacilityFilter] = useState('ALL');
   const [selectedIds, setSelectedIds]   = useState([]);
   const [bulkLoading, setBulkLoading]   = useState(false);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen]     = useState(false);
   const [isExcelModalOpen, setIsExcelModalOpen]   = useState(false);
+  const [editTargetUser, setEditTargetUser]       = useState(null);
   const [selectedHistoryUser, setSelectedHistoryUser] = useState(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen]   = useState(false);
-  const [roleFilter, setRoleFilter] = useState('ALL');
+
   const ROLE_FILTER_OPTIONS = [
-      { value: 'ALL',              label: 'Tất cả chức vụ' },
-      { value: ROLES.ADMIN,        label: 'Quản trị viên (Admin)' },
-      { value: ROLES.MANAGER,      label: 'Quản lý (Manager)' },
-      { value: ROLES.DOCTOR,       label: 'Bác sĩ (Doctor)' },
-      { value: ROLES.COORDINATOR,  label: 'Điều phối viên (Coordinator)' },
-      { value: ROLES.STAFF,        label: 'Nhân viên chăm sóc (Caregiver)' },
-    ];
+    { value: 'ALL',              label: 'Tất cả chức vụ' },
+    { value: ROLES.ADMIN,        label: 'Quản trị viên (Admin)' },
+    { value: ROLES.MANAGER,      label: 'Quản lý (Manager)' },
+    { value: ROLES.DOCTOR,       label: 'Bác sĩ (Doctor)' },
+    { value: ROLES.COORDINATOR,  label: 'Điều phối viên (Coordinator)' },
+    { value: ROLES.CAREGIVER,    label: 'Nhân viên chăm sóc (Caregiver)' },
+  ];
 
   const loadUsers = async () => {
     try {
@@ -38,9 +43,9 @@ export const UserManagementPage = () => {
       setLoading(false);
     }
   };
-  useEffect(() => { setSelectedIds([]); }, [searchQuery, roleFilter]);
+
   useEffect(() => { loadUsers(); }, []);
-  useEffect(() => { setSelectedIds([]); }, [searchQuery]); // reset chọn khi đổi từ khóa tìm kiếm
+  useEffect(() => { setSelectedIds([]); }, [searchQuery, roleFilter, facilityFilter]);
 
   const handleCreateUser = async (data) => {
     try {
@@ -49,6 +54,28 @@ export const UserManagementPage = () => {
       loadUsers();
     } catch (err) {
       alert(err.response?.data?.detail || 'Khởi tạo tài khoản thất bại!');
+    }
+  };
+
+  const handleUpdateUser = async (userId, data) => {
+    try {
+      await usersApi.updateUser(userId, data);
+      setIsEditModalOpen(false);
+      setEditTargetUser(null);
+      loadUsers();
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Cập nhật thông tin thất bại!');
+    }
+  };
+
+  const handleResetPassword = async (userId) => {
+    try {
+      await usersApi.resetPassword(userId);
+      alert('✅ Đã đặt lại mật khẩu về mặc định thành công!');
+      setIsEditModalOpen(false);
+      setEditTargetUser(null);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Đặt lại mật khẩu thất bại!');
     }
   };
 
@@ -76,17 +103,37 @@ export const UserManagementPage = () => {
     catch { alert('Không thể xóa tài khoản này!'); }
   };
 
-  const filteredUsers = usersList.filter(({ full_name, username, role }) => {
+  // Lọc theo cơ sở: Manager chỉ thấy user cùng facility_id với mình.
+  const visibleUsers = user?.role === ROLES.MANAGER
+    ? usersList.filter((u) => u.facility_id === user.facility_id)
+    : usersList;
+
+
+
+  // Danh sách cơ sở duy nhất — chỉ Admin cần, lấy trực tiếp từ dữ liệu user đã tải,
+  // tránh phải gọi thêm API facilities riêng.
+  const facilityOptions = useMemo(() => {
+    if (user?.role !== ROLES.ADMIN) return [];
+    const unique = new Map();
+    usersList.forEach((u) => {
+      if (u.facility_id && u.facility_name && !unique.has(u.facility_id)) {
+        unique.set(u.facility_id, u.facility_name);
+      }
+    });
+    return Array.from(unique, ([id, name]) => ({ id, name }));
+  }, [usersList, user?.role]);
+
+  const filteredUsers = visibleUsers.filter(({ full_name, username, role, facility_id }) => {
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       full_name.toLowerCase().includes(q) ||
       username.toLowerCase().includes(q) ||
       role.toLowerCase().includes(q);
     const matchesRole = roleFilter === 'ALL' || role === roleFilter;
-    return matchesSearch && matchesRole;
+    const matchesFacility = facilityFilter === 'ALL' || String(facility_id) === facilityFilter;
+    return matchesSearch && matchesRole && matchesFacility;
   });
 
-  // Chỉ những user KHÔNG bị khóa chỉnh sửa (không phải admin gốc, không phải Admin dưới quyền Manager) mới được chọn
   const isSelectable = (targetUser) =>
     targetUser.username !== 'admin' &&
     !(user?.role === ROLES.MANAGER && targetUser.role === ROLES.ADMIN);
@@ -103,7 +150,6 @@ export const UserManagementPage = () => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  // Bulk lock: chỉ toggle những user đang active (đang mở) trong danh sách đã chọn
   const handleBulkLock = async () => {
     const targets = usersList.filter((u) => selectedIds.includes(u.id) && u.is_active);
     if (targets.length === 0) { alert('Các tài khoản đã chọn đều đang bị khóa sẵn.'); return; }
@@ -120,7 +166,6 @@ export const UserManagementPage = () => {
     }
   };
 
-  // Bulk unlock: chỉ toggle những user đang bị khóa trong danh sách đã chọn
   const handleBulkUnlock = async () => {
     const targets = usersList.filter((u) => selectedIds.includes(u.id) && !u.is_active);
     if (targets.length === 0) { alert('Các tài khoản đã chọn đều đang hoạt động sẵn.'); return; }
@@ -137,7 +182,6 @@ export const UserManagementPage = () => {
     }
   };
 
-  // Helper: role badge className
   const roleBadgeClass = (role) => {
     if (role === ROLES.ADMIN)   return styles.roleAdmin;
     if (role === ROLES.MANAGER) return styles.roleManager;
@@ -146,79 +190,87 @@ export const UserManagementPage = () => {
 
   if (loading) return <div className={styles.loadingText}>Đang nạp dữ liệu nhân sự...</div>;
 
+  const colSpanCount = user?.role === ROLES.ADMIN ? 7 : 6;
+
   return (
     <div className={styles.container}>
-      {/* Thanh tiêu đề + công cụ */}
       <div className={styles.actionBar}>
         <div>
           <h2 className={styles.pageTitle}>Quản Lý Nhân Sự Hệ Thống</h2>
-          <p className={styles.pageSubtitle}>Xem danh sách, phân quyền và điều phối tài khoản vận hành</p>
+          <p className={styles.pageSubtitle}>
+            {user?.role === ROLES.MANAGER
+              ? `Xem danh sách, phân quyền và điều phối tài khoản tại ${user?.facility_name || 'cơ sở của bạn'}`
+              : 'Xem danh sách, phân quyền và điều phối tài khoản vận hành'}
+          </p>
         </div>
 
         <div className={styles.actionRight}>
-              <div className={styles.searchWrapper}>
-                <span className={styles.searchIcon}>🔍</span>
-                <input
-                  type="text"
-                  placeholder="Tìm theo tên, tài khoản, chức vụ..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={styles.searchInput}
-                  aria-label="Tìm kiếm nhân sự"
-                />
-              </div>
+          <div className={styles.searchWrapper}>
+            <span className={styles.searchIcon}>🔍</span>
+            <input
+              type="text"
+              placeholder="Tìm theo tên, tài khoản, chức vụ..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={styles.searchInput}
+              aria-label="Tìm kiếm nhân sự"
+            />
+          </div>
 
-              <select
-                className={styles.roleFilterSelect}
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                aria-label="Lọc theo chức vụ"
-              >
-                {ROLE_FILTER_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
+          <select
+            className={styles.roleFilterSelect}
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            aria-label="Lọc theo chức vụ"
+          >
+            {ROLE_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
 
-              <button onClick={() => setIsExcelModalOpen(true)} className={styles.importBtn}>📥 Import Excel</button>
-              <button onClick={() => setIsCreateModalOpen(true)} className={styles.addBtn}>➕ Thêm Nhân Sự</button>
-            </div>
+          {/* Chỉ Admin mới thấy — Manager đã tự động giới hạn theo cơ sở của mình rồi */}
+          {user?.role === ROLES.ADMIN && facilityOptions.length > 0 && (
+            <select
+              className={styles.roleFilterSelect}
+              value={facilityFilter}
+              onChange={(e) => setFacilityFilter(e.target.value)}
+              aria-label="Lọc theo cơ sở"
+            >
+              <option value="ALL">Tất cả cơ sở</option>
+              {facilityOptions.map((f) => (
+                <option key={f.id} value={String(f.id)}>{f.name}</option>
+              ))}
+            </select>
+          )}
+
+          <button onClick={() => setIsExcelModalOpen(true)} className={styles.importBtn}>📥 Import Excel</button>
+          <button onClick={() => setIsCreateModalOpen(true)} className={styles.addBtn}>➕ Thêm Nhân Sự</button>
+        </div>
       </div>
 
-      {/* Thanh hành động hàng loạt - chỉ hiện khi có chọn */}
       {selectedIds.length > 0 && (
         <div className={styles.bulkActionBar}>
           <span className={styles.bulkCount}>Đã chọn {selectedIds.length} tài khoản</span>
           <div className={styles.bulkButtons}>
-            <button className={styles.bulkLockBtn} onClick={handleBulkLock} disabled={bulkLoading}>
-              🔒 Khóa hàng loạt
-            </button>
-            <button className={styles.bulkUnlockBtn} onClick={handleBulkUnlock} disabled={bulkLoading}>
-              🔓 Mở khóa hàng loạt
-            </button>
-            <button className={styles.bulkClearBtn} onClick={() => setSelectedIds([])} disabled={bulkLoading}>
-              Bỏ chọn
-            </button>
+            <button className={styles.bulkLockBtn} onClick={handleBulkLock} disabled={bulkLoading}>🔒 Khóa hàng loạt</button>
+            <button className={styles.bulkUnlockBtn} onClick={handleBulkUnlock} disabled={bulkLoading}>🔓 Mở khóa hàng loạt</button>
+            <button className={styles.bulkClearBtn} onClick={() => setSelectedIds([])} disabled={bulkLoading}>Bỏ chọn</button>
           </div>
         </div>
       )}
 
-      {/* Bảng dữ liệu */}
       <div className={styles.tableCard}>
         <div className={styles.tableWrapper}>
           <table className={styles.table}>
             <thead className={styles.thead}>
               <tr>
                 <th className={styles.thCheckbox}>
-                  <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    onChange={toggleSelectAll}
-                    disabled={selectableUsers.length === 0}
-                  />
+                  <input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll} disabled={selectableUsers.length === 0} />
                 </th>
                 <th className={styles.th}>Họ và Tên</th>
                 <th className={styles.th}>Tên Đăng Nhập</th>
                 <th className={styles.th}>Chức Vụ</th>
+                {user?.role === ROLES.ADMIN && <th className={styles.th}>Cơ Sở</th>}
                 <th className={styles.th}>Trạng Thái</th>
                 <th className={styles.thCenter}>Hành Động</th>
               </tr>
@@ -232,11 +284,7 @@ export const UserManagementPage = () => {
                     <tr key={targetUser.id} className={styles.tr}>
                       <td className={styles.tdCheckbox}>
                         {!isActionBlocked && (
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(targetUser.id)}
-                            onChange={() => toggleSelectOne(targetUser.id)}
-                          />
+                          <input type="checkbox" checked={selectedIds.includes(targetUser.id)} onChange={() => toggleSelectOne(targetUser.id)} />
                         )}
                       </td>
                       <td className={styles.tdBold}>{targetUser.full_name}</td>
@@ -244,6 +292,9 @@ export const UserManagementPage = () => {
                       <td className={styles.td}>
                         <span className={roleBadgeClass(targetUser.role)}>{targetUser.role}</span>
                       </td>
+                      {user?.role === ROLES.ADMIN && (
+                        <td className={styles.td}>{targetUser.facility_name || '—'}</td>
+                      )}
                       <td className={styles.td}>
                         <span className={targetUser.is_active ? styles.statusActive : styles.statusLocked}>
                           {targetUser.is_active ? '● Đang hoạt động' : '🔒 Đang khóa'}
@@ -254,6 +305,10 @@ export const UserManagementPage = () => {
                           <span className={styles.blockedBadge}>Khóa chỉnh sửa</span>
                         ) : (
                           <div className={styles.btnGroup}>
+                            <button
+                              className={styles.btnEdit}
+                              onClick={() => { setEditTargetUser(targetUser); setIsEditModalOpen(true); }}
+                            >✏️ Sửa</button>
                             <button
                               className={styles.btnHistory}
                               onClick={() => { setSelectedHistoryUser(targetUser); setIsHistoryModalOpen(true); }}
@@ -278,8 +333,8 @@ export const UserManagementPage = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className={styles.emptyState}>
-                    Không tìm thấy nhân sự nào khớp với từ khóa "{searchQuery}"
+                  <td colSpan={colSpanCount} className={styles.emptyState}>
+                    Không tìm thấy nhân sự nào khớp với bộ lọc hiện tại
                   </td>
                 </tr>
               )}
@@ -288,13 +343,23 @@ export const UserManagementPage = () => {
         </div>
       </div>
 
-      {/* Modals */}
       <CreateUserModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSave={handleCreateUser}
         currentUserRole={user?.role}
+        currentUserFacilityId={user?.facility_id}
       />
+
+      <UserEditModal
+        isOpen={isEditModalOpen}
+        onClose={() => { setIsEditModalOpen(false); setEditTargetUser(null); }}
+        onSave={handleUpdateUser}
+        onResetPassword={handleResetPassword}
+        targetUser={editTargetUser}
+        currentUserRole={user?.role}
+      />
+
       <ImportDataModal
         isOpen={isExcelModalOpen}
         onClose={() => setIsExcelModalOpen(false)}
@@ -308,12 +373,13 @@ export const UserManagementPage = () => {
             <ul>
               <li><b>Cột A (STT):</b> Có thể để trống hoặc đánh số thứ tự.</li>
               <li><b>Cột B (Họ Tên):</b> Nhập đầy đủ họ và tên nhân viên.</li>
-              <li><b>Cột C (Số ĐT):</b> Dùng làm <b>tên đăng nhập</b> và <b>mật khẩu mặc định</b>. Chức vụ tự động: <b>Staff</b>.</li>
+              <li><b>Cột C (Số ĐT):</b> Dùng làm <b>tên đăng nhập</b> và <b>mật khẩu mặc định</b>. Chức vụ tự động: <b>Caregiver</b>.</li>
             </ul>
             <p>* Nếu nhân viên đã tồn tại, hệ thống sẽ cập nhật lại Họ Tên.</p>
           </>
         }
       />
+
       <UserHistoryModal
         isOpen={isHistoryModalOpen}
         onClose={() => setIsHistoryModalOpen(false)}
