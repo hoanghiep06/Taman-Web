@@ -1,0 +1,646 @@
+[33mcommit 92bea520f446c51d9ca266c17efb7c2eaaf06f07[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbackend[m[33m)[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Aug 16 16:34:37 2026 +0700
+
+    refactor(be): Cập nhật các hàm backup
+
+[33mcommit 97f7c88fa7a755183642ce73c8a680d3ad3d3585[m[33m ([m[1;31morigin/frontend[m[33m)[m
+Author: nguyentafi2507 <nguyentafi2507@gmail.com>
+Date:   Sun Aug 16 13:13:29 2026 +0700
+
+    feat(fe): thêm tính năng sửa và lọc theo cơ sở ở admin
+
+[33mcommit 5d854b5a0533ff54fcad475d0996691d7c4e8107[m
+Author: nguyentafi2507 <nguyentafi2507@gmail.com>
+Date:   Sat Aug 15 14:07:36 2026 +0700
+
+    feat(fe): thêm bộ lọc theo chức vụ, thêm nhân sự theo từng role
+
+[33mcommit c90d64ea5f17ba4d9798ba3d1278aebe3cff3f11[m[33m ([m[1;31morigin/backend[m[33m, [m[1;32mfrontend[m[33m)[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 15 11:32:48 2026 +0700
+
+    feat(be): Cập nhật endpoint lấy ca trực hiện tại, lấy thông tin cụ thể của tài khoản, cập nhật endpoint phòng nhân sự, reset password khi đăng nhập
+
+[33mcommit 9d79b602d7cff3039318655e3444a9e717c2ae48[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 15 10:00:07 2026 +0700
+
+    fix(fe): Sửa lỗi ở báo cáo giao ca bị lỗi xem trang
+
+[33mcommit d50ac56ae3066efe7998b4d371b1d4d827d64274[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 15 09:12:36 2026 +0700
+
+    fix(be): Sữa lỗi thiếu tham số doctor-view trong health làm trang vitals bị crash
+
+[33mcommit 049397dfa9a6df943e1fc95c7a8de25304ebca71[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 14 15:46:38 2026 +0700
+
+    feat(fe): Giao diện cho Admin, Manager
+
+[33mcommit 0cfb95d38bb1a182caa7f2ff4a50301f1c07612b[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 14 14:49:04 2026 +0700
+
+    feat(be): Thêm endpoint lấy ảnh random check tư trang
+
+[33mcommit cec0ea8daddcdedab95ce1b231e67a7d7d7c557f[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 14 14:44:32 2026 +0700
+
+    style(fe): Tăng cường UX/UI cho nhân viên
+
+[33mcommit cefebcbb1abfa05018c106085110dcddf8ac9d3e[m
+Merge: 1df63fd f327eea
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 14 14:09:40 2026 +0700
+
+    Merge branch 'frontend' of https://github.com/hoanghiep06/Taman-Web into frontend
+
+[33mcommit 1df63fdae27d18f85101b856ada1be008de1b5c9[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 14 14:09:30 2026 +0700
+
+    feat(fe): Thử nghiệm tính năng kiểm kê tài sản
+
+[33mcommit f327eea27f936014f22fb8d5d01c6a8b2e00ba7c[m
+Author: nguyentafi2507 <nguyentafi2507@gmail.com>
+Date:   Thu Aug 13 13:15:31 2026 +0700
+
+    feat(fe): gắn 1 vài endpoint vào dashboard
+
+[33mcommit ccfbbf667b83ed8f5ca7414d94108de777fa1c16[m
+Author: nguyentafi2507 <nguyentafi2507@gmail.com>
+Date:   Wed Aug 12 23:42:44 2026 +0700
+
+    feat(fe): hoàn thiện dashboard với mockdata (chưa nối endpoint)
+
+[33mcommit 9ccb6c8f732d037daf0a28a583153752728d3946[m
+Author: nguyentafi2507 <nguyentafi2507@gmail.com>
+Date:   Tue Aug 11 20:09:18 2026 +0700
+
+    tách ra phần admin và chuẩn bị cho 4 role còn lại khỏi DashboardPage.jsx
+
+[33mcommit 071e2e2763d4b4f42d666707fd33a8f5e21320ef[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Aug 11 17:12:51 2026 +0700
+
+    fix(fe): Sửa lỗi trang Incident xóa
+
+[33mcommit edc7b241a49fb48f25d53f84533e3195d3c0153f[m
+Author: nguyentafi2507 <nguyentafi2507@gmail.com>
+Date:   Mon Aug 10 15:46:48 2026 +0700
+
+    fix(fe): sửa nút khi xác nhận logout
+
+[33mcommit e7672bcbe5ab216c6c7c5fca2a37848988888ac4[m
+Author: nguyentafi2507 <nguyentafi2507@gmail.com>
+Date:   Mon Aug 10 15:43:25 2026 +0700
+
+    fix(fe): sửa lỗi giao diện ở dashboard
+
+[33mcommit 05f48e694b45082f025f7c76ee3187c13e20d488[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Sun Aug 9 23:46:49 2026 +0700
+
+    feat(fe): dashboard cho từng role cụ thể
+
+[33mcommit 140bc1bb64036577c58b46fe7a18365b6366cf02[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Sun Aug 9 19:27:22 2026 +0700
+
+    fix(fe):sửa lỗi không kéo được sau khi đăng nhập
+
+[33mcommit 817bbc0dbc04e4d147a20e6d0e6418fddce7829f[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Sun Aug 9 18:19:25 2026 +0700
+
+    fix(fe): lỗi các khung lệch nhau ở màn hình đăng nhập
+
+[33mcommit 5b0c78c4daeab2a58b64ece25bd22e219e2c39d7[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Aug 9 17:53:58 2026 +0700
+
+    fix(fe): Cập nhật page vitals chỉ số sinh hiệu và cân nặng
+
+[33mcommit d6a5b6a3fe799c71b2969c5857a31884041c3ade[m
+Merge: 9ec6f04 44734dd
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Aug 9 15:46:33 2026 +0700
+
+    Merge branch 'frontend' of https://github.com/hoanghiep06/Taman-Web into frontend
+
+[33mcommit 9ec6f0478dbfdf8f78f6a94180207b9d9b899955[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Aug 9 15:45:02 2026 +0700
+
+    fix(be, fe): Hoàn thiện trang báo cáo giao ca, cần kiểm thử
+
+[33mcommit 44734dd94fb86784bd176a80d3ee415decb9214e[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Sun Aug 9 10:33:49 2026 +0700
+
+    feat(fe): thêm modal confirm cho logout, chỉnh lại giao diện cho mobile và sidebar của web
+
+[33mcommit ced0b32dfb1f62cfe5f967658a2a5b3f524b34fb[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Aug 9 09:47:00 2026 +0700
+
+    refactor(fe): sửa lỗi caregiver k đăng nhaapjd dược, phân rã care-duty thành báo cáo reports và đo chỉ số vitals
+
+[33mcommit 90fc2a049027efa807623032c8f26241a52bd58c[m
+Merge: 9bc75aa 2b5c6c3
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Aug 9 08:43:35 2026 +0700
+
+    Merge branch 'frontend' of https://github.com/hoanghiep06/Taman-Web into frontend
+
+[33mcommit 9bc75aab35d01e5afcaf05f98d567fbb2e730b16[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Aug 9 08:43:24 2026 +0700
+
+    style(fe): Cải thiện giao diện ảnh báo cáo tải về
+
+[33mcommit 2b5c6c3c50cb6102665848cde24bbbe6c00c4b59[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Sun Aug 9 00:32:51 2026 +0700
+
+    feat(fe): thêm chức năng đăng xuất
+
+[33mcommit 5f8cc523e9d1b177745abcf4e67194a4c52f8a97[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Sat Aug 8 17:39:45 2026 +0700
+
+    feat(fe): làm cụ thể phần medical
+
+[33mcommit 5aa0ad411f64653206d14aca941e0f10aeaaa400[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Sat Aug 8 17:39:16 2026 +0700
+
+    feat(fe): làm cụ thể phần medical
+
+[33mcommit 479bde3e95328bf64095eb38f7de4fd8fba48ff1[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 8 17:17:57 2026 +0700
+
+    feat(be, fe): Cập nhật thêm endpoint lịch sử health, hoàn thành trang shifts
+
+[33mcommit 0a7941c0dcda4067c45b572024368c44f486022e[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 8 10:02:53 2026 +0700
+
+    feat(be, fe): Sửa lỗi khi lấy danh sách phòng + Khu vực; Khắc phục lỗi tải endpoint cân nặng
+
+[33mcommit 8abb8fb552ca5ad0700b939152c9d31074429653[m
+Merge: c8a50ab ff83d45
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 8 07:55:59 2026 +0700
+
+    :wq
+    
+    erge branch 'frontend' of https://github.com/hoanghiep06/Taman-Web into frontend
+    
+    :wq
+    
+    :wq
+
+[33mcommit c8a50ab8b6ffdd7e4802bee4ce7f7c743d2daa8f[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 8 07:53:47 2026 +0700
+
+    feat(be, fe): Thêm endpoint lấy vết lịch sử baieen bản báo cáo, cật nhật endpoint vào frontend cho manager
+
+[33mcommit ff83d45c3815f750129c2ec9d34efd9690c09c90[m
+Merge: 8c3dabf d9834f7
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Fri Aug 7 19:37:04 2026 +0700
+
+    Merge branch 'frontend' of https://github.com/hoanghiep06/Taman-Web into frontend
+
+[33mcommit 8c3dabf94c26462e40370386b2a755f400ce9b7d[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Fri Aug 7 19:09:36 2026 +0700
+
+    feat(fe): gộp 4 tính năng(diseases,health,medical,medicines) vào medical và xóa code chết ở constants.js
+
+[33mcommit 3aac39e1fff61f76ff87787af79d743c4d26387d[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 7 16:02:33 2026 +0700
+
+    refactor(be): Cập nhật endpoint lấy lịch sử chỉnh sửa cho bản báo cáo giao ca với manager
+
+[33mcommit 1ad3ce7f26e028a9b6e681215b791f8d544610ee[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 7 15:50:59 2026 +0700
+
+    refactor(fe): cập nhật lại hooks care-duty nhận endpoint backend
+
+[33mcommit d9834f75ffb3930dbb053a059b6965fbfe1cd06b[m[33m ([m[1;32mtemp-branch[m[33m)[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 7 15:30:49 2026 +0700
+
+    feat(be): Sửa lỗi ở bảng health
+
+[33mcommit 3c919f8271fe2c6853f0cc4fd940f43a0723d6d9[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Fri Aug 7 09:44:41 2026 +0700
+
+    fix(FE): lỗi vòng lặp
+
+[33mcommit 0cf68f99f10e9da8633555fdabb5c137285bd9d1[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Fri Aug 7 09:13:16 2026 +0700
+
+    feat(FE): thêm code dashboard và sửa code dashboard trong App.jsx
+
+[33mcommit 0c440ae79d2d5c2a4fef01325f04d7c1fb44fc12[m
+Merge: 48dc606 79bf853
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 7 08:25:00 2026 +0700
+
+    Merge branch 'frontend' of https://github.com/hoanghiep06/Taman-Web into frontend
+
+[33mcommit 48dc606eb3c64633e5dd967558d1963e120222ec[m
+Merge: e9c21e6 8365598
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Aug 7 08:24:48 2026 +0700
+
+    merge frontend 8365598
+
+[33mcommit 79bf853eb8780123cf76111507da20b4321f5498[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Thu Aug 6 21:19:50 2026 +0700
+
+    feat(FE): tái cấu trúc thư mục (dashboard và App.jsx)
+
+[33mcommit e9c21e6023bc97c89a9727d16d8af877bc0de094[m[33m ([m[1;32mtest[m[33m)[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Thu Aug 6 17:03:55 2026 +0700
+
+    feat(fe): thêm page chỉ số sức khỏe, đang testing dò lỗi, thêm useAuth trong folder context
+
+[33mcommit 75cfab250045801ee9457d0b25ce9bfa644a4601[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Thu Aug 6 09:48:39 2026 +0700
+
+    merge: hợp với nhánh frontend 8365598
+
+[33mcommit 8365598e580d70b212b031c81febb3a365f711f3[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Wed Aug 5 09:42:38 2026 +0700
+
+    style(FE): thay đổi giao diện của mobile cho phù hợp hơn (thu nhỏ các components ở dashboard)
+
+[33mcommit 8c4df33bfa678cfff5c76658e816acc4799ea55a[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Wed Aug 5 09:04:19 2026 +0700
+
+    feat(FE): Thêm khung mobile
+
+[33mcommit b8f6147c6aac87bcd58e77226e34f288615eb744[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Tue Aug 4 13:05:02 2026 +0700
+
+    feat(fe): thêm các folder ở features, cập nhật App.jsx, gộp adminlayout và stafflayout thành mainlayout, thêm folder sidebar,header ở layouts
+
+[33mcommit 7650d418a7b4eb20eb08d0d4f89e699445087f57[m
+Merge: 34d6d82 38b8b2a
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Aug 4 09:54:42 2026 +0700
+
+    Merge branch 'frontend' of https://github.com/hoanghiep06/Taman-Web into test
+
+[33mcommit 38b8b2afdc6d99dff8d59041127f931c4d3c0bd2[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Mon Aug 3 11:30:32 2026 +0700
+
+    Đổi tên vài file và thêm những file chuẩn bị cho khung
+
+[33mcommit 34d6d82ac60abfaa1b8364f34c5aba971b23d714[m
+Merge: 632413f 924fd60
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 18:06:27 2026 +0700
+
+    Merge branch 'backend' of https://github.com/hoanghiep06/Taman-Web into test
+
+[33mcommit 924fd600db70e0956cef689acfa46bc4531d2cea[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 17:59:07 2026 +0700
+
+    feat(be): bổ sung thêm endpoint lấy dấu sinh hiệu từ NCT cụ thể, ngày nào, bao nhiêu ngày,theo cơ sở
+
+[33mcommit 9dfd9f9988a351463eb1e8b4a6a6440f5d295bd2[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 17:24:53 2026 +0700
+
+    refactor(be): Cập nhật lại hàm báo hiệu quá hạn cân nặng
+
+[33mcommit 05cfcd617c9d810dadc9caa0ed67bdb6c9e3aa6c[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 17:15:39 2026 +0700
+
+    refactor(be): Thêm giới hạn số ngày lấy với báo cáo ca trực
+
+[33mcommit 632413f7990fb36972bff49e95c075927678aae1[m
+Merge: 3dd0081 a73dd12
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 13:55:52 2026 +0700
+
+    Merge branch 'frontend' of https://github.com/hoanghiep06/Taman-Web into test
+
+[33mcommit a73dd126bca4493f268e4a47e6b5cbe5000fd16c[m
+Author: tai-24122051 <tai25072006@gmail.com>
+Date:   Sat Aug 1 13:00:12 2026 +0700
+
+    Tách logic và giao diện
+
+[33mcommit 3dd008199d38684a8170ea465d42a2d0adb0ad25[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 11:12:49 2026 +0700
+
+    fix(be): Sửa lỗi đăng nhập không thành công
+
+[33mcommit 56efa31f313571a1098753f116c94a1f87fa44f1[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 10:50:23 2026 +0700
+
+    testing(BE): Đang kiểm nghiệm BE MVP2
+
+[33mcommit 5ee93ccb50b37759fe602d771ff4a9a641f80b04[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 09:35:16 2026 +0700
+
+    feat(be): Cập nhật mới dashboard và system cho admin/manager
+
+[33mcommit a84c93d478cbd41e229126888b912619ffb650b1[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 09:23:26 2026 +0700
+
+    refactor(be): Cập nhật inspection
+
+[33mcommit c29a3fff34bb57a926a25800288f5895b7e29f96[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Aug 1 08:54:05 2026 +0700
+
+    refactor(be): Cập nhật lại file asset
+
+[33mcommit 3d3c42ae9a93568de7381e52c5ed7717915d28c8[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Jul 31 23:21:41 2026 +0700
+
+    feat(be): Thêm mới file health phục vụ dấu sinh hiệu, link đơn thuốc, báo cáo hàng ngày
+
+[33mcommit b1af47162f9798874d5b976f1a5c3b4fae1db58d[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Jul 31 22:53:50 2026 +0700
+
+    feat(be): thêm mới API về hồ sơ sức khỏe cho NCT
+
+[33mcommit 2ea99292f0310b8c10a38cb327ee7b20ab8c5369[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Jul 31 22:24:36 2026 +0700
+
+    feat(be): Tạo mới file facilities cho các cơ sở, và khu vực trong từng cơ sở
+
+[33mcommit 6e8de16cf92b2113b45de999ef7048a4e8883241[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Jul 31 22:13:20 2026 +0700
+
+    refactor(be): Hoàn tất rooms cho Manager
+
+[33mcommit 4ffa03759751754b06f8dcf3a52c82d7dc256c0b[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Jul 31 21:34:19 2026 +0700
+
+    Hoàn tất endpoint cho users file mới
+
+[33mcommit 98b4308fb5525fadf4da472fdedeb48b1fa9461f[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Fri Jul 31 09:11:39 2026 +0700
+
+    refactor(be): update file auth
+
+[33mcommit 5aedb308245e734abb90e52eadc628f46b3d83e6[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Thu Jul 30 22:55:19 2026 +0700
+
+    refactor(be): Update toàn bộ folder core
+
+[33mcommit 8467b797a4c1a3d7ae9cf54335fc55752a6cb74b[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Thu Jul 30 17:40:10 2026 +0700
+
+    refactor(be): Cập nhật mới models, schemas, và thêm tính năng đồ vật cần kiểm tra
+
+[33mcommit 2cc5c80d7d8ba13d09acd9b311e0b0432234b349[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Thu Jul 30 17:02:26 2026 +0700
+
+    refactor(be): Update schemas
+
+[33mcommit ab9f90daafa6235979c597fdf45358ce3a04a379[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Thu Jul 30 12:59:19 2026 +0700
+
+    tmp(be): Cập nhật DB mới
+
+[33mcommit 0d8c06cbe6d17c6b3e34eb2c5dcb134ca127b6c5[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jul 28 21:06:46 2026 +0700
+
+    feat(fe): Kết thúc MVP 1
+
+[33mcommit 90d049a55de1ae93b3fadaced24cf83f0f2a4fc4[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sat Jun 27 11:06:53 2026 +0700
+
+    feat(be): tối ưu hóa drive service
+
+[33mcommit 8d28ca806e112aaadaabb4c4de98727b35522a24[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 18:02:57 2026 +0700
+
+    feat(be): Nới lỏng validate
+
+[33mcommit ff957f48f6fa297a6921ba266498bc3b3326639f[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 17:56:53 2026 +0700
+
+    feat(be): Sửa BE file docker
+
+[33mcommit 19c28ff2cd8346665366fabd99e619f01a728981[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 17:51:50 2026 +0700
+
+    Sửa dockerfile be
+
+[33mcommit 20a46e69cc3d3fba95420a2feb94880bb22714db[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 17:50:17 2026 +0700
+
+    feat(be): Vá lỗi k upload được ảnh ở iphone
+
+[33mcommit dd8069cb4b061e411c02d7bf6f373cf31d1cf2e9[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 17:42:58 2026 +0700
+
+    feat(be): vá lỗi nhiều đthoai k thể upload ảnh
+
+[33mcommit 7f5610136cbfeec75294528a4ee4ef0cfc953521[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 17:40:30 2026 +0700
+
+    temp: show random image (manager)
+
+[33mcommit 06612d8bf7d4e69aa433147b71c11fd7d5ab5306[m
+Merge: becf0ae 06fbe35
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 16:00:08 2026 +0700
+
+    merge branch 'main' of https://github.com/hoanghiep06/TamAn_Item_Supervised
+
+[33mcommit becf0aeeea61cedfdb4d4e98632cb642efb444f2[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 15:59:06 2026 +0700
+
+    feat(fs): Thêm endpoint lịch sử các ca trực, cải thiện dashboard cho manager
+
+[33mcommit 06fbe35ba54a10aa94407720da6dc01d1d311c14[m
+Author: Hoàng Hiệp <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 11:49:02 2026 +0700
+
+    Xóa sample-data test
+
+[33mcommit 07faec07f23b97a69efa7c8752081375c8dbc62d[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 11:48:01 2026 +0700
+
+    feat(be): Sửa lỗi không đúng đường dẫn khi upload hình ảnh lên drive
+
+[33mcommit 9aa4685accb8e92725e49b21752978be8a209362[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 10:29:57 2026 +0700
+
+    style(fe): Sửa lỗi mất chữ khi tên quá dài
+
+[33mcommit f5c83b688fd357d1c17740ffb626b71678b40681[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 10:18:13 2026 +0700
+
+    chore(be): Cố định Dockerfile BE
+
+[33mcommit 7dc9705a78c4af705e9147db712195c68c1d7fca[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 10:13:14 2026 +0700
+
+    style(fe): Sửa lỗi không qua trang khi phòng trống
+
+[33mcommit ee6224cb670ac034f8be8efd66e3c0a0846d6b21[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 09:47:31 2026 +0700
+
+    style(fe): Nổi bật tên NCT trong khi kiểm kê đồ vật
+
+[33mcommit ccd1b53f1aeec25ae8faaa7404246cd524161a53[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Tue Jun 23 09:44:11 2026 +0700
+
+    style(fe): Sửa lỗi giao diện ở iphone không thấy nút chụp ảnh
+
+[33mcommit bed6467483637a657eb35e9363365669909ab23e[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Mon Jun 22 23:38:48 2026 +0700
+
+    feat(be): Khắc phục tính năng cho user refresh ca mỗi khi login
+
+[33mcommit c697dacae74e1cf86a0a49b9b0755d74356cd6ef[m[33m ([m[1;32mmain_tmp[m[33m)[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Mon Jun 22 15:48:49 2026 +0700
+
+    feat(be): Thêm Tự động refresh ca làm mỗi khi đăng nhập
+
+[33mcommit 66fe488814ae93b36acbf47f2f090103c31af8e3[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Mon Jun 22 14:35:22 2026 +0700
+
+    style(fe): Sửa lỗi awake render chạy ngầm định
+
+[33mcommit f447310f20b8ca82273bd0bbcc8266ea03807c1d[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Mon Jun 22 14:22:05 2026 +0700
+
+    feat(fe): Cải thiện cách thức awake render BE bắt đầu từ load trang
+
+[33mcommit 0d7843e44b5ad4b9f5f42494e6c30505079cc09d[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Mon Jun 22 11:52:04 2026 +0700
+
+    style(fe): Sửa chữ ở giao diện
+
+[33mcommit 37658741fc2098fd4103867623984d02ac990fe2[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 19:29:59 2026 +0700
+
+    feat(fe): Sửa bug ở giao diện đi tuần
+
+[33mcommit 683dcbca74e230413e15d1ecb956da2a3e49ba18[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 19:25:43 2026 +0700
+
+    feat(fs): Sửa lỗi ở hiêu ứng dâng nước
+
+[33mcommit 1676c6f3da4e647e769fece64bec91daf54440f4[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 19:02:03 2026 +0700
+
+    feat(fs): Thêm giao diện tiến độ phòng cho nhân viên & Trả thêm tổng số đồ, tiến độ theo phòng ở BE
+
+[33mcommit a7988d0f7f7109035630e6451f5d4b15396e7776[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 18:21:41 2026 +0700
+
+    feat(be): Sửa lỗi upload liên tục bị lỗi IP của nhân viên
+
+[33mcommit 7ed2c7bf40da8b1f3d049923eb6bbe453c7b2610[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 17:45:27 2026 +0700
+
+    fix(be): tích hợp unquote giải mã kí tự cho pg_dump
+
+[33mcommit 857cd267c8e608667f26492f6b61645010e036d4[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 17:42:10 2026 +0700
+
+    chore(fe): Update vercel không bị crash khi f5
+
+[33mcommit ff8390cc617b8849ea5c14768382b04af8fec963[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 17:04:45 2026 +0700
+
+    chore(fe): Thêm vercel.json
+
+[33mcommit 2e8d6f117d2547ba9b684e64cf4d5200bc54bc38[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 16:28:57 2026 +0700
+
+    chore(BE): tối ưu hóa BE Dockerfile
+
+[33mcommit 68137633e2107f3f2c3c555c0b23ab842dcac172[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 15:27:11 2026 +0700
+
+    style(fe): Sửa lỗi giao diện Staff
+
+[33mcommit 97c75b306f82d663c791eadf826f40da15c67b7f[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 15:15:20 2026 +0700
+
+    feat(fs): Hoàn thiện tính năng restart DB
+
+[33mcommit 61f4d3ed8673698f396f4139dff45e3827073a04[m
+Author: hoanghiep06 <maihoanghiepmai@gmail.com>
+Date:   Sun Jun 21 07:22:01 2026 +0700
+
+    feat(fs): Hoàn thiện cơ bản MVP và có chứa file backup
