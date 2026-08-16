@@ -18,7 +18,8 @@ export const ShiftHandoverPage = () => {
   const canEdit = 
     currentRole.includes('COORDINATOR') || 
     currentRole.includes('ADMIN') || 
-    currentRole.includes('MANAGER');
+    currentRole.includes('MANAGER') ||
+    currentRole.includes('DOCTOR');
 
   const hasSpecificFacility = user?.facility_id !== null && user?.facility_id !== undefined;
   const targetFacilityId = hasSpecificFacility ? Number(user.facility_id) : null;
@@ -42,14 +43,13 @@ export const ShiftHandoverPage = () => {
   // 2. Chỉ gọi API facilities nếu người dùng CÓ QUYỀN LÀM ĐƠN
   useEffect(() => {
     const fetchFacilities = async () => {
-      if (!canEdit) return; // Nhân viên chỉ xem -> Bỏ qua, tránh lỗi 403
+      if (!canEdit) return;
 
       try {
         const res = await shiftHandoverApi.getAllFacilities();
-        const facList = res?.data || res || [];
+        const facList = Array.isArray(res) ? res : (res?.data || []);
         setFacilities(facList);
 
-        // Mặc định chọn cơ sở đầu tiên nếu là tài khoản quản lý đa cơ sở chưa chọn
         if (!hasSpecificFacility && facList.length > 0 && !selectedFormFacilityId) {
           setSelectedFormFacilityId(Number(facList[0].id));
         }
@@ -229,7 +229,6 @@ export const ShiftHandoverPage = () => {
         <div ref={formRef}>
           {canEdit && (!isReportSubmitted || isEditingReport) && (
             <HandoverReportForm
-              facilityId={user?.facility_id}
               facilitiesList={facilities}
               selectedFacilityId={selectedFormFacilityId}
               onChangeFacility={(newFacId) => setSelectedFormFacilityId(newFacId)}
@@ -248,6 +247,7 @@ export const ShiftHandoverPage = () => {
           isOpen={isHistoryModalOpen}
           onClose={() => setIsHistoryModalOpen(false)}
           facilityId={targetFacilityId}
+          facilitiesList={facilities}
           role={currentRole}
           onFetchArchived={handleFetchArchivedReports}
         />

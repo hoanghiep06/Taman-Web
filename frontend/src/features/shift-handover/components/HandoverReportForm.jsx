@@ -68,7 +68,6 @@ const SearchableElderSelect = ({ eldersList, selectedElderId, selectedElderIds =
 };
 
 export const HandoverReportForm = ({
-  facilityId,
   facilitiesList = [],
   selectedFacilityId,
   onChangeFacility,
@@ -87,11 +86,18 @@ export const HandoverReportForm = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [fieldErrors, setFieldErrors] = useState([]);
 
-  // Kiểm tra quyền đa cơ sở
+  // Tự động xác định ca trực hiện tại theo khung giờ thực tế
+  const getCurrentShiftType = () => {
+    const hours = new Date().getHours();
+    return (hours >= 6 && hours < 18) ? 'Sang' : 'Toi';
+  };
+  const [shiftType, setShiftType] = useState(existingReport?.shift_type || getCurrentShiftType());
+
   const isMultiFacility = user?.facility_id === null || user?.facility_id === undefined;
   
+  // Khởi tạo ID cơ sở từ props hoặc API list, không fallback hằng số
   const [currentFacId, setCurrentFacId] = useState(
-    existingReport?.facility_id || selectedFacilityId || user?.facility_id || (facilitiesList[0]?.id ?? 1)
+    existingReport?.facility_id || selectedFacilityId || user?.facility_id || facilitiesList[0]?.id || ''
   );
 
   const recognitionRef = useRef(null);
@@ -100,13 +106,18 @@ export const HandoverReportForm = ({
   useEffect(() => {
     if (selectedFacilityId) {
       setCurrentFacId(selectedFacilityId);
+    } else if (facilitiesList.length > 0 && !currentFacId) {
+      setCurrentFacId(facilitiesList[0].id);
     }
-  }, [selectedFacilityId]);
+  }, [selectedFacilityId, facilitiesList]);
 
   useEffect(() => {
     if (existingReport) {
       if (existingReport.facility_id) {
         setCurrentFacId(existingReport.facility_id);
+      }
+      if (existingReport.shift_type) {
+        setShiftType(existingReport.shift_type);
       }
       setHandoverNotes(existingReport.handover_notes || '');
       if (existingReport.formatted_elder_descriptions) {
@@ -134,7 +145,6 @@ export const HandoverReportForm = ({
   const handleFacilitySelect = (newId) => {
     const numericId = Number(newId);
     setCurrentFacId(numericId);
-    // Reset danh sách sự cố về trắng khi đổi cơ sở vì danh sách NCT khác nhau
     setElderEvents([{ elder_id: '', note: '' }]);
     setFieldErrors([{ elder_id: false, note: false }]);
     if (onChangeFacility) {
@@ -228,6 +238,11 @@ export const HandoverReportForm = ({
     e.preventDefault();
     setErrorMessage('');
 
+    if (!currentFacId) {
+      setErrorMessage('Vui lòng chọn cơ sở để thực hiện báo cáo!');
+      return;
+    }
+
     let hasValidationError = false;
     const errorsList = elderEvents.map((item) => {
       const isElderMissing = !item.elder_id;
@@ -255,7 +270,7 @@ export const HandoverReportForm = ({
       {
         facility_id: Number(currentFacId),
         shift_date: new Date().toISOString().split('T')[0],
-        shift_type: 'Sang',
+        shift_type: shiftType,
         elder_events: elderEvents,
         handover_notes: handoverNotes,
       },
@@ -263,9 +278,8 @@ export const HandoverReportForm = ({
     );
   };
 
-  // Lấy tên cơ sở hiện tại từ danh sách trả về của API
   const currentFacilityObj = facilitiesList.find((f) => Number(f.id) === Number(currentFacId));
-  const currentFacilityName = currentFacilityObj ? currentFacilityObj.name : `Cơ sở ${currentFacId || ''}`;
+  const currentFacilityName = currentFacilityObj?.name || (currentFacId ? `Cơ sở ID: ${currentFacId}` : 'Đang tải cơ sở...');
 
   return (
     <div className={styles.box} style={{ position: 'relative', border: existingReport ? '2px solid #d97706' : '2px solid #10b981' }}>
@@ -299,21 +313,21 @@ export const HandoverReportForm = ({
         </div>
       )}
 
-      {/* HEADER FORM + CHỌN/HIỂN THỊ CƠ SỞ */}
+      {/* HEADER FORM */}
       <div className={styles.headerToggle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <h2 className={styles.title} style={{ color: existingReport ? '#b45309' : '#065f46' }}>
             {existingReport ? 'HIỆU CHỈNH BÁO CÁO GIAO CA' : 'TẠO BÁO CÁO GIAO CA (ĐIỀU PHỐI)'}
           </h2>
 
-          {/* VÙNG CHỌN HOẶC HIỂN THỊ CƠ SỞ TỪ BACKEND */}
+          {/* VÙNG CHỌN / HIỂN THỊ CƠ SỞ */}
           {isMultiFacility ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
               <label style={{ fontSize: '12px', fontWeight: '800', color: '#475569' }}>🏢 Cơ sở:</label>
               <select
                 value={currentFacId || ''}
                 onChange={(e) => handleFacilitySelect(e.target.value)}
-                disabled={Boolean(existingReport)} // Khóa chọn cơ sở nếu đang trong chế độ chỉnh sửa báo cáo cũ
+                disabled={Boolean(existingReport) || facilitiesList.length === 0}
                 style={{
                   padding: '5px 10px',
                   borderRadius: '6px',
@@ -327,11 +341,15 @@ export const HandoverReportForm = ({
                   opacity: existingReport ? 0.7 : 1,
                 }}
               >
-                {facilitiesList.map((fac) => (
-                  <option key={fac.id} value={fac.id}>
-                    🏢 {fac.name} {fac.total_elders ? `(${fac.total_elders} Cụ)` : ''}
-                  </option>
-                ))}
+                {facilitiesList.length === 0 ? (
+                  <option value="">Đang tải danh sách cơ sở...</option>
+                ) : (
+                  facilitiesList.map((fac) => (
+                    <option key={fac.id} value={fac.id}>
+                      🏢 {fac.name} {fac.total_elders ? `(${fac.total_elders} Cụ)` : ''}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           ) : (
@@ -348,6 +366,28 @@ export const HandoverReportForm = ({
               🏢 {currentFacilityName}
             </span>
           )}
+
+          {/* CHỌN CA TRỰC */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+            <label style={{ fontSize: '12px', fontWeight: '800', color: '#475569' }}>⏰ Ca:</label>
+            <select
+              value={shiftType}
+              onChange={(e) => setShiftType(e.target.value)}
+              style={{
+                padding: '5px 8px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                fontWeight: '700',
+                fontSize: '12px',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="Sang">Ca Sáng</option>
+              <option value="Toi">Ca Tối</option>
+            </select>
+          </div>
         </div>
 
         <button
@@ -493,4 +533,4 @@ export const HandoverReportForm = ({
       )}
     </div>
   );
-}; 
+};

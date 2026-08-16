@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { exportReportAsJPG } from './ShiftReportView';
 import styles from './ShiftReportHistoryModal.module.css';
 
@@ -20,7 +20,14 @@ const getShiftColorStyle = (shiftDate, shiftType) => {
   return SHIFT_PALETTE[index];
 };
 
-export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchArchived, role = 'CARESTAFF' }) => {
+export const ShiftReportHistoryModal = ({
+  isOpen,
+  onClose,
+  facilityId,
+  facilitiesList = [],
+  onFetchArchived,
+  role = 'CARESTAFF'
+}) => {
   const currentRole = (role || '').toUpperCase();
   const isAdminOrManager = currentRole.includes('ADMIN') || currentRole.includes('MANAGER');
 
@@ -58,16 +65,6 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
     }
   };
 
-  const availableFacilities = useMemo(() => {
-    const map = new Map();
-    reports.forEach((r) => {
-      if (r.facility_id) {
-        map.set(String(r.facility_id), r.facility_name || `Cơ sở ${r.facility_id}`);
-      }
-    });
-    return Array.from(map.entries());
-  }, [reports]);
-
   const filteredReports = reports.filter((r) => {
     if (targetDate && r.shift_date !== targetDate) return false;
     if (shiftType && r.shift_type !== shiftType) return false;
@@ -101,7 +98,7 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
           <button onClick={onClose} className={styles.closeBtn}>✕</button>
         </div>
 
-        {/* BỘ LỌC TÌM KIẾM SMART GRID */}
+        {/* BỘ LỌC TÌM KIẾM */}
         <div className={styles.filterGrid}>
           <div className={styles.filterItem}>
             <label className={styles.filterLabel}>🔍 Tìm kiếm</label>
@@ -122,8 +119,10 @@ export const ShiftReportHistoryModal = ({ isOpen, onClose, facilityId, onFetchAr
               className={styles.filterInput}
             >
               <option value="">Tất cả Cơ sở</option>
-              {availableFacilities.map(([id, name]) => (
-                <option key={id} value={id}>{name}</option>
+              {facilitiesList.map((fac) => (
+                <option key={fac.id} value={fac.id}>
+                  {fac.name}
+                </option>
               ))}
             </select>
           </div>

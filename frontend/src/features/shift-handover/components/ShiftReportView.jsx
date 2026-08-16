@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { shiftHandoverApi } from '../api/shiftHandoverApi';
 
-const FACILITY_THEMES = {
-  1: { border: '#0284c7', headerBg: '#e0f2fe', textColor: '#0369a1', badge: '🏢 CƠ SỞ 1 - THỦ ĐỨC' },
-  2: { border: '#059669', headerBg: '#dcfce7', textColor: '#15803d', badge: '🏢 CƠ SỞ 2 - BÌNH CHÁNH' },
-  default: { border: '#7c3aed', headerBg: '#f3e8ff', textColor: '#6d28d9', badge: '🏢 CƠ SỞ DỰ PHÒNG' }
+// Tạo bảng màu động dựa theo Facility ID, không hardcode tên cơ sở
+const getFacilityTheme = (facilityId) => {
+  const THEME_PALETTES = [
+    { border: '#0284c7', headerBg: '#e0f2fe', textColor: '#0369a1' },
+    { border: '#059669', headerBg: '#dcfce7', textColor: '#15803d' },
+    { border: '#7c3aed', headerBg: '#f3e8ff', textColor: '#6d28d9' },
+    { border: '#d97706', headerBg: '#fef3c7', textColor: '#b45309' },
+  ];
+  if (!facilityId) return THEME_PALETTES[0];
+  const idx = Math.abs(Number(facilityId)) % THEME_PALETTES.length;
+  return THEME_PALETTES[idx];
 };
 
-// HÀM VẼ THẺ BO GÓC CANVAS
 const drawRoundedRect = (ctx, x, y, width, height, radius, fillStyle = null, strokeStyle = null, lineWidth = 1) => {
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
@@ -37,8 +43,6 @@ const formatAuditOldContent = (rawPayload) => {
 
   try {
     const obj = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
-    
-    // Đọc cấu trúc {"old": { "elder_descriptions": "...", "handover_notes": "..." }}
     if (obj && obj.old) {
       const oldElder = obj.old.elder_descriptions || 'Không có ghi nhận';
       const oldHandover = obj.old.handover_notes || 'Không có ghi chú';
@@ -48,11 +52,8 @@ const formatAuditOldContent = (rawPayload) => {
     if (obj && (obj.old_content || obj.old_notes)) {
       return obj.old_content || obj.old_notes;
     }
-  } catch (e) {
-    // Trường hợp không phải JSON
-  }
+  } catch (e) {}
 
-  // Fallback xử lý dạng chuỗi cũ
   let text = String(rawPayload);
   if (text.includes('-->') || text.includes('->')) {
     const separator = text.includes('-->') ? '-->' : '->';
@@ -64,24 +65,20 @@ const formatAuditOldContent = (rawPayload) => {
     .trim();
 };
 
-// HÀM TẠO ẢNH BÁO CÁO CÓ GIAO DIỆN KHUÔN MẪU CHUẨN CARD UI (IMAGE_A090D4)
 export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false) => {
-  const scale = 2; // Độ phân giải Retina HD
+  const scale = 2;
   const baseWidth = 840;
   const margin = 28;
   const contentWidth = baseWidth - margin * 2;
 
-  // Làm sạch dữ liệu
   const rawEvents = (report.formatted_elder_descriptions || '').split('\n').filter(Boolean);
   const cleanEvents = rawEvents.map(e => e.replace(/\bCụ\s+/gi, ''));
   const handoverNotes = (report.handover_notes || 'Không có lưu ý đặc biệt.').replace(/\bCụ\s+/gi, '');
 
-  // CHỈ LẤY NHỮNG CỤ CÓ CHỈ SỐ SỨC KHỎE BẤT THƯỜNG THỰC SỰ
   const realDangerAlerts = facilityAlerts.filter(
     alt => alt.issueDetail && alt.issueDetail.trim() !== '' && alt.alertType !== 'NOTE_ONLY'
   );
 
-  // Canvas phụ để đo chiều cao văn bản
   const dummyCanvas = document.createElement('canvas');
   const dummyCtx = dummyCanvas.getContext('2d');
 
@@ -103,10 +100,8 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
     return lines;
   };
 
-  // 1. TÍNH TOÁN CHÍNH XÁC CHIỀU CAO CỦA TẤM ẢNH
-  let h = margin + 92 + 20 + 68 + 24; // Header + Meta Grid + Margin
+  let h = margin + 92 + 20 + 68 + 24;
 
-  // Chiều cao Diễn biến trong ca
   h += 32;
   if (cleanEvents.length === 0) {
     h += 48 + 12;
@@ -118,7 +113,6 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
     h += 12;
   }
 
-  // Chiều cao Cảnh báo sức khỏe
   if (realDangerAlerts.length > 0) {
     h += 32;
     realDangerAlerts.forEach(alt => {
@@ -129,16 +123,13 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
     h += 12;
   }
 
-  // Chiều cao Lưu ý ca sau
   h += 32;
   const noteLines = wrapText(handoverNotes, contentWidth - 32, '500 14px system-ui, -apple-system, sans-serif');
   const noteBoxH = Math.max(noteLines.length * 24 + 20, 56);
   h += noteBoxH + 28;
 
-  // Footer
   h += 40;
 
-  // 2. KHỞI TẠO CANVAS THẬT VỚI KÍCH THƯỚC CHUẨN
   const canvas = document.createElement('canvas');
   canvas.width = baseWidth * scale;
   canvas.height = h * scale;
@@ -146,15 +137,12 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   const ctx = canvas.getContext('2d');
   ctx.scale(scale, scale);
 
-  // Background Slate Nền xám nhạt
   ctx.fillStyle = '#f8fafc';
   ctx.fillRect(0, 0, baseWidth, h);
 
   let currentY = margin;
 
-  // -------------------------------------------------------------
-  // A. HEADER BANNER NỀN ĐEN NAVY (#0b1329)
-  // -------------------------------------------------------------
+  // HEADER BANNER
   drawRoundedRect(ctx, margin, currentY, contentWidth, 92, 18, '#0b1329');
 
   ctx.fillStyle = '#94a3b8';
@@ -163,9 +151,8 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
 
   ctx.fillStyle = '#ffffff';
   ctx.font = '800 23px system-ui, -apple-system, sans-serif';
-  ctx.fillText(report.facility_name || `CS ${report.facility_id}`, margin + 24, currentY + 65);
+  ctx.fillText(report.facility_name || `Cơ sở ${report.facility_id}`, margin + 24, currentY + 65);
 
-  // Badge trạng thái góc phải Header
   const badgeText = isHistory ? '📜 BẢN LỊCH SỬ' : '✓ ĐÃ CHỐT CA';
   const badgeBg = isHistory ? '#0284c7' : '#16a34a';
   drawRoundedRect(ctx, margin + contentWidth - 140, currentY + 28, 116, 36, 18, badgeBg);
@@ -175,13 +162,10 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
 
   currentY += 92 + 20;
 
-  // -------------------------------------------------------------
-  // B. KHỐI TỔNG HỢP THÔNG TIN 3 CỘT (METADATA GRID)
-  // -------------------------------------------------------------
+  // METADATA GRID
   const colGap = 12;
   const colWidth = (contentWidth - colGap * 2) / 3;
 
-  // Box 1: Ngày
   drawRoundedRect(ctx, margin, currentY, colWidth, 68, 14, '#ffffff', '#e2e8f0');
   ctx.fillStyle = '#94a3b8';
   ctx.font = '700 11px system-ui, -apple-system, sans-serif';
@@ -190,7 +174,6 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   ctx.font = '800 15px system-ui, -apple-system, sans-serif';
   ctx.fillText(report.shift_date || '', margin + 16, currentY + 48);
 
-  // Box 2: Ca Trực
   drawRoundedRect(ctx, margin + colWidth + colGap, currentY, colWidth, 68, 14, '#ffffff', '#e2e8f0');
   ctx.fillStyle = '#94a3b8';
   ctx.font = '700 11px system-ui, -apple-system, sans-serif';
@@ -199,7 +182,6 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   ctx.font = '800 15px system-ui, -apple-system, sans-serif';
   ctx.fillText(`Ca ${report.shift_type || 'Trực'}`, margin + colWidth + colGap + 16, currentY + 48);
 
-  // Box 3: Người báo cáo (Đã sửa hiển thị ĐẦY ĐỦ TÊN 100%)
   drawRoundedRect(ctx, margin + (colWidth + colGap) * 2, currentY, colWidth, 68, 14, '#ffffff', '#e2e8f0');
   ctx.fillStyle = '#94a3b8';
   ctx.font = '700 11px system-ui, -apple-system, sans-serif';
@@ -220,9 +202,7 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
 
   currentY += 68 + 24;
 
-  // -------------------------------------------------------------
-  // C. CÁC DIỄN BIẾN TRONG CA
-  // -------------------------------------------------------------
+  // DIỄN BIẾN TRONG CA
   ctx.fillStyle = '#334155';
   ctx.font = '800 14.5px system-ui, -apple-system, sans-serif';
   ctx.fillText('📋 CÁC DIỄN BIẾN TRONG CA', margin, currentY);
@@ -241,7 +221,6 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
 
       drawRoundedRect(ctx, margin, currentY, contentWidth, boxH, 12, '#ffffff', '#e2e8f0');
 
-      // Chấm tròn Xanh lá
       ctx.fillStyle = '#10b981';
       ctx.beginPath();
       ctx.arc(margin + 20, currentY + 20, 4.5, 0, Math.PI * 2);
@@ -258,9 +237,7 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
     currentY += 12;
   }
 
-  // -------------------------------------------------------------
-  // D. CẢNH BÁO SỨC KHỎE (CHỈ HIỂN THỊ KHI CÓ BẤT THƯỜNG THỰC SỰ)
-  // -------------------------------------------------------------
+  // CẢNH BÁO SỨC KHỎE
   if (realDangerAlerts.length > 0) {
     ctx.fillStyle = '#9f1239';
     ctx.font = '800 14.5px system-ui, -apple-system, sans-serif';
@@ -285,9 +262,7 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
     currentY += 12;
   }
 
-  // -------------------------------------------------------------
-  // E. HƯỚNG XỬ LÝ & LƯU Ý CHO CA TIẾP THEO
-  // -------------------------------------------------------------
+  // LƯU Ý CA TIẾP THEO
   ctx.fillStyle = '#b45309';
   ctx.font = '800 14.5px system-ui, -apple-system, sans-serif';
   ctx.fillText('📌 HƯỚNG XỬ LÝ & LƯU Ý CHO CA TIẾP THEO', margin, currentY);
@@ -306,9 +281,7 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
 
   currentY += handoverBoxH + 28;
 
-  // -------------------------------------------------------------
-  // F. FOOTER TÂM AN HEALTHCARE
-  // -------------------------------------------------------------
+  // FOOTER
   ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -325,11 +298,10 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   const timeWidth = dummyCtx.measureText(nowStr).width;
   ctx.fillText(nowStr, baseWidth - margin - timeWidth, currentY);
 
-  // 3. TẢI FILE JPG NẾU XUẤT ẢNH
   const imageUrl = canvas.toDataURL('image/jpeg', 0.95);
   const link = document.createElement('a');
   link.href = imageUrl;
-  link.download = `BaoCao_${(report.facility_name || 'CS').replace(/\s+/g, '_')}_${report.shift_date}.jpg`;
+  link.download = `BaoCao_${(report.facility_name || `CS_${report.facility_id}`).replace(/\s+/g, '_')}_${report.shift_date}.jpg`;
   link.click();
 };
 
@@ -338,7 +310,11 @@ export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CA
   if (reportsList.length === 0) return null;
 
   const currentRole = role.toUpperCase();
-  const canEditReport = currentRole.includes('COORDINATOR') || currentRole.includes('ADMIN');
+  const canEditReport = 
+    currentRole.includes('COORDINATOR') || 
+    currentRole.includes('ADMIN') || 
+    currentRole.includes('MANAGER') || 
+    currentRole.includes('DOCTOR');
   const isAdminOrManager = currentRole.includes('ADMIN') || currentRole.includes('MANAGER');
 
   const parseDescriptions = (rawText) => {
@@ -357,7 +333,7 @@ export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CA
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }}>
       {reportsList.map((report) => {
-        const theme = FACILITY_THEMES[report.facility_id] || FACILITY_THEMES.default;
+        const theme = getFacilityTheme(report.facility_id);
         const parsedEvents = parseDescriptions(report.formatted_elder_descriptions);
         const facilityAlerts = alerts.filter(a => Number(a.facilityId) === Number(report.facility_id));
 
@@ -407,7 +383,7 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
         <div>
           <span style={{ background: theme.headerBg, color: theme.textColor, padding: '4px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '900', letterSpacing: '0.5px' }}>
-            {report.facility_name || theme.badge}
+            🏢 {report.facility_name || `CƠ SỞ ${report.facility_id}`}
           </span>
           <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a', margin: '6px 0 0 0' }}>
             BÁO CÁO GIAO CA CHÍNH THỨC
@@ -424,16 +400,15 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
           </button>
 
           {isPrevious ? (
-              <span style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: '800' }}>
-                🟠 Ca gần nhất
-              </span>
-            ) : (
-              <span style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: '800' }}>
-                🟢 Ca hiện tại
-              </span>
-            )}
+            <span style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: '800' }}>
+              🟠 Ca gần nhất
+            </span>
+          ) : (
+            <span style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: '800' }}>
+              🟢 Ca hiện tại
+            </span>
+          )}
 
-          
           {canEditReport && (
             <button
               type="button"
@@ -522,7 +497,6 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
                           <span>🕒 {new Date(log.created_at).toLocaleString('vi-VN')}</span>
                         </div>
 
-                        {/* CHỈ HIỂN THỊ NỘI DUNG CŨ */}
                         <div style={{ color: '#334155', marginTop: '4px', lineHeight: '1.4' }}>
                           <span style={{ fontWeight: '800', color: '#b45309' }}>Nội dung cũ: </span>
                           <span style={{ fontStyle: 'italic' }}>{oldContent || 'Không có'}</span>
