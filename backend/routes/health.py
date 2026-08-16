@@ -1,6 +1,6 @@
 # backend/routes/health.py
 from typing import List, Optional
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -22,13 +22,14 @@ from schemas import (
     ElderHealthSummaryCard, ElderShiftNoteInput,
     ShiftMedicalReportCreate, ShiftMedicalReportResponse,
     RoleType, ShiftType, WeightRecordCreate, WeightRecordResponse, CurrentShiftResponse,
-    ElderWeightDueResponse, WeightRecordUpdate, ShiftMedicalReportDetailResponse, ShiftReportAuditResponse, ShiftMedicalReportUpdate
+    ElderWeightDueResponse, WeightRecordUpdate, ShiftMedicalReportDetailResponse, ShiftReportAuditResponse, 
+    ShiftMedicalReportUpdate, CurrentShiftResponse, FacilityShiftReportStatusResponse, FacilityShiftReportSubmissionItem
 )
 from core.dependencies import PermissionChecker, get_current_user, require_care_team, require_medical_team
 from core.constants import VITAL_LIMITS, max_allowed_days_for_staff, max_allowed_days_max
 import json 
 import logging
-
+import pytz
 
 router = APIRouter(prefix="/api/health", tags=["[Y tế/Bác sĩ/Điều phối/NVCS] Quản lý Sức Khỏe & Ca Trực"])
 
@@ -42,6 +43,67 @@ require_coordinator_report = PermissionChecker([
 require_doctor_only = PermissionChecker([
     RoleType.Admin, RoleType.Manager, RoleType.Doctor
 ])
+
+
+
+
+@router.get(
+    "/current-shift",
+    response_model=CurrentShiftResponse,
+    summary="[Tất cả nhân viên] Lấy thông tin Ca trực Live hiện tại",
+    description="""
+    **Dành cho toàn bộ Web & Mobile Frontend:**
+    - Tự động kích hoạt JIT kiểm tra/mở ca trực live theo giờ thực tế.
+    - Trả về chi tiết: `shift_id`, `shift_date`, `shift_type` (Sang/Toi), trạng thái (`Open`), cùng khung giờ bắt đầu - kết thúc.
+    """
+)
+def get_current_live_shift(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Cho phép mọi tài khoản đã đăng nhập
+):
+    # 1. Kích hoạt JIT Sync làm mới và đồng bộ ca trực live tức thì
+    run_system_maintenance_jit(db, background_tasks)
+
+    # 2. Truy vấn ca trực đang Open
+    active_shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.id.desc()).first()
+
+    # 3. Lấy cấu hình khung giờ hiển thị
+    setting = db.query(ShiftSetting).first()
+    m_start = setting.morning_start if setting else "08:00"
+    m_end = setting.morning_end if setting else "19:00"
+    e_start = setting.evening_start if setting else "20:00"
+    e_end = setting.evening_end if setting else "07:00"
+
+    today_vn = datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).date()
+
+    if not active_shift:
+        # Trường hợp đang nằm ngoài giờ trực hành chính (nghỉ giữa ca)
+        return CurrentShiftResponse(
+            shift_id=None,
+            shift_date=today_vn,
+            shift_type="None",
+            status="Closed",
+            start_time="",
+            end_time="",
+            is_active=False
+        )
+
+    # Xác định khung giờ bắt đầu - kết thúc của ca hiện tại
+    if active_shift.shift_type == "Sang":
+        start_time, end_time = m_start, m_end
+    else:
+        start_time, end_time = e_start, e_end
+
+    return CurrentShiftResponse(
+        shift_id=active_shift.id,
+        shift_date=active_shift.shift_date,
+        shift_type=active_shift.shift_type,
+        status=active_shift.status,
+        start_time=start_time,
+        end_time=end_time,
+        is_active=True
+    )
 
 
 # =========================================================================
@@ -982,4 +1044,122 @@ def get_current_active_shift(
         start_time=morning_start,
         end_time=morning_end,
         is_active=False
+    )
+
+
+
+
+
+@router.get(
+    "/shift-reports/facilities-status",
+    response_model=FacilityShiftReportStatusResponse,
+    summary="[Quản lý/Y tế] Kiểm tra trạng thái nộp Báo cáo ca của các Cơ sở",
+    description="""
+    **Mô tả nghiệp vụ:**
+    - Trả về danh sách toàn bộ các Cơ sở và trạng thái đã nộp Báo cáo giao ca (`ShiftReport`) hay chưa.
+    - **Mặc định thông minh:** Nếu không truyền `target_date` và `shift_type`, hệ thống tự động bốc **Ngày hôm nay và Ca trực live hiện tại**.
+    - Nếu đã nộp (`is_submitted = True`), đính kèm chi tiết: `report_id`, Điều phối viên nộp, Thời gian nộp và Tóm tắt vấn đề nổi bật.
+    """
+)
+def get_facilities_shift_report_status(
+    target_date: Optional[date] = Query(None, description="Ngày cần kiểm tra (YYYY-MM-DD). Để trống = Hôm nay"),
+    shift_type: Optional[ShiftType] = Query(None, description="Loại ca ('Sang' hoặc 'Toi'). Để trống = Ca live hiện tại"),
+    facility_id: Optional[int] = Query(None, description="Lọc riêng 1 cơ sở (nếu cần)"),
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_care_vital)
+):
+    # 1. Kích hoạt JIT refresh làm mới ca trực ngầm
+    if background_tasks:
+        run_system_maintenance_jit(db, background_tasks)
+
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    now_vn = datetime.now(tz)
+    
+    # 2. XÁC ĐỊNH NGÀY VÀ CA MẶC ĐỊNH
+    resolved_date = target_date or now_vn.date()
+    resolved_shift_type = shift_type.value if shift_type else None
+
+    if not resolved_shift_type:
+        # Ưu tiên lấy ca trực live đang Open trong DB
+        active_shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.id.desc()).first()
+        if active_shift:
+            resolved_shift_type = active_shift.shift_type
+            if not target_date:
+                resolved_date = active_shift.shift_date
+        else:
+            # Tính toán dựa trên cấu hình khung giờ ShiftSetting
+            setting = db.query(ShiftSetting).first()
+            current_time = now_vn.time()
+            try:
+                m_start = time.fromisoformat(setting.morning_start if setting and setting.morning_start else "08:00")
+                m_end = time.fromisoformat(setting.morning_end if setting and setting.morning_end else "19:00")
+                e_start = time.fromisoformat(setting.evening_start if setting and setting.evening_start else "20:00")
+                e_end = time.fromisoformat(setting.evening_end if setting and setting.evening_end else "07:00")
+            except Exception:
+                m_start, m_end = time(8, 0), time(19, 0)
+                e_start, e_end = time(20, 0), time(7, 0)
+
+            if m_start <= current_time <= m_end:
+                resolved_shift_type = "Sang"
+            elif current_time >= e_start or current_time <= e_end:
+                resolved_shift_type = "Toi"
+                if current_time <= e_end and not target_date:
+                    resolved_date = resolved_date - timedelta(days=1)
+            else:
+                resolved_shift_type = "Sang"
+
+    # 3. TRUY VẤN TẤT CẢ CƠ SỞ (CÓ ÁP DỤNG PHÂN QUYỀN)
+    facility_query = db.query(Facility)
+    
+    # Nếu user bị giới hạn theo cơ sở (Manager/Caregiver cơ sở)
+    target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
+    if target_f_id is not None:
+        facility_query = facility_query.filter(Facility.id == target_f_id)
+
+    facilities = facility_query.order_by(Facility.id).all()
+
+    # 4. TRUY VẤN CÁC BÁO CÁO GIAO CA ĐÃ NỘP TRONG NGÀY & CA ĐÓ
+    reports = db.query(ShiftReport).options(
+        joinedload(ShiftReport.coordinator)
+    ).filter(
+        ShiftReport.shift_date == resolved_date,
+        ShiftReport.shift_type == resolved_shift_type
+    ).all()
+
+    # Map báo cáo theo facility_id để đối chiếu nhanh O(1)
+    report_map = {r.facility_id: r for r in reports}
+
+    # 5. TỔNG HỢP KẾT QUẢ
+    facility_items = []
+    submitted_count = 0
+
+    for fac in facilities:
+        rep = report_map.get(fac.id)
+        is_sub = rep is not None
+        if is_sub:
+            submitted_count += 1
+
+        facility_items.append(
+            FacilityShiftReportSubmissionItem(
+                facility_id=fac.id,
+                facility_name=fac.name,
+                is_submitted=is_sub,
+                report_id=rep.id if rep else None,
+                coordinator_id=rep.coordinator_id if rep else None,
+                coordinator_name=rep.coordinator.full_name if (rep and rep.coordinator) else None,
+                highlighted_issues=rep.highlighted_issues if rep else None,
+                handover_notes=rep.handover_notes if rep else None,
+                submitted_at=rep.created_at if rep else None
+            )
+        )
+
+    total_fac = len(facilities)
+    return FacilityShiftReportStatusResponse(
+        target_date=resolved_date,
+        shift_type=resolved_shift_type,
+        total_facilities=total_fac,
+        submitted_count=submitted_count,
+        unsubmitted_count=total_fac - submitted_count,
+        facilities=facility_items
     )

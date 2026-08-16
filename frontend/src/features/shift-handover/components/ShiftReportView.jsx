@@ -305,15 +305,15 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   link.click();
 };
 
-export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CARESTAFF' }) => {
+export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CAREGIVER' }) => {
   const reportsList = Array.isArray(reports) ? reports : (reports ? [reports] : []);
   if (reportsList.length === 0) return null;
 
   const currentRole = role.toUpperCase();
-  const canEditReport = 
-    currentRole.includes('COORDINATOR') || 
-    currentRole.includes('ADMIN') || 
-    currentRole.includes('MANAGER') || 
+  const canEditReport =
+    currentRole.includes('COORDINATOR') ||
+    currentRole.includes('ADMIN') ||
+    currentRole.includes('MANAGER') ||
     currentRole.includes('DOCTOR');
   const isAdminOrManager = currentRole.includes('ADMIN') || currentRole.includes('MANAGER');
 
@@ -347,7 +347,6 @@ export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CA
             canEditReport={canEditReport}
             isAdminOrManager={isAdminOrManager}
             onEditReport={() => onEditReport && onEditReport(report)}
-            onExportJPG={() => exportReportAsJPG(report, facilityAlerts, false)}
           />
         );
       })}
@@ -355,86 +354,98 @@ export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CA
   );
 };
 
-const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, isAdminOrManager, onEditReport, onExportJPG }) => {
-  const [showEditHistory, setShowEditHistory] = useState(false);
-  const [auditLogs, setAuditLogs] = useState([]);
-  const [loadingAudit, setLoadingAudit] = useState(false);
-
+const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, isAdminOrManager, onEditReport }) => {
   const isPrevious = Boolean(report.isPrevious);
-
-  useEffect(() => {
-    if (showEditHistory && report.id && isAdminOrManager) {
-      setLoadingAudit(true);
-      shiftHandoverApi.getShiftReportAuditHistory(report.id)
-        .then((res) => setAuditLogs(res?.data || res || []))
-        .catch((err) => console.error('Lỗi lấy audit history:', err))
-        .finally(() => setLoadingAudit(false));
-    }
-  }, [showEditHistory, report.id, isAdminOrManager]);
+  const shiftName = report.shift_type === 'Sang' ? 'Ca Sáng' : 'Ca Tối';
 
   return (
     <div style={{
       background: '#ffffff',
-      padding: '20px',
-      borderRadius: '18px',
-      border: `3px solid ${theme.border}`,
-      boxShadow: '0 4px 16px rgba(0,0,0,0.06)'
+      borderRadius: '16px',
+      border: isPrevious ? '2px dashed #f59e0b' : `2px solid ${theme.border}`,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+      overflow: 'hidden'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-        <div>
-          <span style={{ background: theme.headerBg, color: theme.textColor, padding: '4px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '900', letterSpacing: '0.5px' }}>
-            🏢 {report.facility_name || `CƠ SỞ ${report.facility_id}`}
-          </span>
-          <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a', margin: '6px 0 0 0' }}>
-            BÁO CÁO GIAO CA CHÍNH THỨC
-          </h2>
+      {/* BANNER TRẠNG THÁI HIỆN TẠI / QUÁ KHỨ */}
+      {isPrevious ? (
+        <div style={{
+          backgroundColor: '#fffbeb',
+          borderBottom: '1px solid #fde68a',
+          padding: '8px 16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          color: '#b45309',
+          fontSize: '12px',
+          fontWeight: '700'
+        }}>
+          <span>⚠️ BẢN THAM KHẢO TỪ CA TRƯỚC (Chưa tạo báo cáo ca hôm nay)</span>
+          <span>Ngày cũ: {report.shift_date} ({shiftName})</span>
         </div>
+      ) : (
+        <div style={{
+          backgroundColor: '#ecfdf5',
+          borderBottom: '1px solid #a7f3d0',
+          padding: '8px 16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          color: '#047857',
+          fontSize: '12px',
+          fontWeight: '800'
+        }}>
+          <span>🟢 BÁO CÁO GIAO CA CHÍNH THỨC - HÔM NAY</span>
+          <span>{report.shift_date} • {shiftName}</span>
+        </div>
+      )}
 
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={onExportJPG}
-            style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #0284c7', backgroundColor: '#e0f2fe', fontSize: '12px', fontWeight: '800', color: '#0369a1', cursor: 'pointer' }}
-          >
-            📸 Tải ảnh
-          </button>
-
-          {isPrevious ? (
-            <span style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: '800' }}>
-              🟠 Ca gần nhất
+      {/* NỘI DUNG CARD */}
+      <div style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+          <div>
+            <span style={{ background: theme.headerBg, color: theme.textColor, padding: '4px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '900' }}>
+              🏢 {report.facility_name || `Cơ sở ${report.facility_id}`}
             </span>
-          ) : (
-            <span style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: '800' }}>
-              🟢 Ca hiện tại
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', color: '#64748b' }}>
+              Người báo cáo: <b style={{ color: '#0f172a' }}>{report.reporter_name}</b>
             </span>
-          )}
 
-          {canEditReport && (
-            <button
-              type="button"
-              onClick={onEditReport}
-              style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #d97706', backgroundColor: '#fffbeb', fontSize: '12px', fontWeight: '800', color: '#b45309', cursor: 'pointer' }}
-            >
-              ✏️ Hiệu chỉnh
-            </button>
-          )}
+            {canEditReport && (
+              <button
+                type="button"
+                onClick={onEditReport}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#f8fafc',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  color: '#0f172a',
+                  cursor: 'pointer'
+                }}
+              >
+                ✏️ Hiệu chỉnh
+              </button>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '14px' }}>
-        <div>
-          <strong style={{ color: '#475569' }}>Người báo cáo:</strong> <span style={{ fontWeight: '800', color: '#0f172a' }}>{report.reporter_name}</span>
-        </div>
-
-        <div>
-          <strong style={{ display: 'block', marginBottom: '8px', color: '#334155' }}>Diễn biến trong ca:</strong>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {/* CÁC DIỄN BIẾN TRONG CA */}
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ fontSize: '12px', fontWeight: '800', color: '#475569', marginBottom: '6px' }}>
+            1. DIỄN BIẾN TRONG CA:
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {parsedEvents.length === 0 ? (
-              <div style={{ fontStyle: 'italic', color: '#94a3b8' }}>Không có ghi nhận.</div>
+              <div style={{ fontStyle: 'italic', color: '#94a3b8', fontSize: '13px' }}>Không có ghi nhận.</div>
             ) : (
               parsedEvents.map((item, idx) => (
-                <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '800', flexShrink: 0 }}>
+                <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
                     {item.elderName}
                   </span>
                   <span style={{ color: '#1e293b', fontWeight: '600', fontSize: '13px' }}>
@@ -446,70 +457,17 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
           </div>
         </div>
 
+        {/* HƯỚNG XỬ LÝ / LƯU Ý CA SAU */}
         <div>
-          <strong style={{ display: 'block', marginBottom: '4px', color: '#334155' }}>Hướng xử lý / Lưu ý ca sau:</strong>
-          <div style={{ background: '#fffbeb', color: '#78350f', padding: '12px 14px', borderRadius: '10px', border: '1px solid #fef3c7', fontWeight: '700', lineHeight: '1.5' }}>
+          <div style={{ fontSize: '12px', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+            2. LƯU Ý / BÀN GIAO CHO CA SAU:
+          </div>
+          <div style={{ background: '#fffbeb', color: '#78350f', padding: '10px 14px', borderRadius: '8px', border: '1px solid #fef3c7', fontWeight: '600', fontSize: '13px' }}>
             {report.handover_notes || 'Không có lưu ý đặc biệt.'}
           </div>
         </div>
-
-        {isAdminOrManager && (
-          <div style={{ marginTop: '8px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '8px 12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#334155' }}>
-                🛡️ Xem lịch sử vết sửa báo cáo này
-              </span>
-              <input
-                type="checkbox"
-                checked={showEditHistory}
-                onChange={(e) => setShowEditHistory(e.target.checked)}
-                style={{ cursor: 'pointer' }}
-              />
-            </div>
-
-            {showEditHistory && (
-              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {loadingAudit ? (
-                  <div style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic', padding: '4px' }}>
-                    Đang tải log...
-                  </div>
-                ) : auditLogs.length === 0 ? (
-                  <div style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic', padding: '4px' }}>
-                    Chưa có lượt sửa nào.
-                  </div>
-                ) : (
-                  auditLogs.map((log, idx) => {
-                    const oldContent = formatAuditOldContent(log.payload);
-
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          background: '#f1f5f9',
-                          borderLeft: '4px solid #0284c7',
-                          padding: '8px 10px',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
-                          <span>👤 {log.actor_name}</span>
-                          <span>🕒 {new Date(log.created_at).toLocaleString('vi-VN')}</span>
-                        </div>
-
-                        <div style={{ color: '#334155', marginTop: '4px', lineHeight: '1.4' }}>
-                          <span style={{ fontWeight: '800', color: '#b45309' }}>Nội dung cũ: </span>
-                          <span style={{ fontStyle: 'italic' }}>{oldContent || 'Không có'}</span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
 };
+

@@ -219,6 +219,32 @@ class RelativeElderResponse(BaseModel):
 # ==========================================
 # THỰC THỂ: NGHIỆP VỤ Y TẾ (DẤU SINH HIỆU, THUỐC)
 # ==========================================
+class FacilityShiftReportSubmissionItem(BaseModel):
+    facility_id: int
+    facility_name: str
+    is_submitted: bool
+    report_id: Optional[int] = None
+    coordinator_id: Optional[int] = None
+    coordinator_name: Optional[str] = None
+    highlighted_issues: Optional[str] = None
+    handover_notes: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FacilityShiftReportStatusResponse(BaseModel):
+    target_date: date
+    shift_type: str
+    total_facilities: int
+    submitted_count: int
+    unsubmitted_count: int
+    facilities: List[FacilityShiftReportSubmissionItem]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+
 class VitalSignCreate(BaseModel):
     elder_id: int
     shift_type: ShiftType

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { AuthContext } from '../../../contexts/AuthContext';
+import { shiftHandoverApi } from '../api/shiftHandoverApi';
 import styles from './HandoverReportForm.module.css';
 
 const SearchableElderSelect = ({ eldersList, selectedElderId, selectedElderIds = [], onSelect, hasError }) => {
@@ -86,22 +87,31 @@ export const HandoverReportForm = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [fieldErrors, setFieldErrors] = useState([]);
 
-  // Tự động xác định ca trực hiện tại theo khung giờ thực tế
-  const getCurrentShiftType = () => {
-    const hours = new Date().getHours();
-    return (hours >= 6 && hours < 18) ? 'Sang' : 'Toi';
-  };
-  const [shiftType, setShiftType] = useState(existingReport?.shift_type || getCurrentShiftType());
+  // State lưu thông tin ca trực live lấy từ BE
+  const [liveShift, setLiveShift] = useState(null);
 
   const isMultiFacility = user?.facility_id === null || user?.facility_id === undefined;
   
-  // Khởi tạo ID cơ sở từ props hoặc API list, không fallback hằng số
   const [currentFacId, setCurrentFacId] = useState(
     existingReport?.facility_id || selectedFacilityId || user?.facility_id || facilitiesList[0]?.id || ''
   );
 
   const recognitionRef = useRef(null);
   const allSelectedElderIds = elderEvents.map((item) => item.elder_id).filter(Boolean);
+
+  // 1. Tải thông tin ca trực live từ backend
+  useEffect(() => {
+    const fetchCurrentShift = async () => {
+      try {
+        const res = await shiftHandoverApi.getCurrentShift();
+        const shiftData = res?.data || res;
+        setLiveShift(shiftData);
+      } catch (err) {
+        console.error('Lỗi lấy thông tin ca trực live:', err);
+      }
+    };
+    fetchCurrentShift();
+  }, []);
 
   useEffect(() => {
     if (selectedFacilityId) {
@@ -115,9 +125,6 @@ export const HandoverReportForm = ({
     if (existingReport) {
       if (existingReport.facility_id) {
         setCurrentFacId(existingReport.facility_id);
-      }
-      if (existingReport.shift_type) {
-        setShiftType(existingReport.shift_type);
       }
       setHandoverNotes(existingReport.handover_notes || '');
       if (existingReport.formatted_elder_descriptions) {
@@ -266,11 +273,15 @@ export const HandoverReportForm = ({
 
     setFieldErrors([]);
 
+    // Lấy shift_type và shift_date từ ca trực live (hoặc bản đang sửa)
+    const reportShiftType = existingReport?.shift_type || (liveShift?.shift_type !== 'None' ? liveShift?.shift_type : 'Sang') || 'Sang';
+    const reportShiftDate = existingReport?.shift_date || liveShift?.shift_date || new Date().toISOString().split('T')[0];
+
     onSubmitReport(
       {
         facility_id: Number(currentFacId),
-        shift_date: new Date().toISOString().split('T')[0],
-        shift_type: shiftType,
+        shift_date: reportShiftDate,
+        shift_type: reportShiftType,
         elder_events: elderEvents,
         handover_notes: handoverNotes,
       },
@@ -280,6 +291,13 @@ export const HandoverReportForm = ({
 
   const currentFacilityObj = facilitiesList.find((f) => Number(f.id) === Number(currentFacId));
   const currentFacilityName = currentFacilityObj?.name || (currentFacId ? `Cơ sở ID: ${currentFacId}` : 'Đang tải cơ sở...');
+
+  // Chuỗi hiển thị tên ca trực trực tiếp từ Live Shift
+  const shiftDisplayName = existingReport
+    ? `Ca ${existingReport.shift_type === 'Sang' ? 'Sáng' : 'Tối'}`
+    : liveShift?.is_active
+      ? `Ca ${liveShift.shift_type === 'Sang' ? 'Sáng' : 'Tối'} (${liveShift.start_time} - ${liveShift.end_time})`
+      : 'Ngoài ca trực';
 
   return (
     <div className={styles.box} style={{ position: 'relative', border: existingReport ? '2px solid #d97706' : '2px solid #10b981' }}>
@@ -367,27 +385,23 @@ export const HandoverReportForm = ({
             </span>
           )}
 
-          {/* CHỌN CA TRỰC */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
-            <label style={{ fontSize: '12px', fontWeight: '800', color: '#475569' }}>⏰ Ca:</label>
-            <select
-              value={shiftType}
-              onChange={(e) => setShiftType(e.target.value)}
-              style={{
-                padding: '5px 8px',
-                borderRadius: '6px',
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                fontWeight: '700',
-                fontSize: '12px',
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="Sang">Ca Sáng</option>
-              <option value="Toi">Ca Tối</option>
-            </select>
-          </div>
+          {/* HIỂN THỊ CA TRỰC HIỆN TẠI TỰ ĐỘNG TỪ BACKEND (BADGE LIVE) */}
+          <span
+            style={{
+              background: liveShift?.is_active || existingReport ? '#fef3c7' : '#f1f5f9',
+              color: liveShift?.is_active || existingReport ? '#b45309' : '#64748b',
+              border: `1px solid ${liveShift?.is_active || existingReport ? '#fde68a' : '#cbd5e1'}`,
+              padding: '4px 10px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '800',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            ⏰ {shiftDisplayName}
+          </span>
         </div>
 
         <button
