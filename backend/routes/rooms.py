@@ -12,34 +12,28 @@ router = APIRouter(prefix="/api/admin/rooms", tags=["[Admin/Manager] Quản lý 
 # 1. Get All: Lấy toàn bộ danh sách toàn bộ phòng
 @router.get("", response_model=List[RoomResponse])
 def get_all_rooms(
-    facility_id: Optional[int] = None,
+    facility_id: Optional[int] = Query(None, description="Lọc theo Cơ sở"),
+    zone_id: Optional[int] = Query(None, description="Lọc theo Phân khu (Khu A, Khu B...)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_management)
 ):
-    """
-    Lấy danh sách phòng. 
-    Tự động gắn Tên Cơ sở và Tên Phân khu (Khu A, B, C...) vào từng phòng.
-    """
     query = db.query(Room).options(
         joinedload(Room.zone).joinedload(Zone.facility)
     )
 
-    # 1. Xác định ID cơ sở cần lọc
-    target_facility_id = None
-    if current_user.facility_id is not None:
-        # Manager gán cứng 1 cơ sở -> Ép buộc lọc theo cơ sở này
-        target_facility_id = current_user.facility_id
-    else:
-        # Admin hoặc Manager Tổng (facility_id == None) -> Dùng ID từ Query nếu có
-        target_facility_id = facility_id
-
-    # 2. Áp dụng Filter nếu có target_facility_id
+    # 1. Phân quyền đa cơ sở
+    target_facility_id = current_user.facility_id if current_user.facility_id is not None else facility_id
     if target_facility_id is not None:
         query = query.join(Zone).filter(Zone.facility_id == target_facility_id)
 
+    # 2. Lọc theo Phân khu (nếu có)
+    if zone_id is not None:
+        if target_facility_id is None:
+            query = query.join(Zone)
+        query = query.filter(Room.zone_id == zone_id)
+
     rooms = query.order_by(Room.room_number).all()
 
-    # 3. Đóng gói dữ liệu trả về
     return [
         RoomResponse(
             id=r.id,
@@ -54,46 +48,58 @@ def get_all_rooms(
         for r in rooms
     ]
 
-
 # 2. Create: Tạo phòng chăm sóc
-@router.post("", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", 
+    response_model=RoomResponse, 
+    status_code=status.HTTP_201_CREATED,
+    summary="Tạo phòng chăm sóc mới",
+    description="""
+    **Quy trình tạo phòng:**
+    1. Nhận `zone_id` từ Frontend -> Tự động xác định Phân khu và Cơ sở liên kết.
+    2. Kiểm tra phân quyền: Manager cơ sở X không được tạo phòng tại Phân khu thuộc Cơ sở Y[cite: 24].
+    3. Kiểm tra trùng lặp `room_number` trên toàn hệ thống (chống lỗi Database UniqueViolation).
+    4. Trả về đầy đủ: `id`, `room_number`, `zone_id`, `zone_name`, `facility_id`, `facility_name`[cite: 21, 24].
+    """
+)
 def create_room(
     payload: RoomCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_management)
-): 
-    """
-    Tạo phòng mới:
-    - Kiểm tra Phân khu (zone_id) truyền lên có tồn tại không.
-    - Nếu Manager thuộc 1 cơ sở cố định -> Chặn ngay nếu cố tình tạo phòng ở Phân khu thuộc Cơ sở khác.
-    """
-
+):
+    # 1. Kiểm tra Phân khu (zone_id) có tồn tại không
     zone = db.query(Zone).options(joinedload(Zone.facility)).filter(Zone.id == payload.zone_id).first()
     if not zone:
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy Phân khu với ID = {payload.zone_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Không tìm thấy Phân khu với ID = {payload.zone_id}"
+        )
     
-    # Manager không được tạo phòng khác cơ sở
+    # 2. Phân quyền: Manager cơ sở nào chỉ được tạo phòng tại Cơ sở đó[cite: 24]
     if current_user.facility_id is not None and zone.facility_id != current_user.facility_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Bạn không có quyền tạo phòng tại Phân khu thuộc Cơ sở khác!"
         )
 
-    # Kiểm tra trùng số phòng trong cùng Phân khu
-    existing_room = db.query(Room).filter(
-        Room.zone_id == payload.zone_id,
-        Room.room_number == payload.room_number
+    # 3. Chuẩn hóa mã phòng và kiểm tra trùng lặp toàn bảng (do room_number có unique=True)[cite: 22]
+    clean_room_number = payload.room_number.strip()
+    
+    existing_room = db.query(Room).options(joinedload(Room.zone)).filter(
+        func.lower(Room.room_number) == clean_room_number.lower()
     ).first()
+    
     if existing_room:
+        current_zone_name = existing_room.zone.name if existing_room.zone else "Khu khác"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Phòng '{payload.room_number}' đã tồn tại trong {zone.name}."
+            detail=f"Mã phòng '{clean_room_number}' đã tồn tại trên hệ thống (đang thuộc {current_zone_name}). Vui lòng đặt mã khác (VD: B13, A2)!"
         )
-    
-    
+
+    # 4. Thêm phòng mới vào Database[cite: 24]
     new_room = Room(
         zone_id=payload.zone_id,
-        room_number=payload.room_number,
+        room_number=clean_room_number,
         description=payload.description
     )
 
