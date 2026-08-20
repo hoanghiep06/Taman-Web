@@ -384,6 +384,14 @@ class ShiftMedicalReportResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class ShiftMedicalReportCreate(BaseModel):
+    facility_id: int
+    shift_date: Optional[date] = None       # Để trống -> BE tự tính ngày của ca vừa xong
+    shift_type: Optional[ShiftType] = None   # Để trống -> BE tự tính ca vừa xong (Sang/Toi)
+    elder_events: List[ElderShiftNoteInput] = []
+    handover_notes: str
+    highlighted_issues: Optional[str] = None
+
 
 class ElderHealthSummaryCard(BaseModel):
     elder_id: int

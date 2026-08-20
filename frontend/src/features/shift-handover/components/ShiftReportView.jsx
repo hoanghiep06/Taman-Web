@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { shiftHandoverApi } from '../api/shiftHandoverApi';
 
-// Tạo bảng màu động dựa theo Facility ID, không hardcode tên cơ sở
+// Tạo bảng màu động dựa theo Facility ID
 const getFacilityTheme = (facilityId) => {
   const THEME_PALETTES = [
     { border: '#0284c7', headerBg: '#e0f2fe', textColor: '#0369a1' },
@@ -36,33 +36,6 @@ const drawRoundedRect = (ctx, x, y, width, height, radius, fillStyle = null, str
     ctx.lineWidth = lineWidth;
     ctx.stroke();
   }
-};
-
-const formatAuditOldContent = (rawPayload) => {
-  if (!rawPayload) return 'Không có dữ liệu cũ';
-
-  try {
-    const obj = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
-    if (obj && obj.old) {
-      const oldElder = obj.old.elder_descriptions || 'Không có ghi nhận';
-      const oldHandover = obj.old.handover_notes || 'Không có ghi chú';
-      return `Diễn biến Cụ: [${oldElder}] | Giao ca: [${oldHandover}]`;
-    }
-
-    if (obj && (obj.old_content || obj.old_notes)) {
-      return obj.old_content || obj.old_notes;
-    }
-  } catch (e) {}
-
-  let text = String(rawPayload);
-  if (text.includes('-->') || text.includes('->')) {
-    const separator = text.includes('-->') ? '-->' : '->';
-    text = text.split(separator)[0];
-  }
-  return text
-    .replace(/^NỘI DUNG CŨ:\s*/i, '')
-    .replace(/^Ghi chú cũ:\s*/i, '')
-    .trim();
 };
 
 export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false) => {
@@ -339,7 +312,7 @@ export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CA
 
         return (
           <SingleFacilityReportCard
-            key={report.id}
+            key={report.id || `${report.facility_id}_${report.shift_date}`}
             report={report}
             facilityAlerts={facilityAlerts}
             theme={theme}
@@ -379,7 +352,7 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
           fontSize: '12px',
           fontWeight: '700'
         }}>
-          <span>⚠️ BẢN THAM KHẢO TỪ CA TRƯỚC (Chưa tạo báo cáo ca hôm nay)</span>
+          <span>⚠️ BẢN THAM KHẢO TỪ CA TRƯỚC (Chưa tạo báo cáo ca này)</span>
           <span>Ngày cũ: {report.shift_date} ({shiftName})</span>
         </div>
       ) : (
@@ -394,7 +367,7 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
           fontSize: '12px',
           fontWeight: '800'
         }}>
-          <span>🟢 BÁO CÁO GIAO CA CHÍNH THỨC - HÔM NAY</span>
+          <span>🟢 BÁO CÁO GIAO CA CHÍNH THỨC</span>
           <span>{report.shift_date} • {shiftName}</span>
         </div>
       )}
@@ -413,19 +386,21 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
               Người báo cáo: <b style={{ color: '#0f172a' }}>{report.reporter_name}</b>
             </span>
 
-            {canEditReport && (
+            {/* 🌟 CHỈ CHO PHÉP HIỆU CHỈNH KHI ĐÃ CÓ BÁO CÁO CHÍNH THỨC CỦA CA HIỆN TẠI (!isPrevious) */}
+            {canEditReport && !isPrevious && (
               <button
                 type="button"
                 onClick={onEditReport}
                 style={{
                   padding: '6px 12px',
                   borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  backgroundColor: '#f8fafc',
+                  border: '1.5px solid #0284c7',
+                  backgroundColor: '#f0f9ff',
                   fontSize: '12px',
                   fontWeight: '800',
-                  color: '#0f172a',
-                  cursor: 'pointer'
+                  color: '#0369a1',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(2, 132, 199, 0.15)'
                 }}
               >
                 ✏️ Hiệu chỉnh
@@ -470,4 +445,3 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
     </div>
   );
 };
-

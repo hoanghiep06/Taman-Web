@@ -15,7 +15,7 @@ VITAL_LIMITS = {
 
 # Cấu hình giờ giấc mặc định ban đầu cho ca Sáng và ca Tối
 DEFAULT_SHIFT_SETTINGS = {
-    "morning_start": "04:00",
+    "morning_start": "03:00",
     "morning_end": "13:00",
     "evening_start": "14:00",
     "evening_end": "23:00"

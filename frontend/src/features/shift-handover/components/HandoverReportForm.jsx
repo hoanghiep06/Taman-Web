@@ -273,26 +273,25 @@ export const HandoverReportForm = ({
 
     setFieldErrors([]);
 
-    // Lấy shift_type và shift_date từ ca trực live (hoặc bản đang sửa)
-    const reportShiftType = existingReport?.shift_type || (liveShift?.shift_type !== 'None' ? liveShift?.shift_type : 'Sang') || 'Sang';
-    const reportShiftDate = existingReport?.shift_date || liveShift?.shift_date || new Date().toISOString().split('T')[0];
+    // Nếu tạo mới -> KHÔNG gửi shift_date/shift_type để Backend tự động tính ca vừa xong
+    // Nếu sửa báo cáo cũ -> Giữ nguyên shift_date/shift_type của bản ghi cũ
+    const payload = {
+      facility_id: Number(currentFacId),
+      elder_events: elderEvents,
+      handover_notes: handoverNotes,
+      ...(existingReport && {
+        shift_date: existingReport.shift_date,
+        shift_type: existingReport.shift_type,
+      })
+    };
 
-    onSubmitReport(
-      {
-        facility_id: Number(currentFacId),
-        shift_date: reportShiftDate,
-        shift_type: reportShiftType,
-        elder_events: elderEvents,
-        handover_notes: handoverNotes,
-      },
-      existingReport?.id
-    );
+    onSubmitReport(payload, existingReport?.id);
   };
 
   const currentFacilityObj = facilitiesList.find((f) => Number(f.id) === Number(currentFacId));
   const currentFacilityName = currentFacilityObj?.name || (currentFacId ? `Cơ sở ID: ${currentFacId}` : 'Đang tải cơ sở...');
 
-  // Chuỗi hiển thị tên ca trực trực tiếp từ Live Shift
+  // Chuỗi hiển thị tên ca trực
   const shiftDisplayName = existingReport
     ? `Ca ${existingReport.shift_type === 'Sang' ? 'Sáng' : 'Tối'}`
     : liveShift?.is_active
@@ -385,7 +384,7 @@ export const HandoverReportForm = ({
             </span>
           )}
 
-          {/* HIỂN THỊ CA TRỰC HIỆN TẠI TỰ ĐỘNG TỪ BACKEND (BADGE LIVE) */}
+          {/* HIỂN THỊ CA TRỰC */}
           <span
             style={{
               background: liveShift?.is_active || existingReport ? '#fef3c7' : '#f1f5f9',

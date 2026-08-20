@@ -325,3 +325,66 @@ def upload_archive_file_to_drive(
     )
     file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
     return file.get('webViewLink')
+
+
+
+def upload_shift_handover_report_to_drive(
+    file_bytes: bytes,
+    facility_name: str,
+    shift_date_str: str,  # Dạng YYYY-MM-DD
+    filename: str         # 'Ca_Sang.xlsx' hoặc 'Ca_Toi.xlsx'
+) -> str:
+    """
+    Tải hoặc Cập nhật file Báo cáo giao ca lên Drive:
+    - Nếu file đã tồn tại trong folder ngày -> Ghi đè nội dung (In-place Update), giữ nguyên link Drive.
+    - Nếu chưa có -> Tạo mới.
+    """
+    service = get_drive_service()
+    
+    # 1. Thư mục Cơ sở
+    facility_folder_id = get_or_create_folder(sanitize_filename(facility_name), ROOT_FOLDER_ID)
+    
+    # 2. Thư mục Bao_Cao_Giao_Ca
+    handover_base_id = get_or_create_folder("Bao_Cao_Giao_Ca", facility_folder_id)
+    
+    # 3. Thư mục Ngày định dạng DD-MM-YYYY (VD: 20-08-2026)
+    try:
+        dt_obj = datetime.strptime(str(shift_date_str).strip(), "%Y-%m-%d")
+        date_folder_name = dt_obj.strftime("%d-%m-%Y")
+    except Exception:
+        date_folder_name = str(shift_date_str)
+
+    date_folder_id = get_or_create_folder(date_folder_name, handover_base_id)
+    
+    media = MediaIoBaseUpload(
+        io.BytesIO(file_bytes),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        resumable=True
+    )
+
+    # 4. Kiểm tra xem file đã tồn tại trong folder ngày chưa (chống trùng lặp)
+    safe_filename = filename.replace("'", "\\'")
+    query = f"name='{safe_filename}' and '{date_folder_id}' in parents and trashed=false"
+    results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+    existing_files = results.get('files', [])
+
+    if existing_files:
+        # File đã có -> Cập nhật đè nội dung lên File ID hiện tại
+        existing_file_id = existing_files[0]['id']
+        file = service.files().update(
+            fileId=existing_file_id,
+            media_body=media,
+            fields='id, webViewLink'
+        ).execute()
+        logging.info(f"[DRIVE OVERWRITE]: Đã cập nhật đè nội dung mới cho file {filename} (ID: {existing_file_id})")
+    else:
+        # Chưa có -> Tạo mới
+        file_metadata = {'name': filename, 'parents': [date_folder_id]}
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id, webViewLink'
+        ).execute()
+        logging.info(f"[DRIVE CREATE]: Đã tạo file mới {filename}")
+
+    return file.get('webViewLink')

@@ -26,7 +26,7 @@ export const ShiftHandoverPage = () => {
   const [liveShift, setLiveShift] = useState(null);
   const [facilityStatus, setFacilityStatus] = useState(null);
   
-  // State để điều hướng dữ liệu form
+  // State điều hướng dữ liệu form
   const [selectedFormFacilityId, setSelectedFormFacilityId] = useState(targetFacilityId || null);
 
   const activeDataFacilityId = hasSpecificFacility ? targetFacilityId : (selectedFormFacilityId || null);
@@ -38,75 +38,85 @@ export const ShiftHandoverPage = () => {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const formRef = useRef(null);
 
-  // 1. Tải Ca Trực Live & Trạng thái nộp của các cơ sở
-  const fetchShiftAndStatus = async () => {
+  // 1. Tải Ca Trực Live, Trạng thái nộp & Danh sách báo cáo
+  const fetchAllData = async () => {
     try {
-      // Gọi song song để tối ưu tốc độ
-      const [shiftRes, statusRes] = await Promise.all([
+      const [shiftRes, statusRes, archiveRes] = await Promise.all([
         shiftHandoverApi.getCurrentShift(),
-        canEdit ? shiftHandoverApi.getFacilitiesShiftReportStatus({ facility_id: targetFacilityId }) : Promise.resolve(null)
+        canEdit ? shiftHandoverApi.getFacilitiesShiftReportStatus({ facility_id: targetFacilityId }) : Promise.resolve(null),
+        shiftHandoverApi.getArchivedShiftReports({ facility_id: targetFacilityId, limit_days: 7 })
       ]);
       
-      setLiveShift(shiftRes?.data || shiftRes || null);
-      
-      if (statusRes) {
-        const statusData = statusRes?.data || statusRes;
-        setFacilityStatus(statusData);
-
-        // Tự động chọn cơ sở ĐẦU TIÊN CHƯA NỘP vào Form
-        if (!hasSpecificFacility && !isEditingReport) {
-          const unsubmitted = statusData.facilities?.find(f => !f.is_submitted);
-          if (unsubmitted) setSelectedFormFacilityId(Number(unsubmitted.facility_id));
-        }
-      }
-    } catch (err) {
-      console.error('Lỗi lấy thông tin ca/trạng thái:', err);
-    }
-  };
-
-  // 2. Tải danh sách báo cáo chi tiết
-  const fetchShiftReportData = async () => {
-    try {
-      const todayStr = new Date().toISOString().split('T')[0];
-
-      const [todayRes, archiveRes] = await Promise.all([
-        shiftHandoverApi.getArchivedShiftReports({ facility_id: targetFacilityId, target_date: todayStr }),
-        shiftHandoverApi.getArchivedShiftReports({ facility_id: targetFacilityId, limit_days: 7 }),
-      ]);
-
-      const todayReports = todayRes?.data || todayRes || [];
+      const liveData = shiftRes?.data || shiftRes || null;
+      const statusData = statusRes?.data || statusRes || null;
       const archiveReports = archiveRes?.data || archiveRes || [];
 
-      if (!hasSpecificFacility) {
-        const facilityMap = new Map();
-        archiveReports.forEach((report) => {
-          if (!facilityMap.has(String(report.facility_id))) facilityMap.set(String(report.facility_id), { ...report, isPrevious: true });
+      setLiveShift(liveData);
+      setFacilityStatus(statusData);
+
+      // Tự động chọn cơ sở đầu tiên chưa nộp vào Form
+      if (!hasSpecificFacility && !isEditingReport && statusData?.facilities) {
+        const unsubmitted = statusData.facilities.find(f => !f.is_submitted);
+        if (unsubmitted) setSelectedFormFacilityId(Number(unsubmitted.facility_id));
+      }
+
+      // 🌟 ĐỐI CHIẾU CHÍNH XÁC BẢN CHÍNH THỨC (!isPrevious) VÀ BẢN THAM KHẢO (isPrevious)
+      if (statusData && statusData.facilities) {
+        const mappedList = [];
+
+        statusData.facilities.forEach((fac) => {
+          if (fac.is_submitted && fac.report_id) {
+            // Cơ sở ĐÃ NỘP ca này -> Tìm báo cáo chính thức tương ứng
+            const officialReport = archiveReports.find(r => r.id === fac.report_id);
+            if (officialReport) {
+              mappedList.push({ ...officialReport, isPrevious: false });
+            } else {
+              // Fallback dữ liệu từ status nếu chưa kịp nạp archive
+              mappedList.push({
+                id: fac.report_id,
+                facility_id: fac.facility_id,
+                facility_name: fac.facility_name,
+                reporter_name: fac.coordinator_name,
+                shift_date: statusData.target_date,
+                shift_type: statusData.shift_type,
+                formatted_elder_descriptions: fac.highlighted_issues || '',
+                handover_notes: fac.handover_notes || '',
+                isPrevious: false
+              });
+            }
+          } else {
+            // Cơ sở CHƯA NỘP ca này -> Lấy báo cáo gần nhất trong quá khứ làm bản tham khảo
+            const pastReport = archiveReports.find(r => Number(r.facility_id) === Number(fac.facility_id));
+            if (pastReport) {
+              mappedList.push({ ...pastReport, isPrevious: true });
+            }
+          }
         });
-        todayReports.forEach((report) => {
-          facilityMap.set(String(report.facility_id), { ...report, isPrevious: false });
+
+        setReportData(mappedList);
+      } else {
+        // Trường hợp không có statusData (nhân viên thường)
+        const facilityMap = new Map();
+        archiveReports.forEach((r) => {
+          const key = String(r.facility_id);
+          if (!facilityMap.has(key)) {
+            facilityMap.set(key, { ...r, isPrevious: false });
+          }
         });
         setReportData(Array.from(facilityMap.values()));
-      } else {
-        if (todayReports.length > 0) {
-          setReportData(todayReports.map((r) => ({ ...r, isPrevious: false })));
-        } else if (archiveReports.length > 0) {
-          setReportData([{ ...archiveReports[0], isPrevious: true }]);
-        } else {
-          setReportData([]);
-        }
       }
+
     } catch (err) {
-      console.error('Lỗi tải dữ liệu báo cáo:', err);
+      console.error('Lỗi tải dữ liệu giao ca:', err);
     }
   };
 
   useEffect(() => {
-    fetchShiftAndStatus();
-    fetchShiftReportData();
+    fetchAllData();
   }, [user?.facility_id, currentRole]);
 
   const handleStartEditReport = (targetReport) => {
-    if (!canEdit) return;
+    if (!canEdit || targetReport.isPrevious) return; // 🌟 Chặn không cho chỉnh sửa nếu là bản cũ
     setEditingReportItem(targetReport);
     setIsEditingReport(true);
     if (targetReport.facility_id) {
@@ -127,15 +137,13 @@ export const ShiftHandoverPage = () => {
       setIsEditingReport(false);
       setEditingReportItem(null);
       
-      // Refresh lại toàn bộ Data và Status
-      fetchShiftAndStatus();
-      fetchShiftReportData();
+      // Refresh lại toàn bộ dữ liệu
+      fetchAllData();
     } catch (err) {
       console.error('Lỗi lưu báo cáo giao ca:', err.response?.data?.detail || err.message);
     }
   };
 
-  // KHÔI PHỤC LẠI HÀM NÀY ĐỂ TRUYỀN CHO MODAL LỊCH SỬ
   const handleFetchArchivedReports = async (params = {}) => {
     try {
       const res = await shiftHandoverApi.getArchivedShiftReports({
@@ -151,17 +159,14 @@ export const ShiftHandoverPage = () => {
 
   const Layout = isDesktop ? ShiftHandoverWebLayout : ShiftHandoverMobileLayout;
 
-  // Xử lý dữ liệu UI
   const isLiveActive = Boolean(liveShift?.is_active);
   const shiftText = liveShift?.shift_type === 'Sang' ? 'Ca Sáng' : liveShift?.shift_type === 'Toi' ? 'Ca Tối' : 'Ngoài giờ trực';
   const shiftHours = liveShift?.start_time && liveShift?.end_time ? `(${liveShift.start_time} - ${liveShift.end_time})` : '';
 
-  // Phân loại danh sách cơ sở truyền vào Form
   const allFacilities = facilityStatus?.facilities?.map(f => ({ id: f.facility_id, name: f.facility_name })) || [];
   const unsubmittedFacilities = facilityStatus?.facilities?.filter(f => !f.is_submitted).map(f => ({ id: f.facility_id, name: f.facility_name })) || [];
   const isAllSubmitted = facilityStatus && facilityStatus.unsubmitted_count === 0;
   
-  // UX Progress Bar
   const totalFacs = facilityStatus?.total_facilities || 0;
   const submittedFacs = facilityStatus?.submitted_count || 0;
   const progressPercent = totalFacs > 0 ? (submittedFacs / totalFacs) * 100 : 0;
@@ -170,9 +175,7 @@ export const ShiftHandoverPage = () => {
     <Layout>
       <div style={{ paddingBottom: '120px' }}>
         
-        {/* ========================================================================= */}
-        {/* KHU VỰC 1: BANNER CA TRỰC LIVE & TIẾN ĐỘ                                */}
-        {/* ========================================================================= */}
+        {/* KHU VỰC 1: BANNER CA TRỰC LIVE & TIẾN ĐỘ */}
         <div style={{
           backgroundColor: '#0f172a',
           color: '#ffffff',
@@ -212,7 +215,7 @@ export const ShiftHandoverPage = () => {
             </button>
           </div>
 
-          {/* UX Tăng cường: Thanh Tiến Độ Nộp Báo Cáo */}
+          {/* Thanh Tiến Độ Nộp Báo Cáo */}
           {canEdit && facilityStatus && (
              <div>
                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '700', color: '#cbd5e1', marginBottom: '6px' }}>
@@ -226,13 +229,10 @@ export const ShiftHandoverPage = () => {
           )}
         </div>
 
-        {/* ========================================================================= */}
-        {/* KHU VỰC 2: FORM LẬP BÁO CÁO (Tự ẩn cơ sở đã nộp)                        */}
-        {/* ========================================================================= */}
+        {/* KHU VỰC 2: FORM LẬP BÁO CÁO */}
         <div ref={formRef} style={{ marginBottom: '28px' }}>
           {canEdit && (
             isEditingReport ? (
-              // Trạng thái: Đang hiệu chỉnh báo cáo cũ -> Hiển thị form, truyền vào toàn bộ cơ sở để khoá select đúng ID
               <HandoverReportForm
                 liveShift={liveShift}
                 facilitiesList={allFacilities} 
@@ -244,12 +244,10 @@ export const ShiftHandoverPage = () => {
                 onCancelEdit={() => {
                   setIsEditingReport(false);
                   setEditingReportItem(null);
-                  // Khi huỷ edit, tự quay về cơ sở chưa nộp
                   if (unsubmittedFacilities.length > 0) setSelectedFormFacilityId(unsubmittedFacilities[0].id);
                 }}
               />
             ) : isAllSubmitted ? (
-              // Trạng thái: Đã nộp xong hết -> Ẩn form, hiển thị thông báo thành công
               <div style={{
                 backgroundColor: '#ecfdf5', border: '2px solid #34d399', borderRadius: '16px', padding: '24px',
                 textAlign: 'center', color: '#065f46', boxShadow: '0 4px 12px rgba(52, 211, 153, 0.1)'
@@ -259,7 +257,6 @@ export const ShiftHandoverPage = () => {
                 <p style={{ margin: 0, fontSize: '13px', fontWeight: '600' }}>Toàn bộ các cơ sở đã được tạo báo cáo thành công cho ca trực này.</p>
               </div>
             ) : (
-              // Trạng thái: Đang tạo mới -> Chỉ truyền vào các cơ sở chưa nộp (is_submitted = false)
               <HandoverReportForm
                 liveShift={liveShift}
                 facilitiesList={unsubmittedFacilities}
@@ -273,9 +270,7 @@ export const ShiftHandoverPage = () => {
           )}
         </div>
 
-        {/* ========================================================================= */}
-        {/* KHU VỰC 3: BẢNG HIỂN THỊ BÁO CÁO                                        */}
-        {/* ========================================================================= */}
+        {/* KHU VỰC 3: BẢNG HIỂN THỊ BÁO CÁO */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
           <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#334155', margin: 0, textTransform: 'uppercase' }}>
             📋 Danh Sách Báo Cáo Ca Trực

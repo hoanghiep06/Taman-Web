@@ -29,4 +29,7 @@ export const shiftHandoverApi = {
     getArchivedShiftReports: async (params = {}) => {
         return await axiosClient.get('/health/shift-reports/archive', { params });
     },
+    getShiftAbnormalSummary: async (params = {}) => {
+        return await axiosClient.get('/health/shift-reports/auto-summary', { params });
+    },
 };

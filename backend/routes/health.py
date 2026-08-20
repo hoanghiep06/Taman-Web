@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Background
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from services.maintenance_service import run_system_maintenance_jit
-
+from services.report_export_service import export_and_upload_shift_report_background
 
 from services.shift_service import check_and_sync_shift_jit 
 
@@ -44,6 +44,58 @@ require_doctor_only = PermissionChecker([
     RoleType.Admin, RoleType.Manager, RoleType.Doctor
 ])
 
+
+
+# =========================================================================
+# HELPER: TỰ ĐỘNG TÍNH TOÁN CA VỪA KẾT THÚC CẦN BÁO CÁO (DÙNG CHUNG)
+# =========================================================================
+def resolve_handover_shift_context(
+    db: Session, 
+    target_date: Optional[date] = None, 
+    shift_type: Optional[str] = None
+) -> tuple[date, str]:
+    """
+    Quy chuẩn logic:
+    - Nếu nộp vào ban ngày (từ giờ bắt đầu ca sáng -> trước giờ bắt đầu ca tối, VD 08:00 - 19:00):
+      -> Ca vừa kết thúc cần bàn giao là: Ca Tối của ngày HÔM QUA.
+    - Nếu nộp vào ban đêm/chiều tối (từ giờ ca tối -> trước giờ ca sáng hôm sau, VD 20:00 - 07:00):
+      -> Ca vừa kết thúc cần bàn giao là: Ca Sáng của ngày HÔM NAY.
+    """
+    if target_date and shift_type:
+        return target_date, shift_type
+
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    now_vn = datetime.now(tz)
+    cur_time = now_vn.time()
+    cur_date = now_vn.date()
+
+    setting = db.query(ShiftSetting).first()
+    m_start_str = setting.morning_start if setting and setting.morning_start else "08:00"
+    m_end_str = setting.morning_end if setting and setting.morning_end else "19:00"
+
+    try:
+        m_start = time.fromisoformat(m_start_str)
+        m_end = time.fromisoformat(m_end_str)
+    except Exception:
+        m_start, m_end = time(8, 0), time(19, 0)
+
+    resolved_date = target_date
+    resolved_shift_type = shift_type
+
+    if m_start <= cur_time < m_end:
+        # Đang trong ca sáng / ban ngày -> Tổng kết Ca Tối hôm qua
+        if not resolved_shift_type:
+            resolved_shift_type = "Toi"
+        if not resolved_date:
+            resolved_date = cur_date - timedelta(days=1)
+    else:
+        # Đang trong ca tối / ban đêm -> Tổng kết Ca Sáng hôm nay
+        if not resolved_shift_type:
+            resolved_shift_type = "Sang"
+        if not resolved_date:
+            resolved_date = cur_date - timedelta(days=1) if cur_time < m_start else cur_date
+
+    return resolved_date, resolved_shift_type
 
 
 
@@ -259,17 +311,24 @@ def get_vital_signs_history(
 @router.post("/shift-reports", response_model=ShiftMedicalReportResponse, status_code=status.HTTP_201_CREATED)
 def create_shift_medical_report(
     payload: ShiftMedicalReportCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_coordinator_report)
 ):
     """
-    ĐIỀU PHỐI TỔNG KẾT CA TRỰC:
-    1. Chọn từng Cụ -> Gõ ghi chú diễn biến trong ca.
-    2. Tự động lưu vào Nhật ký `TreatmentDiary` của Cụ đó để bật cờ chú ý cho Bác sĩ.
-    3. Định dạng chuỗi văn bản giao ca hoàn chỉnh.
+    ĐIỀU PHỐI TỔNG KẾT & GIAO CA:
+    1. Tự động xác định đúng ca vừa kết thúc (Ca Sáng nay hoặc Ca Tối qua) để lưu DB.
+    2. Lưu bản ghi vào Database và TreatmentDiary của từng Cụ.
+    3. Đẩy file Excel lên Google Drive vào đúng folder DD-MM-YYYY.
     """
-    formatted_descriptions = []
+    # 🌟 1. TỰ ĐỘNG TÍNH TOÁN CA VỪA KẾT THÚC ĐỂ GHI VÀO DB
+    resolved_date, resolved_shift_type = resolve_handover_shift_context(
+        db, 
+        target_date=payload.shift_date, 
+        shift_type=payload.shift_type.value if payload.shift_type else None
+    )
 
+    formatted_descriptions = []
     for idx, item in enumerate(payload.elder_events, start=1):
         elder = db.query(Elder).filter(Elder.id == item.elder_id).first()
         if not elder:
@@ -288,18 +347,22 @@ def create_shift_medical_report(
 
     full_text = "\n".join(formatted_descriptions)
 
+    # 🌟 2. LƯU VÀO DB VỚI NGÀY VÀ CA ĐÃ ĐƯỢC CHUẨN HÓA
     new_report = ShiftReport(
         facility_id=payload.facility_id,
         coordinator_id=current_user.id,
-        shift_date=payload.shift_date,
-        shift_type=payload.shift_type.value,
-        highlighted_issues=f"Đã ghi nhận lưu ý cho {len(payload.elder_events)} Cụ.",
+        shift_date=resolved_date,
+        shift_type=resolved_shift_type,
+        highlighted_issues=payload.highlighted_issues or f"Đã ghi nhận lưu ý cho {len(payload.elder_events)} Cụ.",
         elder_descriptions=full_text,
         handover_notes=payload.handover_notes
     )
     db.add(new_report)
     db.commit()
     db.refresh(new_report)
+
+    # 🌟 3. KÍCH HOẠT TIẾN TRÌNH XUẤT EXCEL & UPLOAD GOOGLE DRIVE
+    background_tasks.add_task(export_and_upload_shift_report_background, report_id=new_report.id)
 
     facility = db.query(Facility).filter(Facility.id == payload.facility_id).first()
 
@@ -315,7 +378,6 @@ def create_shift_medical_report(
         handover_notes=new_report.handover_notes,
         created_at=new_report.created_at
     )
-
 
 # =========================================================================
 # 3. DASHBOARD CA LIVE CHO TOÀN BỘ NHÂN VIÊN
@@ -508,30 +570,33 @@ def get_archived_shift_reports(
     return results
 
 
+# =========================================================================
+# TỰ ĐỘNG TỔNG HỢP DIỄN BIẾN (TÍNH ĐÚNG CA VỪA KẾT THÚC CẦN TỔNG KẾT)
+# =========================================================================
 @router.get("/shift-reports/auto-summary", response_model=dict)
 def get_shift_abnormal_summary(
     facility_id: int = Query(..., description="ID Cơ sở"),
-    target_date: date = Query(default_factory=date.today),
-    shift_type: str = Query(..., description="'Sang' hoặc 'Toi'"),
+    target_date: Optional[date] = Query(None, description="Ngày ca cần tổng kết"),
+    shift_type: Optional[str] = Query(None, description="'Sang' hoặc 'Toi'"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_coordinator_report)
 ):
-    """
-    TỰ ĐỘNG TỔNG HỢP DIỄN BIẾN CÁC CỤ CÓ CỜ ĐỎ TRONG CA ĐỂ NỘP BÁO CÁO GIAO CA
-    """
-    # Lấy danh sách các Cụ thuộc Cơ sở
+    # 🌟 DÙNG CHUNG HÀM TÍNH TOÁN CA
+    resolved_date, resolved_shift_type = resolve_handover_shift_context(
+        db, target_date=target_date, shift_type=shift_type
+    )
+
     elders_in_fac = db.query(Elder).join(Room).join(Zone)\
         .filter(Zone.facility_id == facility_id).all()
     elder_ids = [e.id for e in elders_in_fac]
 
-    # Query các bản ghi sinh hiệu có is_abnormal = True trong ca đó
-    start_dt = datetime.combine(target_date, datetime.min.time())
-    end_dt = datetime.combine(target_date, datetime.max.time())
+    start_dt = datetime.combine(resolved_date, datetime.min.time())
+    end_dt = datetime.combine(resolved_date, datetime.max.time())
 
     abnormal_vitals = db.query(VitalSignRecord)\
         .filter(
             VitalSignRecord.elder_id.in_(elder_ids),
-            VitalSignRecord.shift_type == shift_type,
+            VitalSignRecord.shift_type == resolved_shift_type,
             VitalSignRecord.measured_at >= start_dt,
             VitalSignRecord.measured_at <= end_dt,
             VitalSignRecord.is_abnormal == True
@@ -543,18 +608,15 @@ def get_shift_abnormal_summary(
     for idx, v in enumerate(abnormal_vitals, start=1):
         elder = db.query(Elder).filter(Elder.id == v.elder_id).first()
         name = elder.full_name if elder else f"Cụ ID {v.elder_id}"
-        
-        # Ghép chỉ số bất thường + ghi chú
         vital_str = f"BP: {v.bp_systolic}/{v.bp_diastolic}, SpO2: {v.spo2}%, Temp: {v.temperature}°C"
         note_str = f" - Ghi chú: {v.notes}" if v.notes else ""
-        
         auto_descriptions.append(f"{idx}. {name} [{vital_str}]{note_str}")
         issues_summary.append(f"{name} ({v.notes or 'Chỉ số bất thường'})")
 
     return {
         "facility_id": facility_id,
-        "shift_date": target_date,
-        "shift_type": shift_type,
+        "shift_date": resolved_date,
+        "shift_type": resolved_shift_type,
         "abnormal_count": len(abnormal_vitals),
         "suggested_highlighted_issues": f"Ca có {len(abnormal_vitals)} Cụ báo hiệu bất thường: " + ", ".join(issues_summary) if issues_summary else "Ca trực bình thường, không có bất thường.",
         "suggested_elder_descriptions": "\n".join(auto_descriptions)
@@ -613,6 +675,7 @@ def get_shift_report_audit_history(
 def update_shift_medical_report(
     report_id: int,
     payload: ShiftMedicalReportUpdate,
+    background_tasks: BackgroundTasks,  # 🌟 Bắt buộc có BackgroundTasks
     db: Session = Depends(get_db),
     current_user: User = Depends(require_coordinator_report)
 ):
@@ -626,13 +689,11 @@ def update_shift_medical_report(
     if current_user.facility_id is not None and report.facility_id != current_user.facility_id:
         raise HTTPException(status_code=403, detail="Bạn không có quyền chỉnh sửa báo cáo của Cơ sở khác!")
 
-    # 1. 📸 CHỤP SNAPSHOT NỘI DUNG CŨ DẠNG DICT
     old_data = {
         "elder_descriptions": report.elder_descriptions or "",
         "handover_notes": report.handover_notes or ""
     }
 
-    # 2. THỰC HIỆN CẬP NHẬT DỮ LIỆU
     if payload.elder_events is not None:
         formatted_descriptions = []
         for idx, item in enumerate(payload.elder_events, start=1):
@@ -657,18 +718,12 @@ def update_shift_medical_report(
     if payload.handover_notes is not None:
         report.handover_notes = payload.handover_notes
 
-    # 3. 📸 CHỤP SNAPSHOT NỘI DUNG MỚI DẠNG DICT
     new_data = {
         "elder_descriptions": report.elder_descriptions or "",
         "handover_notes": report.handover_notes or ""
     }
 
-    # 4. ĐÓNG GÓI PAYLOAD DẠNG JSON STRING CHUẨN XÁC
-    audit_payload = json.dumps({
-        "old": old_data,
-        "new": new_data
-    }, ensure_ascii=False)
-
+    audit_payload = json.dumps({"old": old_data, "new": new_data}, ensure_ascii=False)
     audit = AuditLog(
         actor_id=current_user.id,
         action="UPDATE_SHIFT_REPORT",
@@ -677,10 +732,11 @@ def update_shift_medical_report(
         payload=audit_payload
     )
     db.add(audit)
-
-    # Commit toàn bộ giao dịch
     db.commit()
     db.refresh(report)
+
+    # 🌟 KÍCH HOẠT XUẤT ĐÈ FILE EXCEL MỚI NHẤT LÊN GOOGLE DRIVE
+    background_tasks.add_task(export_and_upload_shift_report_background, report_id=report.id)
 
     return ShiftMedicalReportResponse(
         id=report.id,
@@ -694,7 +750,6 @@ def update_shift_medical_report(
         handover_notes=report.handover_notes,
         created_at=report.created_at
     )
-
 
 # =========================================================================
 # 6. QUẢN LÝ CÂN NẶNG HÀNG THÁNG (POST / PUT / GET)
@@ -1053,73 +1108,31 @@ def get_current_active_shift(
 @router.get(
     "/shift-reports/facilities-status",
     response_model=FacilityShiftReportStatusResponse,
-    summary="[Quản lý/Y tế] Kiểm tra trạng thái nộp Báo cáo ca của các Cơ sở",
-    description="""
-    **Mô tả nghiệp vụ:**
-    - Trả về danh sách toàn bộ các Cơ sở và trạng thái đã nộp Báo cáo giao ca (`ShiftReport`) hay chưa.
-    - **Mặc định thông minh:** Nếu không truyền `target_date` và `shift_type`, hệ thống tự động bốc **Ngày hôm nay và Ca trực live hiện tại**.
-    - Nếu đã nộp (`is_submitted = True`), đính kèm chi tiết: `report_id`, Điều phối viên nộp, Thời gian nộp và Tóm tắt vấn đề nổi bật.
-    """
+    summary="[Quản lý/Y tế] Kiểm tra trạng thái nộp Báo cáo ca của các Cơ sở"
 )
 def get_facilities_shift_report_status(
-    target_date: Optional[date] = Query(None, description="Ngày cần kiểm tra (YYYY-MM-DD). Để trống = Hôm nay"),
-    shift_type: Optional[ShiftType] = Query(None, description="Loại ca ('Sang' hoặc 'Toi'). Để trống = Ca live hiện tại"),
-    facility_id: Optional[int] = Query(None, description="Lọc riêng 1 cơ sở (nếu cần)"),
+    target_date: Optional[date] = Query(None, description="Ngày cần kiểm tra (YYYY-MM-DD)"),
+    shift_type: Optional[ShiftType] = Query(None, description="Loại ca ('Sang' hoặc 'Toi')"),
+    facility_id: Optional[int] = Query(None, description="Lọc riêng 1 cơ sở"),
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    # 1. Kích hoạt JIT refresh làm mới ca trực ngầm
     if background_tasks:
         run_system_maintenance_jit(db, background_tasks)
 
-    tz = pytz.timezone('Asia/Ho_Chi_Minh')
-    now_vn = datetime.now(tz)
-    
-    # 2. XÁC ĐỊNH NGÀY VÀ CA MẶC ĐỊNH
-    resolved_date = target_date or now_vn.date()
-    resolved_shift_type = shift_type.value if shift_type else None
+    # 🌟 DÙNG CHUNG HÀM TÍNH TOÁN CA
+    resolved_date, resolved_shift_type = resolve_handover_shift_context(
+        db, target_date=target_date, shift_type=shift_type.value if shift_type else None
+    )
 
-    if not resolved_shift_type:
-        # Ưu tiên lấy ca trực live đang Open trong DB
-        active_shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.id.desc()).first()
-        if active_shift:
-            resolved_shift_type = active_shift.shift_type
-            if not target_date:
-                resolved_date = active_shift.shift_date
-        else:
-            # Tính toán dựa trên cấu hình khung giờ ShiftSetting
-            setting = db.query(ShiftSetting).first()
-            current_time = now_vn.time()
-            try:
-                m_start = time.fromisoformat(setting.morning_start if setting and setting.morning_start else "08:00")
-                m_end = time.fromisoformat(setting.morning_end if setting and setting.morning_end else "19:00")
-                e_start = time.fromisoformat(setting.evening_start if setting and setting.evening_start else "20:00")
-                e_end = time.fromisoformat(setting.evening_end if setting and setting.evening_end else "07:00")
-            except Exception:
-                m_start, m_end = time(8, 0), time(19, 0)
-                e_start, e_end = time(20, 0), time(7, 0)
-
-            if m_start <= current_time <= m_end:
-                resolved_shift_type = "Sang"
-            elif current_time >= e_start or current_time <= e_end:
-                resolved_shift_type = "Toi"
-                if current_time <= e_end and not target_date:
-                    resolved_date = resolved_date - timedelta(days=1)
-            else:
-                resolved_shift_type = "Sang"
-
-    # 3. TRUY VẤN TẤT CẢ CƠ SỞ (CÓ ÁP DỤNG PHÂN QUYỀN)
     facility_query = db.query(Facility)
-    
-    # Nếu user bị giới hạn theo cơ sở (Manager/Caregiver cơ sở)
     target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
     if target_f_id is not None:
         facility_query = facility_query.filter(Facility.id == target_f_id)
 
     facilities = facility_query.order_by(Facility.id).all()
 
-    # 4. TRUY VẤN CÁC BÁO CÁO GIAO CA ĐÃ NỘP TRONG NGÀY & CA ĐÓ
     reports = db.query(ShiftReport).options(
         joinedload(ShiftReport.coordinator)
     ).filter(
@@ -1127,10 +1140,8 @@ def get_facilities_shift_report_status(
         ShiftReport.shift_type == resolved_shift_type
     ).all()
 
-    # Map báo cáo theo facility_id để đối chiếu nhanh O(1)
     report_map = {r.facility_id: r for r in reports}
 
-    # 5. TỔNG HỢP KẾT QUẢ
     facility_items = []
     submitted_count = 0
 
