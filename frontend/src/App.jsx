@@ -201,7 +201,14 @@ function App() {
                             <Route path="/reports" element={<ReportPage />} />
 
                             <Route path="/users" element={<UserManagementPage />} />
-                            <Route path="/elders" element={<ElderListPage />} />
+                            <Route
+                                path="/elders"
+                                element={
+                                    <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANAGER, ROLES.DOCTOR]}>
+                                        <ElderListPage />
+                                    </ProtectedRoute>
+                                }
+                            />
                             <Route path="/staffs" element={<StaffListPage />} />
                             <Route path="/assignments" element={<AssignmentPage />} />
                             <Route path="/health" element={<HealthDashboardPage />} />
