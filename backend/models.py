@@ -36,7 +36,7 @@ class Room(Base):
     id = Column(Integer, primary_key=True, index=True)
     zone_id = Column(Integer, ForeignKey("zones.id", ondelete="CASCADE"))
 
-    room_number = Column(String(20), unique=True, nullable=False)
+    room_number = Column(String(20), nullable=False)
     description = Column(Text)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
