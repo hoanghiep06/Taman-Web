@@ -213,12 +213,6 @@ export const SIDEBAR_MENU = {
         },
 
         {
-            title: "Danh sách cụ",
-            icon: "👴",
-            path: "/elders"
-        },
-
-        {
             title: "Đo sinh hiệu",
             icon: "❤️",
             path: "/vitals"
