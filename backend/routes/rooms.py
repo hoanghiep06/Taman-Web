@@ -1,8 +1,9 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
+from sqlalchemy import func
 from models import Room, Zone, Facility, User
 from schemas import RoomCreate, RoomResponse, RoleType
 from core.dependencies import require_management
@@ -158,44 +159,75 @@ def get_room_by_id(
 
 
 # 4. Update: Chỉnh sửa số phòng, mô tả phòng
-@router.put("/{room_id}", response_model=RoomResponse)
+@router.put(
+    "/{room_id}", 
+    response_model=RoomResponse,
+    summary="Cập nhật thông tin phòng chăm sóc",
+    description="""
+    **Quy trình cập nhật:**
+    1. Kiểm tra phòng tồn tại và quyền sở hữu cơ sở của phòng hiện tại.
+    2. Kiểm tra Phân khu đích (`zone_id`) có tồn tại và thuộc quyền quản lý không.
+    3. Kiểm tra trùng lặp `room_number` với các phòng khác trên toàn hệ thống.
+    4. Cập nhật và trả về thông tin phòng kèm tên Khu và Cơ sở mới nhất.
+    """
+)
 def update_room(
     room_id: int, 
     payload: RoomCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_management)
 ):
-    room = db.query(Room).options(joinedload(Room.zone)).filter(Room.id == room_id).first()
+    # 1. Tìm phòng cần sửa
+    room = db.query(Room).options(joinedload(Room.zone).joinedload(Zone.facility)).filter(Room.id == room_id).first()
     if not room:
-        raise HTTPException(status_code=404, detail="Không tìm thấy phòng để cập nhật")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Không tìm thấy phòng này trên hệ thống!"
+        )
 
+    # 2. Kiểm tra quyền: Manager không được sửa phòng thuộc Cơ sở khác
     if current_user.facility_id is not None:
         if not room.zone or room.zone.facility_id != current_user.facility_id:
-            raise HTTPException(status_code=403, detail="Bạn không có quyền sửa phòng thuộc Cơ sở khác!")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Bạn không có quyền chỉnh sửa phòng thuộc Cơ sở khác!"
+            )
 
-    # 2. Kiểm tra Phân khu mới chọn
+    # 3. Kiểm tra Phân khu mới chọn
     target_zone = db.query(Zone).options(joinedload(Zone.facility)).filter(Zone.id == payload.zone_id).first()
     if not target_zone:
-        raise HTTPException(status_code=404, detail="Phân khu mới chọn không tồn tại")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Phân khu mới (ID = {payload.zone_id}) không tồn tại!"
+        )
 
-    # 3. Kiểm tra nếu Manager chuyển phòng sang Phân khu thuộc Cơ sở khác mà mình không quản lý
+    # 4. Kiểm tra quyền: Manager không được chuyển phòng sang Phân khu của Cơ sở khác
     if current_user.facility_id is not None and target_zone.facility_id != current_user.facility_id:
-        raise HTTPException(status_code=403, detail="Không thể chuyển phòng sang Phân khu thuộc Cơ sở khác!")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Không thể chuyển phòng sang Phân khu thuộc Cơ sở khác!"
+        )
+
+    # 5. Kiểm tra trùng mã phòng toàn cục (loại trừ chính phòng đang sửa)
+    clean_room_number = payload.room_number.strip()
     
-    
-    # 4. Kiểm tra trùng số phòng
-    if room.room_number != payload.room_number or room.zone_id != payload.zone_id:
-        existing = db.query(Room).filter(
-            Room.zone_id == payload.zone_id,
-            Room.room_number == payload.room_number,
+    if clean_room_number.lower() != room.room_number.lower() or room.zone_id != payload.zone_id:
+        existing_conflict = db.query(Room).options(joinedload(Room.zone)).filter(
+            func.lower(Room.room_number) == clean_room_number.lower(),
             Room.id != room_id
         ).first()
-        if existing:
-            raise HTTPException(status_code=400, detail=f"Số phòng '{payload.room_number}' đã bị trùng trong {target_zone.name}")
-        
+
+        if existing_conflict:
+            conflict_zone_name = existing_conflict.zone.name if existing_conflict.zone else "Khu khác"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mã phòng '{clean_room_number}' đã được sử dụng tại {conflict_zone_name}. Vui lòng chọn mã khác!"
+            )
+
+    # 6. Ghi nhận cập nhật
     room.zone_id = payload.zone_id
-    room.room_number = payload.room_number
-    room.description = payload.description
+    room.room_number = clean_room_number
+    room.description = payload.description.strip() if payload.description else None
 
     db.commit()
     db.refresh(room)
@@ -211,24 +243,3 @@ def update_room(
         facility_name=facility_obj.name if facility_obj else None,
         created_at=room.created_at
     )
-
-
-# 5. DELETE: Xóa phòng khỏi hệ thống
-@router.delete("/{room_id}", status_code=status.HTTP_200_OK)
-def delete_room(
-    room_id: int, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_management)
-):
-    room = db.query(Room).options(joinedload(Room.zone)).filter(Room.id == room_id).first()
-    if not room:
-        raise HTTPException(status_code=404, detail="Không tìm thấy phòng để xóa")
-
-    # Kiểm tra xem Manager có quyền xóa phòng ở Cơ sở này không
-    if current_user.facility_id is not None:
-        if not room.zone or room.zone.facility_id != current_user.facility_id:
-            raise HTTPException(status_code=403, detail="Bạn không có quyền xóa phòng thuộc Cơ sở khác!")
-
-    db.delete(room)
-    db.commit()
-    return {"message": f"Đã xóa thành công phòng '{room.room_number}'"}
