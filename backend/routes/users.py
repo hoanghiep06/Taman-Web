@@ -1,6 +1,7 @@
 import io
+import re
 from zoneinfo import ZoneInfo
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
@@ -380,48 +381,179 @@ def reset_staff_password(
 
 
 # =========================================================================
+# HELPER: CHUẨN HÓA VAI TRÒ TỪ CHUỖI VIẾT TẮT TRONG EXCEL
+# =========================================================================
+def parse_role_from_string(role_str: Optional[str]) -> RoleType:
+    if not role_str:
+        return RoleType.Caregiver
+
+    clean = str(role_str).strip().lower()
+
+    if clean in ["dp", "đp"] or any(k in clean for k in ["điều phối", "dieu phoi", "coordinator"]):
+        return RoleType.Coordinator
+    if clean == "bs" or any(k in clean for k in ["bác sĩ", "bac si", "doctor"]):
+        return RoleType.Doctor
+    if clean == "ql" or any(k in clean for k in ["quản lý", "quan ly", "manager"]):
+        return RoleType.Manager
+    if clean == "admin" or any(k in clean for k in ["quản trị", "quan tri"]):
+        return RoleType.Admin
+    if clean == "nvcs" or any(k in clean for k in ["chăm sóc", "cham soc", "caregiver", "điều dưỡng", "y tá"]):
+        return RoleType.Caregiver
+    if clean == "bv" or any(k in clean for k in ["bảo vệ", "bao ve", "security"]):
+        return RoleType.Security
+    if any(k in clean for k in ["bếp", "bep", "kitchen", "cấp dưỡng"]):
+        return RoleType.Kitchen
+    if any(k in clean for k in ["tạp vụ", "tap vu", "janitor", "vệ sinh"]):
+        return RoleType.Janitor
+    if any(k in clean for k in ["người thân", "nguoi than", "relative", "gia đình"]):
+        return RoleType.Relative
+
+    return RoleType.Caregiver
+
+# =========================================================================
 # 8. IMPORT EXCEL & LỊCH SỬ TỔNG HỢP CỦA NHÂN VIÊN
 # =========================================================================
-@router.post("/import-xlsx", status_code=status.HTTP_200_OK)
+@router.post(
+    "/import-xlsx",
+    status_code=status.HTTP_200_OK,
+    summary="Import danh sách Nhân sự hàng loạt từ file Excel",
+    description="""
+    **Phân quyền & Kiểm tra Đa cơ sở:**
+    - Admin / Manager Tổng (`facility_id is None`): Toàn quyền import cho tất cả cơ sở hoặc tạo nhân sự Toàn viện.
+    - Manager Cơ sở X (`facility_id = X`):
+      + Tự động BỎ QUA các dòng nhân sự thuộc cơ sở khác.
+      + Tuyệt đối KHÔNG ĐƯỢC sửa thông tin nhân sự đã có sẵn của cơ sở khác hoặc Admin.
+      + Dòng để trống cơ sở sẽ tự động gán vào Cơ sở X của Manager đó.
+    """
+)
 async def import_staff_from_xlsx(
-    file: UploadFile = File(...),
+    file: UploadFile = File(..., description="File Excel danh sách nhân sự (.xlsx/.xls)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_management)
 ):
     if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hệ thống chỉ chấp nhận file Excel (.xls hoặc .xlsx)")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Hệ thống chỉ chấp nhận file Excel định dạng .xlsx hoặc .xls"
+        )
 
     try:
         contents = await file.read()
         wb = load_workbook(io.BytesIO(contents), data_only=True)
         ws = wb.active
 
+        # 1. Bóc tách bản đồ các ô bị Merge ở Cột A (Cơ sở)
+        merged_facility_map: Dict[int, str] = {}
+        for rng in ws.merged_cells.ranges:
+            if rng.min_col <= 1 <= rng.max_col:
+                top_val = ws.cell(row=rng.min_row, column=rng.min_col).value
+                if top_val is not None and str(top_val).strip() != "":
+                    for row_idx in range(rng.min_row, rng.max_row + 1):
+                        merged_facility_map[row_idx] = str(top_val).strip()
+
+        facilities = db.query(Facility).all()
         inserted_count = 0
         updated_count = 0
+        skipped_count = 0
+        skipped_reasons: List[str] = []
 
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or len(row) < 3 or row[1] is None or row[2] is None:
+        default_password_hash = get_password_hash("123456")
+
+        # 2. Duyệt từng dòng dữ liệu từ hàng 2
+        for row_idx in range(2, ws.max_row + 1):
+            fullname_cell = ws.cell(row=row_idx, column=2).value
+            phone_cell = ws.cell(row=row_idx, column=3).value
+            role_cell = ws.cell(row=row_idx, column=4).value
+
+            if not fullname_cell or not phone_cell:
                 continue
 
-            full_name = str(row[1]).strip()
-            phone_str = str(row[2]).strip().lstrip("'")
-            if phone_str.isdigit() and len(phone_str) == 9:
-                phone_str = "0" + phone_str
+            full_name = str(fullname_cell).strip()
 
-            if not full_name or not phone_str:
+            raw_phone = re.sub(r"[^\d]", "", str(phone_cell).strip())
+            if len(raw_phone) == 9:
+                raw_phone = "0" + raw_phone
+            phone_str = raw_phone
+
+            if not phone_str:
                 continue
 
-            existing_user = db.query(User).filter(User.username == phone_str).first()
+            # -------------------------------------------------------------
+            # BƯỚC 1: XÁC ĐỊNH CƠ SỞ VÀ KIỂM TRA QUYỀN HẠN CỦA MANAGER
+            # -------------------------------------------------------------
+            if row_idx in merged_facility_map:
+                fac_val = merged_facility_map[row_idx]
+            else:
+                raw_a = ws.cell(row=row_idx, column=1).value
+                fac_val = str(raw_a).strip() if (raw_a is not None and str(raw_a).strip() != "") else None
+
+            target_facility_id = None
+            if fac_val:
+                fac_str_lower = fac_val.lower()
+                for f in facilities:
+                    f_name_lower = f.name.lower()
+                    if (f_name_lower == fac_str_lower or 
+                        f"cs {fac_str_lower}" in f_name_lower or 
+                        f"cơ sở {fac_str_lower}" in f_name_lower or
+                        fac_str_lower in f_name_lower):
+                        target_facility_id = f.id
+                        break
+            else:
+                # Nếu file để trống:
+                # - Admin/Manager Tổng -> facility_id = None (Toàn viện)
+                # - Manager Cơ sở X -> tự động gán vào Cơ sở X
+                target_facility_id = None if current_user.facility_id is None else current_user.facility_id
+
+            # 🛡️ CHỐT CHẶN 1: Manager Cơ sở X cố tình import dòng thuộc Cơ sở Y khác
+            if current_user.facility_id is not None:
+                if target_facility_id is not None and target_facility_id != current_user.facility_id:
+                    skipped_count += 1
+                    skipped_reasons.append(f"Dòng {row_idx} ({full_name}): Thuộc cơ sở khác, bạn không có quyền import.")
+                    continue
+                # Luôn đảm bảo tài khoản tạo bởi Manager này thuộc đúng cơ sở của họ
+                target_facility_id = current_user.facility_id
+
+            # -------------------------------------------------------------
+            # BƯỚC 2: XÁC ĐỊNH VAI TRÒ VÀ KHÓA BẢO VỆ ADMIN
+            # -------------------------------------------------------------
+            resolved_role = parse_role_from_string(str(role_cell) if role_cell else None)
+
+            # 🛡️ CHỐT CHẶN 2: Manager không được cấp quyền Admin
+            if current_user.role == RoleType.Manager and resolved_role == RoleType.Admin:
+                resolved_role = RoleType.Caregiver
+
+            # -------------------------------------------------------------
+            # BƯỚC 3: KIỂM TRA TÀI KHOẢN TỒN TẠI VÀ CHỐNG SỬA ĐÈ CƠ SỞ KHÁC
+            # -------------------------------------------------------------
+            username = phone_str
+
+            existing_user = db.query(User).filter(
+                (User.username == username) | (User.phone_number == phone_str)
+            ).first()
+
             if existing_user:
+                # 🛡️ CHỐT CHẶN 3: Không cho Manager sửa tài khoản của Admin hoặc của Cơ sở khác
+                if current_user.facility_id is not None:
+                    if existing_user.facility_id != current_user.facility_id or existing_user.role == RoleType.Admin:
+                        skipped_count += 1
+                        skipped_reasons.append(f"Dòng {row_idx} ({full_name} - {phone_str}): Đã tồn tại nhưng thuộc quyền quản lý của Cơ sở khác hoặc là Admin.")
+                        continue
+
+                # Cập nhật thông tin hợp lệ
                 existing_user.full_name = full_name
+                existing_user.phone_number = phone_str
+                existing_user.role = resolved_role
+                if target_facility_id is not None or current_user.facility_id is None:
+                    existing_user.facility_id = target_facility_id
                 updated_count += 1
             else:
+                # Tạo mới tài khoản hợp lệ
                 new_user = User(
-                    username=phone_str,
-                    password_hash=get_password_hash(phone_str),
+                    username=username,
+                    password_hash=default_password_hash,
                     full_name=full_name,
-                    role=RoleType.Caregiver,
-                    facility_id=current_user.facility_id,
+                    role=resolved_role,
+                    facility_id=target_facility_id,
                     phone_number=phone_str,
                     is_active=True,
                     must_change_password=True
@@ -432,73 +564,18 @@ async def import_staff_from_xlsx(
         db.commit()
         return {
             "status": "Success",
+            "message": "Đồng bộ danh sách nhân sự từ Excel thành công!",
             "summary": {
                 "total_created": inserted_count,
-                "total_updated": updated_count
+                "total_updated": updated_count,
+                "total_skipped": skipped_count,
+                "skipped_details": skipped_reasons[:10]  # Trả về tối đa 10 lý do nếu có dòng bị bỏ qua
             }
         }
+
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Lỗi đọc file Excel: {str(e)}")
-
-
-@router.get("/{user_id}/comprehensive-history", status_code=status.HTTP_200_OK)
-def get_user_comprehensive_history(
-    user_id: int,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_management)
-):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Không tìm thấy thông tin nhân viên")
-
-    # Manager không được xem lịch sử của Admin
-    if current_user.role == RoleType.Manager and user.role == RoleType.Admin:
-        raise HTTPException(status_code=403, detail="Manager không có quyền xem thông tin của Admin")
-
-    tz = ZoneInfo("Asia/Ho_Chi_Minh")
-
-    # 1. Lịch sử Đăng nhập
-    login_logs = db.query(LoginLog).filter(LoginLog.user_id == user_id).order_by(LoginLog.login_time.desc()).limit(limit).all()
-    login_history = [{
-        "id": log.id,
-        "login_at": log.login_time.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S") if log.login_time else None,
-        "ip_address": log.ip_address,
-        "user_agent": log.user_agent
-    } for log in login_logs]
-
-    # 2. Nhật ký đi tuần
-    inspection_logs = (
-        db.query(InspectionLog, Asset.asset_name, Room.room_number, Shift.shift_date, Shift.shift_type)
-        .join(Asset, InspectionLog.asset_id == Asset.id)
-        .join(Room, Asset.room_id == Room.id)
-        .join(Shift, InspectionLog.shift_id == Shift.id)
-        .filter(InspectionLog.user_id == user_id)
-        .order_by(InspectionLog.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-    inspection_history = [{
-        "log_id": log.id,
-        "shift_date": str(s_date),
-        "shift_type": s_type,
-        "room_number": r_num,
-        "asset_name": asset_name,
-        "status": log.status,
-        "note": log.note,
-        "inspected_at": log.created_at.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S") if log.created_at else None
-    } for log, asset_name, r_num, s_date, s_type in inspection_logs]
-
-    return {
-        "staff_info": {
-            "user_id": user.id,
-            "username": user.username,
-            "full_name": user.full_name,
-            "phone_number": user.phone_number,
-            "role": user.role,
-            "is_active": user.is_active
-        },
-        "login_history": login_history,
-        "inspection_history": inspection_history
-    }
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Lỗi cấu trúc hoặc đọc file Excel nhân sự: {str(e)}"
+        )
