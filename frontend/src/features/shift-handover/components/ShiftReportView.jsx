@@ -38,6 +38,9 @@ const drawRoundedRect = (ctx, x, y, width, height, radius, fillStyle = null, str
   }
 };
 
+// =========================================================================
+// HÀM XUẤT ẢNH JPG ĐẸP MẮT ĐỂ GỬI ZALO / LƯU MÁY
+// =========================================================================
 export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false) => {
   const scale = 2;
   const baseWidth = 840;
@@ -153,7 +156,7 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   ctx.fillText('CA TRỰC', margin + colWidth + colGap + 16, currentY + 24);
   ctx.fillStyle = '#0284c7';
   ctx.font = '800 15px system-ui, -apple-system, sans-serif';
-  ctx.fillText(`Ca ${report.shift_type || 'Trực'}`, margin + colWidth + colGap + 16, currentY + 48);
+  ctx.fillText(`Ca ${report.shift_type === 'Sang' ? 'Sáng' : 'Tối'}`, margin + colWidth + colGap + 16, currentY + 48);
 
   drawRoundedRect(ctx, margin + (colWidth + colGap) * 2, currentY, colWidth, 68, 14, '#ffffff', '#e2e8f0');
   ctx.fillStyle = '#94a3b8';
@@ -274,7 +277,7 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   const imageUrl = canvas.toDataURL('image/jpeg', 0.95);
   const link = document.createElement('a');
   link.href = imageUrl;
-  link.download = `BaoCao_${(report.facility_name || `CS_${report.facility_id}`).replace(/\s+/g, '_')}_${report.shift_date}.jpg`;
+  link.download = `BaoCao_${(report.facility_name || `CS_${report.facility_id}`).replace(/\s+/g, '_')}_Ca_${report.shift_type}_${report.shift_date}.jpg`;
   link.click();
 };
 
@@ -327,7 +330,7 @@ export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CA
   );
 };
 
-const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, isAdminOrManager, onEditReport }) => {
+const SingleFacilityReportCard = ({ report, theme, parsedEvents, facilityAlerts = [], canEditReport, isAdminOrManager, onEditReport }) => {
   const isPrevious = Boolean(report.isPrevious);
   const shiftName = report.shift_type === 'Sang' ? 'Ca Sáng' : 'Ca Tối';
 
@@ -381,12 +384,34 @@ const SingleFacilityReportCard = ({ report, theme, parsedEvents, canEditReport, 
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '12px', color: '#64748b' }}>
               Người báo cáo: <b style={{ color: '#0f172a' }}>{report.reporter_name}</b>
             </span>
 
-            {/* 🌟 CHỈ CHO PHÉP HIỆU CHỈNH KHI ĐÃ CÓ BÁO CÁO CHÍNH THỨC CỦA CA HIỆN TẠI (!isPrevious) */}
+            {/* 🌟 NÚT TẢI ẢNH BÁO CÁO GỬI ZALO */}
+            <button
+              type="button"
+              onClick={() => exportReportAsJPG(report, facilityAlerts, isPrevious)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1.5px solid #10b981',
+                backgroundColor: '#ecfdf5',
+                fontSize: '12px',
+                fontWeight: '800',
+                color: '#047857',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.15)'
+              }}
+            >
+              📸 Tải ảnh Zalo
+            </button>
+
+            {/* NÚT HIỆU CHỈNH (Chỉ hiện khi là báo cáo chính thức) */}
             {canEditReport && !isPrevious && (
               <button
                 type="button"
