@@ -1,12 +1,14 @@
 # assets.py
 import io
-from typing import List, Optional
+import re
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from openpyxl import load_workbook
 
 from database import get_db
-from models import Asset, Elder, Room, Zone, Facility, User, Shift, InspectionLog
+from models import Asset, Elder, Room, Zone, Facility, User, Shift, InspectionLog, ElderHealthProfile
 from schemas import AssetCreate, AssetResponse, RoleType, AssetStatsResponse, RoomPatrolProgressResponse
 from core.dependencies import require_care_team, get_current_user
 
@@ -479,18 +481,68 @@ def delete_asset(
     return {"message": f"Đã xóa thành công tài sản '{asset.asset_name}'"}
 
 
+
 # =========================================================================
-# 6. IMPORT MATRIX EXCEL: TỰ ĐỘNG ĐỒNG BỘ DANH MỤC TƯ TRANG
+# HELPER: BÓC TÁCH PHÂN KHU VÀ SỐ PHÒNG TỰ ĐỘNG
+# =========================================================================
+import re
+from typing import Tuple
+
+def parse_zone_and_room(room_str: str) -> Tuple[str, str]:
+    """
+    Bóc tách tên phân khu và số phòng từ chuỗi nhập liệu.
+    """
+    cleaned = room_str.strip()
+    
+    # Regex tách phân khu (Group 1) và số phòng (Group 2)
+    match = re.match(r"^(?:Khu\s*)?([A-Za-z]+)[\s\-_]*(.*)$", cleaned, re.IGNORECASE)
+    
+    if match:
+        zone_name = match.group(1).upper()
+        room_name = match.group(2).strip()
+        
+        # Phòng hờ trường hợp chuỗi nhập chỉ có chữ, không có số phòng (VD: "Khu A")
+        if not room_name:
+            room_name = cleaned
+            
+        return zone_name, room_name
+        
+    return "Chung", cleaned
+
+
+# =========================================================================
+# HELPER: TỰ ĐỘNG ĐẢM BẢO HỒ SƠ SỨC KHỎE CHO CỤ
+# =========================================================================
+def ensure_elder_health_profile(db: Session, elder_id: int):
+    profile = db.query(ElderHealthProfile).filter(ElderHealthProfile.elder_id == elder_id).first()
+    if not profile:
+        profile = ElderHealthProfile(
+            elder_id=elder_id,
+            has_surgery=False,
+            has_fall=False,
+            has_stroke=False,
+            has_cardiovascular=False,
+            drug_allergies=[],
+            food_allergies=[],
+            chronic_diseases=[]
+        )
+        db.add(profile)
+        db.flush()
+
+
+# =========================================================================
+# ENDPOINT: IMPORT MA TRẬN TƯ TRANG / VẬT TƯ KIỂM KÊ TỪ EXCEL
 # =========================================================================
 @router.post(
     "/import-xlsx",
     status_code=status.HTTP_200_OK,
     summary="Import danh mục Tư trang ma trận từ file Excel",
     description="""
-    **Mô tả dành cho Frontend:**
-    - Tải file Excel biểu mẫu Ma trận tư trang của Viện (Cột A: Phòng, Cột B: Tên Cụ, Cột C trở đi: Dấu x/✓ ứng với tên món đồ)[cite: 11, 13].
-    - Hệ thống tự động bóc tách: Tạo phòng mới nếu chưa có, tạo Cụ mới nếu chưa có, và bật trạng thái `Active` cho các món tư trang được đánh dấu tích[cite: 11, 13].
-    - Mặc định các tư trang import từ Ma trận sẽ được gán `requires_inspection = True` để đưa vào danh sách NVCS đi tuần chụp ảnh[cite: 13].
+    **Quy chuẩn cấu trúc file Excel Ma trận:**
+    - Cột 0 (A): Tên Cơ sở (Hỗ trợ merge hàng)
+    - Cột 1 (B): Tên/Số Phòng (VD: 'B13' -> tự tách Khu B, Phòng 13; hỗ trợ merge hàng)
+    - Cột 2 (C): Họ và tên Cụ
+    - Cột 3 trở đi: Tên các món tài sản / vật tư kiểm kê (đánh dấu x, v, 1, true để kích hoạt)
     """
 )
 async def import_assets_from_xlsx(
@@ -499,102 +551,206 @@ async def import_assets_from_xlsx(
     current_user: User = Depends(require_care_team)
 ):
     if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="Hệ thống chỉ chấp nhận file Excel định dạng .xlsx hoặc .xls!")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Hệ thống chỉ chấp nhận file Excel định dạng .xlsx hoặc .xls!"
+        )
 
     try:
         contents = await file.read()
         wb = load_workbook(io.BytesIO(contents), data_only=True)
         ws = wb.active
 
+        # Đọc dòng tiêu đề (Header)
         header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
-        headers = [str(cell).strip() if cell else "" for cell in header_row]
+        headers = [str(cell).strip() if cell is not None else "" for cell in header_row]
 
         processed_elders = 0
         total_assets_upserted = 0
-        current_room_number = None
+
+        # Biến lưu trữ ngữ cảnh khi duyệt qua các ô bị merge
+        current_facility_name: Optional[str] = None
+        current_room_raw: Optional[str] = None
+
+        # Danh sách các tên cột định danh cần bỏ qua khi duyệt tài sản
+        ignored_header_keywords = [
+            "cơ sở", "co so", "facility",
+            "phòng", "phong", "room",
+            "tên cụ", "ten cu", "họ và tên", "ho va ten", "elder", "stt"
+        ]
 
         for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or len(row) < 2:
+            if not row or all(cell is None for cell in row):
                 continue
 
-            room_raw, elder_raw = row[0], row[1]
+            facility_cell = row[0] if len(row) > 0 else None
+            room_cell = row[1] if len(row) > 1 else None
+            elder_cell = row[2] if len(row) > 2 else None
 
-            if room_raw is not None and str(room_raw).strip() != "":
-                current_room_number = str(room_raw).strip()
+            # Cập nhật context từ các ô merge
+            if facility_cell is not None and str(facility_cell).strip() != "":
+                current_facility_name = str(facility_cell).strip()
 
-            if not current_room_number or elder_raw is None or str(elder_raw).strip() == "":
+            if room_cell is not None and str(room_cell).strip() != "":
+                current_room_raw = str(room_cell).strip()
+
+            # Bỏ qua nếu dòng không có tên Cụ
+            if elder_cell is None or str(elder_cell).strip() == "":
                 continue
 
-            elder_name = str(elder_raw).strip()
+            elder_name = str(elder_cell).strip()
 
-            # BƯỚC 1: Xử lý Phòng (Tự động tạo nếu chưa có)
-            room = db.query(Room).filter(Room.room_number == current_room_number).first()
+            # -------------------------------------------------------------
+            # BƯỚC 1: XỬ LÝ CƠ SỞ (FACILITY)
+            # -------------------------------------------------------------
+            target_facility = None
+            if current_facility_name:
+                target_facility = db.query(Facility).filter(
+                    func.lower(Facility.name) == current_facility_name.lower()
+                ).first()
+
+                if not target_facility:
+                    target_facility = Facility(
+                        name=current_facility_name,
+                        address="Khởi tạo tự động từ Import Excel"
+                    )
+                    db.add(target_facility)
+                    db.flush()
+            elif current_user.facility_id:
+                target_facility = db.query(Facility).filter(Facility.id == current_user.facility_id).first()
+            else:
+                target_facility = db.query(Facility).first()
+                if not target_facility:
+                    target_facility = Facility(name="Cơ sở Mặc định", address="Chưa cập nhật")
+                    db.add(target_facility)
+                    db.flush()
+
+            # Phân quyền cơ sở đối với Manager quản lý đơn cơ sở
+            if current_user.facility_id is not None and target_facility.id != current_user.facility_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Bạn không có quyền import dữ liệu vào Cơ sở '{target_facility.name}'!"
+                )
+
+            # -------------------------------------------------------------
+            # BƯỚC 2: XỬ LÝ PHÂN KHU (ZONE) & PHÒNG (ROOM)
+            # -------------------------------------------------------------
+            room_str = current_room_raw if current_room_raw else "Phòng Chung"
+            zone_name, room_number = parse_zone_and_room(room_str)
+
+            # 2.1. Đảm bảo Phân khu tồn tại trong Cơ sở
+            zone = db.query(Zone).filter(
+                Zone.facility_id == target_facility.id,
+                func.lower(Zone.name) == zone_name.lower()
+            ).first()
+
+            if not zone:
+                zone = Zone(
+                    facility_id=target_facility.id,
+                    name=zone_name,
+                    description=f"{zone_name} tạo tự động từ Import"
+                )
+                db.add(zone)
+                db.flush()
+
+            # 2.2. Đảm bảo Phòng tồn tại trong Phân khu
+            room = db.query(Room).filter(
+                Room.zone_id == zone.id,
+                func.lower(Room.room_number) == room_number.lower()
+            ).first()
+
             if not room:
-                # Tìm Phân khu mặc định (Khu A) của Cơ sở
-                default_zone = db.query(Zone).filter(Zone.facility_id == current_user.facility_id).first() if current_user.facility_id else db.query(Zone).first()
-                
                 room = Room(
-                    zone_id=default_zone.id if default_zone else None,
-                    room_number=current_room_number,
-                    description=f"Phòng {current_room_number} tạo tự động từ Import Ma trận"
+                    zone_id=zone.id,
+                    room_number=room_number,
+                    description=f"Phòng {room_number} ({zone.name} - {target_facility.name})"
                 )
                 db.add(room)
                 db.flush()
 
-            # BƯỚC 2: Xử lý Cụ
-            elder = db.query(Elder).filter(Elder.full_name == elder_name, Elder.room_id == room.id).first()
+            # -------------------------------------------------------------
+            # BƯỚC 3: XỬ LÝ HỒ SƠ CỤ & BẢNG THEO DÕI SỨC KHỎE
+            # -------------------------------------------------------------
+            elder = db.query(Elder).filter(
+                func.lower(Elder.full_name) == elder_name.lower(),
+                Elder.room_id == room.id
+            ).first()
+
             if not elder:
-                elder = Elder(full_name=elder_name, room_id=room.id)
+                elder = Elder(
+                    full_name=elder_name,
+                    room_id=room.id
+                )
                 db.add(elder)
                 db.flush()
 
+            # Tự động khởi tạo Hồ sơ sức khỏe nếu chưa có
+            ensure_elder_health_profile(db, elder.id)
             processed_elders += 1
 
-            # BƯỚC 3: Duyệt ma trận các cột tư trang
+            # -------------------------------------------------------------
+            # BƯỚC 4: XỬ LÝ MA TRẬN VẬT TƯ / TÀI SẢN (TỪ CỘT 3 TRỞ ĐI)
+            # -------------------------------------------------------------
             existing_assets = db.query(Asset).filter(Asset.elder_id == elder.id).all()
             asset_dict = {a.asset_name.lower().strip(): a for a in existing_assets}
 
-            for col_index in range(2, len(row)):
+            for col_index in range(3, len(row)):
                 if col_index >= len(headers):
                     break
 
                 asset_name = headers[col_index]
-                if not asset_name or asset_name in ["PHÒNG", "TÊN CỤ"]:
+                if not asset_name:
+                    continue
+
+                # Bỏ qua các cột tiêu đề trùng tên định danh
+                if any(kw in asset_name.lower() for kw in ignored_header_keywords):
                     continue
 
                 cell_val = row[col_index]
-                is_checked = (cell_val is True) or (str(cell_val).strip().upper() in ["TRUE", "1", "1.0", "X", "V", "✓", "YES"])
+                is_checked = (cell_val is True) or (
+                    str(cell_val).strip().upper() in ["TRUE", "1", "1.0", "X", "V", "✓", "YES", "CÓ"]
+                )
 
                 if is_checked:
                     search_key = asset_name.lower().strip()
                     if search_key in asset_dict:
-                        asset_dict[search_key].status = "Active"
-                        asset_dict[search_key].room_id = room.id
+                        target_asset = asset_dict[search_key]
+                        target_asset.status = "Active"
+                        target_asset.room_id = room.id
+                        target_asset.requires_inspection = True
                     else:
                         new_asset = Asset(
-                            asset_name=asset_name,
+                            asset_name=asset_name.strip(),
                             room_id=room.id,
                             elder_id=elder.id,
                             status="Active",
-                            requires_inspection=True # Mặc định yêu cầu đi tuần chụp ảnh
+                            requires_inspection=True
                         )
                         db.add(new_asset)
                     total_assets_upserted += 1
 
         db.commit()
+
         return {
             "status": "Success",
-            "message": "Đồng bộ ma trận tư trang từ Excel thành công!",
+            "message": "Đồng bộ ma trận cơ sở, phòng và vật tư kiểm kê từ Excel thành công!",
             "summary": {
                 "total_elders_processed": processed_elders,
                 "total_assets_active": total_assets_upserted
             }
         }
+
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Lỗi cấu trúc file Excel Ma trận: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi cấu trúc hoặc xử lý dữ liệu file Excel: {str(e)}"
+        )
 
-
+    
 # =========================================================================
 # 7. LẤY TOÀN BỘ TƯ TRANG / TÀI SẢN THEO PHÒNG ĐÍCH DANH
 # =========================================================================
