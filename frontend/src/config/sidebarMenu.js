@@ -53,22 +53,12 @@ export const SIDEBAR_MENU = {
         },
 
         {
-            title: "Quản lý thuốc",
+            title: "Đo dấu sinh hiệu",
             icon: "💊",
-            path: "/medicines"
+            path: "/vitals"
         },
 
-        {
-            title: "Quản lý bệnh",
-            icon: "🩺",
-            path: "/diseases"
-        },
 
-        {
-            title: "Báo cáo",
-            icon: "📊",
-            path: "/reports"
-        },
 
         {
             title: "Hệ thống",
@@ -111,16 +101,22 @@ export const SIDEBAR_MENU = {
         },
 
         {
+            title: "Tài sản",
+            icon: "🛏️",
+            path: "/patrol"
+        }, 
+
+        {
             title: "Phân công",
             icon: "📋",
             path: "/assignments"
         },
 
         {
-            title: "Báo cáo",
-            icon: "📊",
-            path: "/reports"
-        }
+            title: "Đo dấu sinh hiệu",
+            icon: "💊",
+            path: "/vitals"
+        },
 
     ],
 
@@ -139,16 +135,16 @@ export const SIDEBAR_MENU = {
         },
 
         {
-            title: "Thuốc",
-            icon: "💊",
-            path: "/medicines"
+            title: "Dấu sinh hiệu",
+            icon: "❤️",
+            path: "/vitals"
         },
 
         {
-            title: "Bệnh",
-            icon: "🩺",
-            path: "/diseases"
-        }
+            title: "Ca trực",
+            icon: "📅",
+            path: "/shifts"
+        },
 
     ],
 
@@ -164,6 +160,18 @@ export const SIDEBAR_MENU = {
             title: "Ca trực",
             icon: "📅",
             path: "/shifts"
+        },
+
+        {
+            title: "Đo dấu sinh hiệu",
+            icon: "❤️",
+            path: "/vitals"
+        },
+
+        {
+            title: "Tài sản",
+            icon: "🛏️",
+            path: "/patrol"
         },
 
         {
@@ -197,7 +205,7 @@ export const SIDEBAR_MENU = {
         {
             title: "Tài sản",
             icon: "🛏️",
-            path: "/assets"
+            path: "/patrol"
         }
 
     ]
