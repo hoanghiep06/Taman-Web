@@ -53,22 +53,12 @@ export const SIDEBAR_MENU = {
         },
 
         {
-            title: "Quản lý thuốc",
+            title: "Đo dấu sinh hiệu",
             icon: "💊",
-            path: "/medicines"
+            path: "/vitals"
         },
 
-        {
-            title: "Quản lý bệnh",
-            icon: "🩺",
-            path: "/diseases"
-        },
 
-        {
-            title: "Báo cáo",
-            icon: "📊",
-            path: "/reports"
-        },
 
         {
             title: "Hệ thống",
@@ -84,12 +74,6 @@ export const SIDEBAR_MENU = {
             title: "Dashboard",
             icon: "🏠",
             path: "/dashboard"
-        },
-
-        {
-            title: "Quản lý tài khoản",
-            icon: "👤",
-            path: "/users"
         },
 
         {
@@ -117,16 +101,22 @@ export const SIDEBAR_MENU = {
         },
 
         {
+            title: "Tài sản",
+            icon: "🛏️",
+            path: "/patrol"
+        }, 
+
+        {
             title: "Phân công",
             icon: "📋",
             path: "/assignments"
         },
 
         {
-            title: "Báo cáo",
-            icon: "📊",
-            path: "/reports"
-        }
+            title: "Đo dấu sinh hiệu",
+            icon: "💊",
+            path: "/vitals"
+        },
 
     ],
 
@@ -145,40 +135,16 @@ export const SIDEBAR_MENU = {
         },
 
         {
-            title: "Theo dõi sức khỏe",
+            title: "Dấu sinh hiệu",
             icon: "❤️",
-            path: "/health"
+            path: "/vitals"
         },
 
         {
-            title: "Lịch sử khám",
-            icon: "🔍",
-            path: "/health-check"
+            title: "Ca trực",
+            icon: "📅",
+            path: "/shifts"
         },
-
-        {
-            title: "Hồ sơ bệnh án",
-            icon: "📋",
-            path: "/medical-record"
-        },
-
-        {
-            title: "Đơn thuốc",
-            icon: "💊",
-            path: "/prescriptions"
-        },
-
-        {
-            title: "Thuốc",
-            icon: "💊",
-            path: "/medicines"
-        },
-
-        {
-            title: "Bệnh",
-            icon: "🩺",
-            path: "/diseases"
-        }
 
     ],
 
@@ -197,6 +163,18 @@ export const SIDEBAR_MENU = {
         },
 
         {
+            title: "Đo dấu sinh hiệu",
+            icon: "❤️",
+            path: "/vitals"
+        },
+
+        {
+            title: "Tài sản",
+            icon: "🛏️",
+            path: "/patrol"
+        },
+
+        {
             title: "Phân công",
             icon: "📋",
             path: "/assignments"
@@ -204,12 +182,18 @@ export const SIDEBAR_MENU = {
 
     ],
 
-    [ROLES.CAREGIVER]: [
+    [ROLES.CARESTAFF]: [
 
         {
             title: "Dashboard",
             icon: "🏠",
             path: "/dashboard"
+        },
+
+        {
+            title: "Danh sách cụ",
+            icon: "👴",
+            path: "/elders"
         },
 
         {
@@ -221,7 +205,7 @@ export const SIDEBAR_MENU = {
         {
             title: "Tài sản",
             icon: "🛏️",
-            path: "/assets"
+            path: "/patrol"
         }
 
     ]
