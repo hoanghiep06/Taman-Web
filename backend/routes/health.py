@@ -317,11 +317,10 @@ def create_shift_medical_report(
 ):
     """
     ĐIỀU PHỐI TỔNG KẾT & GIAO CA:
-    1. Tự động xác định đúng ca vừa kết thúc (Ca Sáng nay hoặc Ca Tối qua) để lưu DB.
-    2. Lưu bản ghi vào Database và TreatmentDiary của từng Cụ.
-    3. Đẩy file Excel lên Google Drive vào đúng folder DD-MM-YYYY.
+    1. Tự động xác định đúng ca vừa kết thúc để lưu DB.
+    2. Nếu ca này đã có báo cáo -> Tự động cập nhật đè + ghi vết AuditLog.
+    3. Đẩy file Excel mới nhất lên Google Drive.
     """
-    # 🌟 1. TỰ ĐỘNG TÍNH TOÁN CA VỪA KẾT THÚC ĐỂ GHI VÀO DB
     resolved_date, resolved_shift_type = resolve_handover_shift_context(
         db, 
         target_date=payload.shift_date, 
@@ -346,38 +345,74 @@ def create_shift_medical_report(
         db.add(diary)
 
     full_text = "\n".join(formatted_descriptions)
+    highlight_text = payload.highlighted_issues or f"Đã ghi nhận lưu ý cho {len(payload.elder_events)} Cụ."
 
-    # 🌟 2. LƯU VÀO DB VỚI NGÀY VÀ CA ĐÃ ĐƯỢC CHUẨN HÓA
-    new_report = ShiftReport(
-        facility_id=payload.facility_id,
-        coordinator_id=current_user.id,
-        shift_date=resolved_date,
-        shift_type=resolved_shift_type,
-        highlighted_issues=payload.highlighted_issues or f"Đã ghi nhận lưu ý cho {len(payload.elder_events)} Cụ.",
-        elder_descriptions=full_text,
-        handover_notes=payload.handover_notes
-    )
-    db.add(new_report)
+    # 🌟 1. KIỂM TRA XEM ĐÃ CÓ BÁO CÁO CỦA CA NÀY CHƯA (UPSERT)
+    existing_report = db.query(ShiftReport).filter(
+        ShiftReport.facility_id == payload.facility_id,
+        ShiftReport.shift_date == resolved_date,
+        ShiftReport.shift_type == resolved_shift_type
+    ).order_by(ShiftReport.id.desc()).first()
+
+    if existing_report:
+        # Ghi vết lịch sử chỉnh sửa
+        old_data = {
+            "elder_descriptions": existing_report.elder_descriptions or "",
+            "handover_notes": existing_report.handover_notes or ""
+        }
+        new_data = {
+            "elder_descriptions": full_text,
+            "handover_notes": payload.handover_notes or ""
+        }
+        audit_payload = json.dumps({"old": old_data, "new": new_data}, ensure_ascii=False)
+        audit = AuditLog(
+            actor_id=current_user.id,
+            action="UPDATE_SHIFT_REPORT",
+            target_id=str(existing_report.id).strip(),
+            ip_address="Internal",
+            payload=audit_payload
+        )
+        db.add(audit)
+
+        existing_report.coordinator_id = current_user.id
+        existing_report.highlighted_issues = highlight_text
+        existing_report.elder_descriptions = full_text
+        existing_report.handover_notes = payload.handover_notes
+        target_report = existing_report
+    else:
+        new_report = ShiftReport(
+            facility_id=payload.facility_id,
+            coordinator_id=current_user.id,
+            shift_date=resolved_date,
+            shift_type=resolved_shift_type,
+            highlighted_issues=highlight_text,
+            elder_descriptions=full_text,
+            handover_notes=payload.handover_notes
+        )
+        db.add(new_report)
+        target_report = new_report
+
     db.commit()
-    db.refresh(new_report)
+    db.refresh(target_report)
 
-    # 🌟 3. KÍCH HOẠT TIẾN TRÌNH XUẤT EXCEL & UPLOAD GOOGLE DRIVE
-    background_tasks.add_task(export_and_upload_shift_report_background, report_id=new_report.id)
+    # Đẩy file Excel lên Google Drive
+    background_tasks.add_task(export_and_upload_shift_report_background, report_id=target_report.id)
 
     facility = db.query(Facility).filter(Facility.id == payload.facility_id).first()
 
     return ShiftMedicalReportResponse(
-        id=new_report.id,
-        facility_id=new_report.facility_id,
+        id=target_report.id,
+        facility_id=target_report.facility_id,
         facility_name=facility.name if facility else "N/A",
         reporter_id=current_user.id,
         reporter_name=current_user.full_name,
-        shift_date=new_report.shift_date,
-        shift_type=ShiftType(new_report.shift_type),
+        shift_date=target_report.shift_date,
+        shift_type=ShiftType(target_report.shift_type),
         formatted_elder_descriptions=full_text,
-        handover_notes=new_report.handover_notes,
-        created_at=new_report.created_at
+        handover_notes=target_report.handover_notes,
+        created_at=target_report.created_at
     )
+
 
 # =========================================================================
 # 3. DASHBOARD CA LIVE CHO TOÀN BỘ NHÂN VIÊN
@@ -483,20 +518,20 @@ def get_archived_shift_reports(
 ):
     """
     XEM LẠI BÁO CÁO GIAO CA QUÁ KHỨ:
-    - NVCS, Điều phối, Bác sĩ: Chỉ xem được BẢN BÁO CÁO HOÀN CHỈNH CUỐI CÙNG trong giới hạn ngày cho phép.
-    - Admin, Manager: Khi truyền `include_history=True` sẽ xem được thêm danh sách Nhật ký lịch sử các lần hiệu chỉnh (Audit History).
+    - Mỗi Ca trực của 1 Cơ sở chỉ hiển thị DUY NHẤT 1 BẢN MỚI NHẤT (Bản cuối cùng).
+    - Khi `include_history=True`: Gắn thêm danh sách vết sửa AuditLog vào bên trong thẻ báo cáo đó.
     """
     query = db.query(ShiftReport).options(
         joinedload(ShiftReport.coordinator), 
         joinedload(ShiftReport.facility)
     )
 
-    # 1. PHÂN QUYỀN ĐA CƠ SỞ (Multi-facility isolation)
+    # 1. Phân quyền đa cơ sở
     target_f_id = current_user.facility_id if current_user.facility_id is not None else facility_id
     if target_f_id is not None:
         query = query.filter(ShiftReport.facility_id == target_f_id)
 
-    # 2. KHÓA GIỚI HẠN SỐ NGÀY THEO VAI TRÒ
+    # 2. Khóa giới hạn số ngày theo vai trò
     today = date.today()
     max_allowed_days = max_allowed_days_max
     if current_user.role in [RoleType.Caregiver, RoleType.Coordinator]:
@@ -507,7 +542,6 @@ def get_archived_shift_reports(
 
     query = query.filter(ShiftReport.shift_date >= cutoff_date)
 
-    # 3. LỌC THEO NGÀY CỤ THỂ VÀ CA TRỰC
     if target_date:
         if target_date < cutoff_date:
             raise HTTPException(
@@ -519,21 +553,41 @@ def get_archived_shift_reports(
     if shift_type:
         query = query.filter(ShiftReport.shift_type == shift_type.value)
 
-    reports = query.order_by(ShiftReport.shift_date.desc(), ShiftReport.created_at.desc()).all()
+    # Sắp xếp bản mới nhất lên đầu
+    all_reports = query.order_by(
+        ShiftReport.shift_date.desc(), 
+        ShiftReport.created_at.desc(), 
+        ShiftReport.id.desc()
+    ).all()
 
-    # 4. BẢO MẬT & TRUY XUẤT VẾT LỊCH SỬ CHỈNH SỬA (CHO ADMIN / MANAGER)
+    # 🌟 3. KHỬ TRÙNG LẶP: Mỗi cặp (facility_id, shift_date, shift_type) chỉ lấy DUY NHẤT bản mới nhất
+    seen_shifts = set()
+    latest_reports = []
+    all_report_ids_per_shift = {}  # Lưu tập hợp các ID cũ để truy vết AuditLog đầy đủ
+
+    for r in all_reports:
+        shift_key = (r.facility_id, str(r.shift_date), str(r.shift_type))
+        if shift_key not in seen_shifts:
+            seen_shifts.add(shift_key)
+            latest_reports.append(r)
+            all_report_ids_per_shift[shift_key] = [str(r.id)]
+        else:
+            all_report_ids_per_shift[shift_key].append(str(r.id))
+
     is_admin_or_manager = current_user.role in [RoleType.Admin, RoleType.Manager]
     results = []
 
-    for r in reports:
+    # 4. Đóng gói kết quả đầu ra
+    for r in latest_reports:
         history_list = []
-        
-        # Chỉ truy vấn vết AuditLog khi là Admin/Manager VÀ có bật cờ include_history
+        shift_key = (r.facility_id, str(r.shift_date), str(r.shift_type))
+        related_ids = all_report_ids_per_shift.get(shift_key, [str(r.id)])
+
         if include_history and is_admin_or_manager:
             audit_logs = db.query(AuditLog)\
                 .filter(
                     AuditLog.action == "UPDATE_SHIFT_REPORT",
-                    AuditLog.target_id == str(r.id)
+                    AuditLog.target_id.in_(related_ids)
                 )\
                 .order_by(AuditLog.created_at.desc()).all()
 
@@ -560,15 +614,14 @@ def get_archived_shift_reports(
                 reporter_name=r.coordinator.full_name if r.coordinator else "N/A",
                 shift_date=r.shift_date,
                 shift_type=ShiftType(r.shift_type),
-                formatted_elder_descriptions=r.elder_descriptions,  # Bản báo cáo đã cập nhật mới nhất
+                formatted_elder_descriptions=r.elder_descriptions,
                 handover_notes=r.handover_notes,
                 created_at=r.created_at,
-                edit_history=history_list  # Mảng vết sửa (Rỗng đối với Doctor / Caregiver / Coordinator)
+                edit_history=history_list
             )
         )
 
     return results
-
 
 # =========================================================================
 # TỰ ĐỘNG TỔNG HỢP DIỄN BIẾN (TÍNH ĐÚNG CA VỪA KẾT THÚC CẦN TỔNG KẾT)
