@@ -483,32 +483,69 @@ def delete_asset(
 
 
 # =========================================================================
-# HELPER: BÓC TÁCH PHÂN KHU VÀ SỐ PHÒNG TỰ ĐỘNG
+# HELPER 1: TÁCH RIÊNG PHÂN KHU (KHU A/B) VÀ SỐ PHÒNG THUẦN SỐ (1, 4, 11, 21...)
 # =========================================================================
 def parse_zone_and_room(room_str: str) -> Tuple[str, str]:
     """
-    Bóc tách tên phân khu và số phòng từ chuỗi nhập liệu.
+    Bóc tách tên Phân khu và Số phòng thuần túy:
+    - 'A1'  -> Zone: 'Khu A', room_number: '1'
+    - 'A11' -> Zone: 'Khu A', room_number: '11'
+    - 'B4'  -> Zone: 'Khu B', room_number: '4'
+    - 'B12' -> Zone: 'Khu B', room_number: '12'
+    - 'Phòng A11' -> Zone: 'Khu A', room_number: '11'
+    - '101' -> Zone: 'Khu Chung', room_number: '101'
     """
-    cleaned = room_str.strip()
+    cleaned = str(room_str).strip()
     
-    # Regex tách phân khu (Group 1) và số phòng (Group 2)
-    match = re.match(r"^(?:Khu\s*)?([A-Za-z]+)[\s\-_]*(.*)$", cleaned, re.IGNORECASE)
+    # Loại bỏ tiền tố "Phòng", "P." nếu có
+    temp = re.sub(r"^(?:phòng|phong|p\.)\s*", "", cleaned, flags=re.IGNORECASE).strip()
     
+    # Tách chữ cái phân khu và số phòng
+    match = re.match(r"^(?:Khu\s*)?([A-Za-z]+)[\s\-_]*(?:phòng|phong|p\.)?[\s\-_]*(\d+)$", temp, re.IGNORECASE)
     if match:
-        zone_name = match.group(1).upper()
-        room_name = match.group(2).strip()
-        
-        # Phòng hờ trường hợp chuỗi nhập chỉ có chữ, không có số phòng (VD: "Khu A")
-        if not room_name:
-            room_name = cleaned
-            
-        return zone_name, room_name
-        
-    return "Chung", cleaned
+        letter = match.group(1).upper()
+        digits = match.group(2).strip()
+        return f"Khu {letter}", digits
+
+    if temp.isdigit():
+        return "Khu Chung", temp
+
+    return "Khu Chung", temp
 
 
 # =========================================================================
-# HELPER: TỰ ĐỘNG ĐẢM BẢO HỒ SƠ SỨC KHỎE CHO CỤ
+# HELPER 2: KHỚP CƠ SỞ THÔNG MINH (HỖ TRỢ '1', '2', 'CS 1', 'CS 2'...)
+# =========================================================================
+def match_facility_smart(fac_input: str, facilities: List[Facility]) -> Optional[Facility]:
+    if not fac_input:
+        return None
+    raw = str(fac_input).strip()
+    raw_lower = raw.lower()
+    
+    # 1. Khớp chính xác tên
+    for f in facilities:
+        if f.name.lower() == raw_lower:
+            return f
+            
+    # 2. Khớp theo số thứ tự cơ sở (VD: '1' -> khớp 'CS 1 - Linh Xuân' hoặc 'CS 1')
+    digits = re.findall(r'\d+', raw)
+    if digits:
+        fac_num = digits[0]
+        for f in facilities:
+            f_digits = re.findall(r'\d+', f.name)
+            if f_digits and f_digits[0] == fac_num:
+                return f
+                
+    # 3. Khớp chuỗi con
+    for f in facilities:
+        if raw_lower in f.name.lower() or f.name.lower() in raw_lower:
+            return f
+            
+    return None
+
+
+# =========================================================================
+# HELPER 3: ĐẢM BẢO HỒ SƠ SỨC KHỎE BAN ĐẦU
 # =========================================================================
 def ensure_elder_health_profile(db: Session, elder_id: int):
     profile = db.query(ElderHealthProfile).filter(ElderHealthProfile.elder_id == elder_id).first()
@@ -534,7 +571,7 @@ def ensure_elder_health_profile(db: Session, elder_id: int):
     "/import-xlsx",
     status_code=status.HTTP_200_OK,
     summary="Import danh mục Tư trang ma trận từ file Excel",
-    description="Tự động khởi tạo Cơ sở, Phân khu, Phòng, Cụ già, Hồ sơ sức khỏe và Vật tư nếu chưa có."
+    description="Tự động bóc tách Cơ sở, Phân khu (Khu A/B), Số phòng (1, 4, 11...), Cụ già và Tư trang."
 )
 async def import_assets_from_xlsx(
     file: UploadFile = File(..., description="File Excel ma trận tư trang (.xlsx/.xls)"),
@@ -552,7 +589,6 @@ async def import_assets_from_xlsx(
         wb = load_workbook(io.BytesIO(contents), data_only=True)
         ws = wb.active
 
-        # Đọc dòng tiêu đề
         header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
         headers = [str(cell).strip() if cell is not None else "" for cell in header_row]
 
@@ -576,7 +612,7 @@ async def import_assets_from_xlsx(
             room_cell = row[1] if len(row) > 1 else None
             elder_cell = row[2] if len(row) > 2 else None
 
-            # Kế thừa context từ ô merge
+            # Kế thừa context từ ô bị merge
             if facility_cell is not None and str(facility_cell).strip() != "":
                 current_facility_raw = str(facility_cell).strip()
 
@@ -587,37 +623,19 @@ async def import_assets_from_xlsx(
                 continue
 
             # -------------------------------------------------------------
-            # 1. TỰ ĐỘNG KHAI BÁO CƠ SỞ (FACILITY)
+            # 1. TỰ ĐỘNG XÁC ĐỊNH CƠ SỞ (FACILITY)
             # -------------------------------------------------------------
-            target_facility = None
-            fac_str = str(current_facility_raw).strip()
-
-            # Tìm khớp tên cơ sở (CS 1, Cơ sở 1, CS 1 - Thủ Đức,...)
-            facilities = db.query(Facility).all()
-            for f in facilities:
-                f_name_lower = f.name.lower()
-                if (f_name_lower == fac_str.lower() or 
-                    f"cs {fac_str}".lower() in f_name_lower or 
-                    f"cơ sở {fac_str}".lower() in f_name_lower or
-                    f"cs_{fac_str}".lower() in f_name_lower):
-                    target_facility = f
-                    break
-
-            if not target_facility:
-                for f in facilities:
-                    if fac_str.lower() in f.name.lower():
-                        target_facility = f
-                        break
+            all_facilities = db.query(Facility).all()
+            target_facility = match_facility_smart(current_facility_raw, all_facilities)
 
             if not target_facility:
                 target_facility = Facility(
-                    name=f"CS {fac_str}",
+                    name=f"CS {current_facility_raw}",
                     address="Khởi tạo tự động từ Import Excel"
                 )
                 db.add(target_facility)
                 db.flush()
 
-            # Phân quyền cơ sở
             if current_user.facility_id is not None and target_facility.id != current_user.facility_id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -625,27 +643,28 @@ async def import_assets_from_xlsx(
                 )
 
             # -------------------------------------------------------------
-            # 2. TỰ ĐỘNG KHAI BÁO PHÂN KHU (ZONE) & PHÒNG (ROOM)
+            # 2. TỰ ĐỘNG TÁCH PHÂN KHU (ZONE) & SỐ PHÒNG THUẦN SỐ (ROOM)
             # -------------------------------------------------------------
-            zone_char, room_number = parse_zone_and_room(current_room_raw)
+            zone_name, room_number = parse_zone_and_room(current_room_raw)
 
-            # 2.1. Phân khu (Khu A, Khu B...)
+            # 2.1. Phân khu (Khu A thuộc CS1, Khu B thuộc CS2)
             zone = db.query(Zone).filter(
                 Zone.facility_id == target_facility.id,
-                func.lower(Zone.name).in_([zone_char.lower(), f"khu {zone_char}".lower()])
+                func.lower(Zone.name) == zone_name.lower()
             ).first()
 
             if not zone:
                 zone = Zone(
                     facility_id=target_facility.id,
-                    name=f"Khu {zone_char}",
-                    description=f"Khu {zone_char} tạo tự động từ Import"
+                    name=zone_name,
+                    description=f"{zone_name} thuộc {target_facility.name}"
                 )
                 db.add(zone)
                 db.flush()
 
-            # 2.2. Phòng (Tra cứu theo room_number duy nhất toàn bảng: 'A4', 'B4', 'B13')
+            # 2.2. Phòng: Lưu thuần số (1, 4, 11...) và tra cứu theo zone_id + room_number
             room = db.query(Room).filter(
+                Room.zone_id == zone.id,
                 func.lower(Room.room_number) == room_number.lower()
             ).first()
 
@@ -657,13 +676,7 @@ async def import_assets_from_xlsx(
                 )
                 db.add(room)
                 db.flush()
-            else:
-                # Đảm bảo phòng gắn đúng với Phân khu hiện tại
-                if room.zone_id != zone.id:
-                    room.zone_id = zone.id
-                    db.flush()
 
-            # Nếu dòng chỉ có Phòng mà chưa có Cụ (phòng trống) -> Dừng ở bước tạo Phòng
             if elder_cell is None or str(elder_cell).strip() == "":
                 continue
 
@@ -685,7 +698,6 @@ async def import_assets_from_xlsx(
                 db.add(elder)
                 db.flush()
 
-            # Tự động tạo Hồ sơ sức khỏe nếu chưa có
             ensure_elder_health_profile(db, elder.id)
             processed_elders += 1
 
@@ -694,10 +706,6 @@ async def import_assets_from_xlsx(
             # -------------------------------------------------------------
             existing_assets = db.query(Asset).filter(Asset.elder_id == elder.id).all()
             asset_dict = {a.asset_name.lower().strip(): a for a in existing_assets}
-
-            # Đưa toàn bộ đồ cũ của Cụ về Archived trước khi kích hoạt lại theo file
-            for a in existing_assets:
-                a.status = "Archived"
 
             for col_index in range(3, len(row)):
                 if col_index >= len(headers):
