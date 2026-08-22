@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ROLES } from '../../../utils/constants';
 import { Modal } from '../../../components/Modal';
+import { facilitiesApi } from '../api/facilitiesApi';
 import styles from './CreateUserModal.module.css';
 
 const buildEmptyForm = (defaultFacilityId) => ({
@@ -8,7 +9,7 @@ const buildEmptyForm = (defaultFacilityId) => ({
   full_name: '',
   password: '',
   role: ROLES.CAREGIVER,
-  facility_id: defaultFacilityId ?? null,
+  facility_id: defaultFacilityId ?? '',
   is_active: true,
 });
 
@@ -28,13 +29,31 @@ const getAvailableRoles = (currentUserRole) => {
 
 export const CreateUserModal = ({ isOpen, onClose, onSave, currentUserRole, currentUserFacilityId }) => {
   const [formData, setFormData] = useState(buildEmptyForm(currentUserFacilityId));
+  const [facilities, setFacilities] = useState([]);
+  const [loadingFacilities, setLoadingFacilities] = useState(false);
+
   const availableRoles = getAvailableRoles(currentUserRole);
   const isManager = currentUserRole === ROLES.MANAGER;
+  const isAdmin = currentUserRole === ROLES.ADMIN;
 
-  // Reset form mỗi lần mở modal, gán sẵn facility của Manager nếu có
+  // Reset form mỗi lần mở modal, gán sẵn facility của Manager nếu có.
+  // Admin cần tải danh sách cơ sở để tự chọn — Manager không cần vì cơ sở đã bị khóa cứng.
   useEffect(() => {
-    if (isOpen) setFormData(buildEmptyForm(currentUserFacilityId));
-  }, [isOpen, currentUserFacilityId]);
+    if (!isOpen) return;
+
+    setFormData(buildEmptyForm(currentUserFacilityId));
+
+    if (isAdmin) {
+      setLoadingFacilities(true);
+      facilitiesApi.getAllFacilities()
+        .then((data) => setFacilities(data))
+        .catch((err) => {
+          console.error('Lỗi tải danh sách cơ sở:', err);
+          setFacilities([]);
+        })
+        .finally(() => setLoadingFacilities(false));
+    }
+  }, [isOpen, currentUserFacilityId, isAdmin]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -42,10 +61,13 @@ export const CreateUserModal = ({ isOpen, onClose, onSave, currentUserRole, curr
       alert('Vui lòng điền đầy đủ thông tin bắt buộc!');
       return;
     }
-    // Manager: khoá cứng facility_id = cơ sở của chính Manager, không cho ghi đè
+
+    // Manager: khoá cứng facility_id = cơ sở của chính Manager, không cho ghi đè dù form có sửa được hay không —
+    // đảm bảo an toàn ngay cả khi UI bị can thiệp, vì backend cũng tự ép lại giá trị này ở phía server.
     const payload = isManager
       ? { ...formData, facility_id: currentUserFacilityId }
-      : formData;
+      : { ...formData, facility_id: formData.facility_id ? Number(formData.facility_id) : null };
+
     onSave(payload);
   };
 
@@ -98,6 +120,26 @@ export const CreateUserModal = ({ isOpen, onClose, onSave, currentUserRole, curr
             ))}
           </select>
         </div>
+
+        {/* Admin: được tự chọn cơ sở cho tài khoản mới (hoặc để trống nếu không gắn cơ sở cụ thể) */}
+        {isAdmin && (
+          <div className={styles.inputGroup}>
+            <label className={styles.label}>Cơ Sở</label>
+            <select
+              className={styles.select}
+              value={formData.facility_id}
+              onChange={(e) => setFormData({ ...formData, facility_id: e.target.value })}
+              disabled={loadingFacilities}
+            >
+              <option value="">
+                {loadingFacilities ? 'Đang tải...' : '-- Không gắn cơ sở cụ thể --'}
+              </option>
+              {facilities.map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Manager: cơ sở bị khoá cứng, chỉ hiển thị để biết, không cho sửa */}
         {isManager && (

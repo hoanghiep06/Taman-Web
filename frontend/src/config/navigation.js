@@ -104,7 +104,7 @@ export const SIDEBAR_MENU = {
             title: "Tài sản",
             icon: "🛏️",
             path: "/patrol"
-        }, 
+        },
 
         {
             title: "Phân công",

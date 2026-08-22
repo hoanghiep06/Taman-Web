@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../../contexts/AuthContext';
 import { authApi } from '../api/authApi';
@@ -17,6 +17,15 @@ export const LoginPage = () => {
 
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  // Đánh thức backend ngay khi trang Login vừa load — chạy 1 lần, không chặn UI,
+  // không hiển thị lỗi cho người dùng dù ping thất bại (chỉ là "warm-up" request).
+  useEffect(() => {
+    authApi.pingServer().catch(() => {
+      // Im lặng bỏ qua — nếu server đang ngủ/khởi động chậm, lần gọi login thật
+      // phía dưới vẫn xử lý bình thường, không cần báo lỗi ở bước ping này.
+    });
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();

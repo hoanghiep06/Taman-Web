@@ -57,12 +57,12 @@ class PermissionChecker:
         return current_user
 
 # Định nghĩa sẵn nhóm quyền tái sử dụng
-require_management = PermissionChecker([RoleType.Admin, RoleType.Manager])
+require_management = PermissionChecker([RoleType.Admin, RoleType.Manager, RoleType.Doctor])
 require_medical_team = PermissionChecker([
-    RoleType.Admin, RoleType.Manager, RoleType.Doctor, RoleType.Coordinator
+    RoleType.Admin, RoleType.Manager, RoleType.Doctor, RoleType.Coordinator,RoleType.Caregiver
 ])
 require_care_team = PermissionChecker([
-    RoleType.Admin, RoleType.Manager, RoleType.Coordinator, RoleType.Caregiver
+    RoleType.Admin, RoleType.Manager, RoleType.Coordinator, RoleType.Caregiver, RoleType.Doctor
 ])
 
 require_logistics_team = PermissionChecker([

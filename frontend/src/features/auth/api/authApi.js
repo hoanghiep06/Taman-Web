@@ -21,4 +21,11 @@ export const authApi = {
       new_password: newPassword,
     });
   },
+
+  // Gọi health check để "đánh thức" backend (hữu ích nếu backend host trên
+  // dịch vụ free tier có cơ chế ngủ đông khi không có traffic, VD Render).
+  // Không quan tâm response, chỉ cần request chạm tới server là đủ.
+  pingServer: () => {
+    return axiosClient.get('/health');
+  },
 };
