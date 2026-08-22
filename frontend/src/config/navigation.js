@@ -49,7 +49,7 @@ export const SIDEBAR_MENU = {
         {
             title: "Quản lý tài sản",
             icon: "🛏️",
-            path: "/assets"
+            path: "/patrol"
         },
 
         {
