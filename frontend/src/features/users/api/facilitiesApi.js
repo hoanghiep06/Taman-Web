@@ -17,9 +17,6 @@ export const facilitiesApi = {
     return axiosClient.delete(`/admin/facilities/${facilityId}`);
   },
 
-  // Theo API doc: GET /api/admin/facilities/zones — cần xác nhận với backend
-  // endpoint này có bắt buộc truyền facility_id qua query param không
-  // (ví dụ ?facility_id=1) hay trả về zones của TẤT CẢ cơ sở cùng lúc.
   getZonesByFacility: (facilityId) => {
     return axiosClient.get('/admin/facilities/zones', {
       params: { facility_id: facilityId },
