@@ -7,6 +7,8 @@ from sqlalchemy import func
 from services.maintenance_service import run_system_maintenance_jit
 from services.report_export_service import export_and_upload_shift_report_background
 
+from services.drive_service import append_elder_health_log_to_drive
+
 from services.shift_service import check_and_sync_shift_jit 
 
 from database import get_db
@@ -98,6 +100,15 @@ def resolve_handover_shift_context(
     return resolved_date, resolved_shift_type
 
 
+def calculate_abnormal_flags(spo2, bp_sys, bp_dia, temp, pulse) -> dict:
+    flags = {"spo2": False, "bp": False, "temp": False, "pulse": False, "any_vital": False}
+    if spo2 and spo2 < VITAL_LIMITS["SPO2_WARNING"]: flags["spo2"] = True
+    if bp_sys and (bp_sys > VITAL_LIMITS["BP_SYSTOLIC_HIGH"] or bp_sys < VITAL_LIMITS["BP_SYSTOLIC_LOW"]): flags["bp"] = True
+    if bp_dia and (bp_dia > VITAL_LIMITS["BP_DIASTOLIC_HIGH"] or bp_dia < VITAL_LIMITS["BP_DIASTOLIC_LOW"]): flags["bp"] = True
+    if temp and temp >= VITAL_LIMITS["TEMP_FEVER"]: flags["temp"] = True
+    if pulse and (pulse > VITAL_LIMITS["PULSE_FAST"] or pulse < VITAL_LIMITS["PULSE_SLOW"]): flags["pulse"] = True
+    flags["any_vital"] = any([flags["spo2"], flags["bp"], flags["temp"], flags["pulse"]])
+    return flags
 
 @router.get(
     "/current-shift",
@@ -164,31 +175,47 @@ def get_current_live_shift(
 @router.post("/vitals", response_model=VitalSignResponse, status_code=status.HTTP_201_CREATED)
 def record_vital_signs(
     payload: VitalSignCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    """NVCS / Điều phối đo sinh hiệu (Bắt cờ cảnh báo tự động)"""
-    elder = db.query(Elder).filter(Elder.id == payload.elder_id).first()
-    if not elder:
-        raise HTTPException(status_code=404, detail="Không tìm thấy Cụ!")
+    elder = db.query(Elder).options(joinedload(Elder.room).joinedload(Room.zone).joinedload(Zone.facility)).filter(Elder.id == payload.elder_id).first()
+    if not elder: raise HTTPException(status_code=404, detail="Không tìm thấy Cụ!")
 
-    is_abnormal = calculate_abnormal_flag(payload.spo2, payload.bp_systolic, payload.bp_diastolic, payload.temperature, payload.pulse)
+    flags = calculate_abnormal_flags(payload.spo2, payload.bp_systolic, payload.bp_diastolic, payload.temperature, payload.pulse)
+    is_abnormal = flags["any_vital"]
 
     new_record = VitalSignRecord(
-        elder_id=payload.elder_id,
-        measured_by=current_user.id,
-        shift_type=payload.shift_type.value,
-        bp_systolic=payload.bp_systolic,
-        bp_diastolic=payload.bp_diastolic,
-        pulse=payload.pulse,
-        spo2=payload.spo2,
-        temperature=payload.temperature,
-        notes=payload.notes,
-        is_abnormal=is_abnormal
+        elder_id=payload.elder_id, measured_by=current_user.id, shift_type=payload.shift_type.value,
+        bp_systolic=payload.bp_systolic, bp_diastolic=payload.bp_diastolic, pulse=payload.pulse,
+        spo2=payload.spo2, temperature=payload.temperature, notes=payload.notes, is_abnormal=is_abnormal
     )
     db.add(new_record)
     db.commit()
     db.refresh(new_record)
+    
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    time_str = datetime.now(tz).strftime("%d/%m/%Y %H:%M")
+    fac_name = elder.room.zone.facility.name if (elder.room and elder.room.zone and elder.room.zone.facility) else "System_Global"
+    
+    log_data = {
+        "time": time_str,
+        "date_key": time_str[:10],
+        "base_type": "Sinh Hiệu",
+        "type": "Đo Sinh Hiệu",
+        "bp": f"{payload.bp_systolic}/{payload.bp_diastolic}" if payload.bp_systolic else "",
+        "pulse": str(payload.pulse) if payload.pulse else "",
+        "temp": f"{payload.temperature}°C" if payload.temperature else "",
+        "spo2": f"{payload.spo2}%" if payload.spo2 else "",
+        "weight": "",
+        "staff": current_user.full_name,
+        "vital_note": payload.notes or "",
+        "shift_note": "",
+        "is_update": False,
+        "abnormal_flags": flags
+    }
+    background_tasks.add_task(append_elder_health_log_to_drive, fac_name, elder.full_name, log_data)
+    
     return new_record
 
 
@@ -196,15 +223,14 @@ def record_vital_signs(
 def update_vital_signs(
     vital_id: int,
     payload: VitalSignUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
     record = db.query(VitalSignRecord).filter(VitalSignRecord.id == vital_id).first()
-    if not record:
-        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi sinh hiệu này!")
+    if not record: raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi này!")
 
     old_values = f"BP:{record.bp_systolic}/{record.bp_diastolic}, SPO2:{record.spo2}, Temp:{record.temperature}"
-    # Cập nhật các trường chỉ số
     if payload.bp_systolic is not None: record.bp_systolic = payload.bp_systolic
     if payload.bp_diastolic is not None: record.bp_diastolic = payload.bp_diastolic
     if payload.pulse is not None: record.pulse = payload.pulse
@@ -212,23 +238,42 @@ def update_vital_signs(
     if payload.temperature is not None: record.temperature = payload.temperature
     if payload.notes is not None: record.notes = payload.notes
 
-    # Bật cờ đánh dấu đã chỉnh sửa và tính lại cờ bất thường
+    flags = calculate_abnormal_flags(record.spo2, record.bp_systolic, record.bp_diastolic, record.temperature, record.pulse)
     record.is_edited = True
     record.edited_at = datetime.now()
-    record.is_abnormal = calculate_abnormal_flag(record.spo2, record.bp_systolic, record.bp_diastolic, record.temperature, record.pulse)
+    record.is_abnormal = flags["any_vital"]
 
-    # Ghi log minh bạch
-    audit = AuditLog(
-        actor_id=current_user.id,
-        action="UPDATE_VITAL_SIGN",
-        target_id=str(vital_id),
-        ip_address="Internal",
-        payload=f"Sửa sinh hiệu Cụ ID={record.elder_id}. Cũ: [{old_values}] -> Mới: [BP:{record.bp_systolic}/{record.bp_diastolic}, SPO2:{record.spo2}]"
-    )
+    audit = AuditLog(actor_id=current_user.id, action="UPDATE_VITAL_SIGN", target_id=str(vital_id), ip_address="Internal", payload=f"Sửa sinh hiệu Cụ ID={record.elder_id}. Cũ: [{old_values}] -> Mới: [BP:{record.bp_systolic}/{record.bp_diastolic}, SPO2:{record.spo2}]")
     db.add(audit)
-
     db.commit()
     db.refresh(record)
+
+    # 🌟 TỰ ĐỘNG TÌM DÒNG CŨ TRÊN DRIVE ĐỂ GHI ĐÈ THÔNG SỐ SỬA ĐỔI
+    elder = db.query(Elder).options(joinedload(Elder.room).joinedload(Room.zone).joinedload(Zone.facility)).filter(Elder.id == record.elder_id).first()
+    fac_name = elder.room.zone.facility.name if (elder.room and elder.room.zone and elder.room.zone.facility) else "System_Global"
+    
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    time_str = datetime.now(tz).strftime("%d/%m/%Y %H:%M")
+    log_time = record.measured_at.strftime("%d/%m/%Y %H:%M") if record.measured_at else time_str
+    
+    log_data = {
+        "time": log_time,
+        "date_key": log_time[:10],
+        "base_type": "Sinh Hiệu",
+        "type": "Cập nhật Sinh Hiệu",
+        "bp": f"{record.bp_systolic}/{record.bp_diastolic}" if record.bp_systolic else "",
+        "pulse": str(record.pulse) if record.pulse else "",
+        "temp": f"{record.temperature}°C" if record.temperature else "",
+        "spo2": f"{record.spo2}%" if record.spo2 else "",
+        "weight": "",
+        "staff": current_user.full_name,
+        "vital_note": record.notes or "Hiệu chỉnh sau đo",
+        "shift_note": "",
+        "is_update": True, # Tìm kiếm và ghi đè
+        "abnormal_flags": flags
+    }
+    background_tasks.add_task(append_elder_health_log_to_drive, fac_name, elder.full_name, log_data)
+
     return record
 
 
@@ -315,63 +360,52 @@ def create_shift_medical_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_coordinator_report)
 ):
-    """
-    ĐIỀU PHỐI TỔNG KẾT & GIAO CA:
-    1. Tự động xác định đúng ca vừa kết thúc để lưu DB.
-    2. Nếu ca này đã có báo cáo -> Tự động cập nhật đè + ghi vết AuditLog.
-    3. Đẩy file Excel mới nhất lên Google Drive.
-    """
     resolved_date, resolved_shift_type = resolve_handover_shift_context(
-        db, 
-        target_date=payload.shift_date, 
-        shift_type=payload.shift_type.value if payload.shift_type else None
+        db, target_date=payload.shift_date, shift_type=payload.shift_type.value if payload.shift_type else None
     )
 
     formatted_descriptions = []
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    time_str = datetime.now(tz).strftime("%d/%m/%Y %H:%M")
+    shift_label = "Ca Sáng" if resolved_shift_type == "Sang" else "Ca Tối"
+
     for idx, item in enumerate(payload.elder_events, start=1):
-        elder = db.query(Elder).filter(Elder.id == item.elder_id).first()
-        if not elder:
-            continue
+        elder = db.query(Elder).options(joinedload(Elder.room).joinedload(Room.zone).joinedload(Zone.facility)).filter(Elder.id == item.elder_id).first()
+        if not elder: continue
 
         note_text = item.note.strip()
         formatted_descriptions.append(f"{idx}. {elder.full_name}: {note_text}")
 
-        diary = TreatmentDiary(
-            elder_id=elder.id,
-            event_type="Lưu ý giao ca (ĐP)",
-            content=note_text,
-            created_by=current_user.id
-        )
+        diary = TreatmentDiary(elder_id=elder.id, event_type="Lưu ý giao ca (ĐP)", content=note_text, created_by=current_user.id)
         db.add(diary)
+
+        fac_name = elder.room.zone.facility.name if (elder.room and elder.room.zone and elder.room.zone.facility) else "System_Global"
+        
+        log_data = {
+            "time": time_str,
+            "date_key": resolved_date.strftime("%d/%m/%Y"),
+            "base_type": "Giao ca",
+            "type": f"Giao ca ({shift_label})",
+            "bp": "", "pulse": "", "temp": "", "spo2": "", "weight": "",
+            "staff": current_user.full_name,
+            "vital_note": "",
+            "shift_note": note_text,
+            "is_update": False,
+            "abnormal_flags": {"shift_note": True} # Bôi đỏ cột Ghi chú Báo Cáo
+        }
+        background_tasks.add_task(append_elder_health_log_to_drive, fac_name, elder.full_name, log_data)
 
     full_text = "\n".join(formatted_descriptions)
     highlight_text = payload.highlighted_issues or f"Đã ghi nhận lưu ý cho {len(payload.elder_events)} Cụ."
 
-    # 🌟 1. KIỂM TRA XEM ĐÃ CÓ BÁO CÁO CỦA CA NÀY CHƯA (UPSERT)
     existing_report = db.query(ShiftReport).filter(
-        ShiftReport.facility_id == payload.facility_id,
-        ShiftReport.shift_date == resolved_date,
-        ShiftReport.shift_type == resolved_shift_type
+        ShiftReport.facility_id == payload.facility_id, ShiftReport.shift_date == resolved_date, ShiftReport.shift_type == resolved_shift_type
     ).order_by(ShiftReport.id.desc()).first()
 
     if existing_report:
-        # Ghi vết lịch sử chỉnh sửa
-        old_data = {
-            "elder_descriptions": existing_report.elder_descriptions or "",
-            "handover_notes": existing_report.handover_notes or ""
-        }
-        new_data = {
-            "elder_descriptions": full_text,
-            "handover_notes": payload.handover_notes or ""
-        }
-        audit_payload = json.dumps({"old": old_data, "new": new_data}, ensure_ascii=False)
-        audit = AuditLog(
-            actor_id=current_user.id,
-            action="UPDATE_SHIFT_REPORT",
-            target_id=str(existing_report.id).strip(),
-            ip_address="Internal",
-            payload=audit_payload
-        )
+        old_data = {"elder_descriptions": existing_report.elder_descriptions or "", "handover_notes": existing_report.handover_notes or ""}
+        new_data = {"elder_descriptions": full_text, "handover_notes": payload.handover_notes or ""}
+        audit = AuditLog(actor_id=current_user.id, action="UPDATE_SHIFT_REPORT", target_id=str(existing_report.id).strip(), ip_address="Internal", payload=json.dumps({"old": old_data, "new": new_data}, ensure_ascii=False))
         db.add(audit)
 
         existing_report.coordinator_id = current_user.id
@@ -380,37 +414,16 @@ def create_shift_medical_report(
         existing_report.handover_notes = payload.handover_notes
         target_report = existing_report
     else:
-        new_report = ShiftReport(
-            facility_id=payload.facility_id,
-            coordinator_id=current_user.id,
-            shift_date=resolved_date,
-            shift_type=resolved_shift_type,
-            highlighted_issues=highlight_text,
-            elder_descriptions=full_text,
-            handover_notes=payload.handover_notes
-        )
+        new_report = ShiftReport(facility_id=payload.facility_id, coordinator_id=current_user.id, shift_date=resolved_date, shift_type=resolved_shift_type, highlighted_issues=highlight_text, elder_descriptions=full_text, handover_notes=payload.handover_notes)
         db.add(new_report)
         target_report = new_report
 
     db.commit()
     db.refresh(target_report)
-
-    # Đẩy file Excel lên Google Drive
     background_tasks.add_task(export_and_upload_shift_report_background, report_id=target_report.id)
 
-    facility = db.query(Facility).filter(Facility.id == payload.facility_id).first()
-
     return ShiftMedicalReportResponse(
-        id=target_report.id,
-        facility_id=target_report.facility_id,
-        facility_name=facility.name if facility else "N/A",
-        reporter_id=current_user.id,
-        reporter_name=current_user.full_name,
-        shift_date=target_report.shift_date,
-        shift_type=ShiftType(target_report.shift_type),
-        formatted_elder_descriptions=full_text,
-        handover_notes=target_report.handover_notes,
-        created_at=target_report.created_at
+        id=target_report.id, facility_id=target_report.facility_id, facility_name="N/A", reporter_id=current_user.id, reporter_name=current_user.full_name, shift_date=target_report.shift_date, shift_type=ShiftType(target_report.shift_type), formatted_elder_descriptions=full_text, handover_notes=target_report.handover_notes, created_at=target_report.created_at
     )
 
 
@@ -728,81 +741,55 @@ def get_shift_report_audit_history(
 def update_shift_medical_report(
     report_id: int,
     payload: ShiftMedicalReportUpdate,
-    background_tasks: BackgroundTasks,  # 🌟 Bắt buộc có BackgroundTasks
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_coordinator_report)
 ):
-    report = db.query(ShiftReport)\
-        .options(joinedload(ShiftReport.coordinator), joinedload(ShiftReport.facility))\
-        .filter(ShiftReport.id == report_id).first()
-
-    if not report:
-        raise HTTPException(status_code=404, detail="Không tìm thấy báo cáo giao ca này!")
-
-    if current_user.facility_id is not None and report.facility_id != current_user.facility_id:
-        raise HTTPException(status_code=403, detail="Bạn không có quyền chỉnh sửa báo cáo của Cơ sở khác!")
-
-    old_data = {
-        "elder_descriptions": report.elder_descriptions or "",
-        "handover_notes": report.handover_notes or ""
-    }
+    report = db.query(ShiftReport).options(joinedload(ShiftReport.coordinator)).filter(ShiftReport.id == report_id).first()
+    if not report: raise HTTPException(status_code=404, detail="Không tìm thấy báo cáo!")
 
     if payload.elder_events is not None:
         formatted_descriptions = []
+        tz = pytz.timezone('Asia/Ho_Chi_Minh')
+        time_str = datetime.now(tz).strftime("%d/%m/%Y %H:%M")
+        shift_label = "Ca Sáng" if report.shift_type == "Sang" else "Ca Tối"
+
         for idx, item in enumerate(payload.elder_events, start=1):
-            elder = db.query(Elder).filter(Elder.id == item.elder_id).first()
-            if not elder:
-                continue
+            elder = db.query(Elder).options(joinedload(Elder.room).joinedload(Room.zone).joinedload(Zone.facility)).filter(Elder.id == item.elder_id).first()
+            if not elder: continue
 
             note_text = item.note.strip()
             formatted_descriptions.append(f"{idx}. {elder.full_name}: {note_text}")
 
-            diary = TreatmentDiary(
-                elder_id=elder.id,
-                event_type="Cập nhật báo cáo ca (ĐP)",
-                content=f"[Hiệu chỉnh ca] {note_text}",
-                created_by=current_user.id
-            )
-            db.add(diary)
+            fac_name = elder.room.zone.facility.name if (elder.room and elder.room.zone and elder.room.zone.facility) else "System_Global"
+            
+            # 🌟 TỰ ĐỘNG GHI ĐÈ LÊN GHI CHÚ GIAO CA CŨ CỦA NGÀY NÀY
+            log_data = {
+                "time": time_str,
+                "date_key": report.shift_date.strftime("%d/%m/%Y"),
+                "base_type": "Giao ca",
+                "type": f"Giao ca ({shift_label}) [Đã sửa]",
+                "bp": "", "pulse": "", "temp": "", "spo2": "", "weight": "",
+                "staff": current_user.full_name,
+                "vital_note": "",
+                "shift_note": note_text,
+                "is_update": True, # Tìm kiếm ghi đè
+                "abnormal_flags": {"shift_note": True}
+            }
+            background_tasks.add_task(append_elder_health_log_to_drive, fac_name, elder.full_name, log_data)
 
         report.elder_descriptions = "\n".join(formatted_descriptions)
         report.highlighted_issues = f"Đã cập nhật lưu ý cho {len(payload.elder_events)} Cụ."
 
-    if payload.handover_notes is not None:
-        report.handover_notes = payload.handover_notes
-
-    new_data = {
-        "elder_descriptions": report.elder_descriptions or "",
-        "handover_notes": report.handover_notes or ""
-    }
-
-    audit_payload = json.dumps({"old": old_data, "new": new_data}, ensure_ascii=False)
-    audit = AuditLog(
-        actor_id=current_user.id,
-        action="UPDATE_SHIFT_REPORT",
-        target_id=str(report.id).strip(),
-        ip_address="Internal",
-        payload=audit_payload
-    )
-    db.add(audit)
+    if payload.handover_notes is not None: report.handover_notes = payload.handover_notes
     db.commit()
     db.refresh(report)
-
-    # 🌟 KÍCH HOẠT XUẤT ĐÈ FILE EXCEL MỚI NHẤT LÊN GOOGLE DRIVE
     background_tasks.add_task(export_and_upload_shift_report_background, report_id=report.id)
 
     return ShiftMedicalReportResponse(
-        id=report.id,
-        facility_id=report.facility_id,
-        facility_name=report.facility.name if report.facility else "N/A",
-        reporter_id=report.coordinator_id,
-        reporter_name=report.coordinator.full_name if report.coordinator else "N/A",
-        shift_date=report.shift_date,
-        shift_type=ShiftType(report.shift_type),
-        formatted_elder_descriptions=report.elder_descriptions,
-        handover_notes=report.handover_notes,
-        created_at=report.created_at
+        id=report.id, facility_id=report.facility_id, facility_name="N/A", reporter_id=report.coordinator_id, reporter_name="N/A", shift_date=report.shift_date, shift_type=ShiftType(report.shift_type), formatted_elder_descriptions=report.elder_descriptions, handover_notes=report.handover_notes, created_at=report.created_at
     )
+
 
 # =========================================================================
 # 6. QUẢN LÝ CÂN NẶNG HÀNG THÁNG (POST / PUT / GET)
@@ -810,91 +797,90 @@ def update_shift_medical_report(
 @router.post("/weight", response_model=WeightRecordResponse, status_code=status.HTTP_201_CREATED)
 def record_elder_weight(
     payload: WeightRecordCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    """
-    Nhập chỉ số cân nặng định kỳ cho Cụ (Thường đo 30 ngày/lần):
-    - Tự động lưu bản ghi vào `weight_records` với tháng YYYY-MM hiện tại.
-    - Tự động cập nhật `last_weight_date` trong hồ sơ của Cụ để reset bộ đếm 30 ngày.
-    """
-    elder = db.query(Elder).filter(Elder.id == payload.elder_id).first()
-    if not elder:
-        raise HTTPException(status_code=404, detail="Không tìm thấy thông tin Cụ!")
-
+    elder = db.query(Elder).options(joinedload(Elder.room).joinedload(Room.zone).joinedload(Zone.facility)).filter(Elder.id == payload.elder_id).first()
     today_date = date.today()
     current_month_str = today_date.strftime("%Y-%m")
 
-    existing_record = db.query(WeightRecord)\
-        .options(joinedload(WeightRecord.staff))\
-        .filter(
-            WeightRecord.elder_id == payload.elder_id,
-            WeightRecord.measured_month == current_month_str
-        ).first()
-
+    existing_record = db.query(WeightRecord).filter(WeightRecord.elder_id == payload.elder_id, WeightRecord.measured_month == current_month_str).first()
+    
     if existing_record:
         existing_record.weight = payload.weight
         existing_record.notes = payload.notes
         existing_record.measured_by = current_user.id
-        existing_record.measured_at = datetime.now()
-        
-        elder.last_weight_date = today_date
         db.commit()
         db.refresh(existing_record)
-        return existing_record
+        target_record = existing_record
+    else:
+        target_record = WeightRecord(elder_id=payload.elder_id, measured_by=current_user.id, weight=payload.weight, measured_month=current_month_str, notes=payload.notes)
+        db.add(target_record)
+        db.commit()
+        db.refresh(target_record)
 
-    new_record = WeightRecord(
-        elder_id=payload.elder_id,
-        measured_by=current_user.id,
-        weight=payload.weight,
-        measured_month=current_month_str,
-        notes=payload.notes
-    )
-    
     elder.last_weight_date = today_date
-
-    db.add(new_record)
     db.commit()
 
-    record = db.query(WeightRecord)\
-        .options(joinedload(WeightRecord.staff))\
-        .filter(WeightRecord.id == new_record.id).first()
+    # 🌟 GHI CÂN NẶNG VÀO FILE
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    time_str = datetime.now(tz).strftime("%d/%m/%Y %H:%M")
+    fac_name = elder.room.zone.facility.name if (elder.room and elder.room.zone and elder.room.zone.facility) else "System_Global"
+    
+    log_data = {
+        "time": time_str,
+        "date_key": today_date.strftime("%d/%m/%Y"),
+        "base_type": "Cân Nặng",
+        "type": "Cập nhật Cân Nặng" if existing_record else "Đo Cân Nặng",
+        "bp": "", "pulse": "", "temp": "", "spo2": "",
+        "weight": f"{payload.weight} kg",
+        "staff": current_user.full_name,
+        "vital_note": payload.notes or "Đo định kỳ",
+        "shift_note": "",
+        "is_update": True if existing_record else False,
+        "abnormal_flags": {}
+    }
+    background_tasks.add_task(append_elder_health_log_to_drive, fac_name, elder.full_name, log_data)
 
-    return record
-
+    return db.query(WeightRecord).options(joinedload(WeightRecord.staff)).filter(WeightRecord.id == target_record.id).first()
 
 @router.put("/weight/{weight_id}", response_model=WeightRecordResponse)
 def update_elder_weight(
     weight_id: int,
     payload: WeightRecordUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
-    """Sửa lại chỉ số cân nặng khi nhân viên nhập nhầm số kg"""
-    record = db.query(WeightRecord)\
-        .options(joinedload(WeightRecord.staff))\
-        .filter(WeightRecord.id == weight_id).first()
+    record = db.query(WeightRecord).options(joinedload(WeightRecord.staff)).filter(WeightRecord.id == weight_id).first()
+    if not record: raise HTTPException(status_code=404)
 
-    if not record:
-        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi cân nặng này!")
-
-    old_weight = record.weight
     record.weight = payload.weight
-    if payload.notes is not None:
-        record.notes = payload.notes
-    record.measured_by = current_user.id
-
-    audit = AuditLog(
-        actor_id=current_user.id,
-        action="UPDATE_WEIGHT_RECORD",
-        target_id=str(weight_id),
-        ip_address="Internal",
-        payload=f"Sửa cân nặng Cụ ID={record.elder_id}. Cũ: {old_weight}kg -> Mới: {payload.weight}kg"
-    )
-    db.add(audit)
-
+    if payload.notes is not None: record.notes = payload.notes
     db.commit()
     db.refresh(record)
+
+    elder = db.query(Elder).options(joinedload(Elder.room).joinedload(Room.zone).joinedload(Zone.facility)).filter(Elder.id == record.elder_id).first()
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    time_str = datetime.now(tz).strftime("%d/%m/%Y %H:%M")
+    log_time = record.measured_at.strftime("%d/%m/%Y %H:%M") if getattr(record, 'measured_at', None) else time_str
+    fac_name = elder.room.zone.facility.name if (elder.room and elder.room.zone) else "System_Global"
+
+    log_data = {
+        "time": log_time,
+        "date_key": log_time[:10],
+        "base_type": "Cân Nặng",
+        "type": "Cập nhật Cân Nặng",
+        "bp": "", "pulse": "", "temp": "", "spo2": "",
+        "weight": f"{payload.weight} kg",
+        "staff": current_user.full_name,
+        "vital_note": payload.notes or "Hiệu chỉnh cân nặng",
+        "shift_note": "",
+        "is_update": True, # Tìm kiếm để sửa
+        "abnormal_flags": {}
+    }
+    background_tasks.add_task(append_elder_health_log_to_drive, fac_name, elder.full_name, log_data)
 
     return record
 

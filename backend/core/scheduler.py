@@ -4,25 +4,21 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from core.constants import DEFAULT_SHIFT_SETTINGS
+
 
 from database import SessionLocal
 import models
 from services.shift_service import auto_close_and_check_missing_assets, auto_open_shift
 from services.drive_service import (
     cleanup_old_drive_folders, 
-    upload_backup_file_to_drive, 
     cleanup_old_db_backups, 
     upload_db_backup_to_drive
 )
 from services.backup_service import execute_database_dump
 
 # Fallback khung giờ mới: Sáng 08:00 - 19:00 | Tối 20:00 - 07:00
-DEFAULT_SHIFT_SETTINGS_NEW = {
-    "morning_start": "08:00",
-    "morning_end": "19:00",
-    "evening_start": "20:00",
-    "evening_end": "07:00"
-}
+DEFAULT_SHIFT_SETTINGS_NEW = DEFAULT_SHIFT_SETTINGS
 
 scheduler = BackgroundScheduler(timezone="Asia/Ho_Chi_Minh")
 
@@ -118,7 +114,7 @@ def scheduled_audit_log_archive_and_cleanup():
             output_audit.seek(0)
             
             filename_audit = f"TamAn_AuditLog_Archive_{timestamp_now}.xlsx"
-            upload_backup_file_to_drive(file_bytes=output_audit.getvalue(), filename=filename_audit)
+            upload_db_backup_to_drive(file_bytes=output_audit.getvalue(), filename=filename_audit)
             
             db.query(models.AuditLog).filter(models.AuditLog.created_at < cutoff_time_audit).delete(synchronize_session=False)
             db.commit()
@@ -162,7 +158,7 @@ def scheduled_audit_log_archive_and_cleanup():
             output_inspect.seek(0)
             
             filename_inspect = f"TamAn_InspectionLog_Archive_{timestamp_now}.xlsx"
-            upload_backup_file_to_drive(file_bytes=output_inspect.getvalue(), filename=filename_inspect)
+            upload_db_backup_to_drive(file_bytes=output_inspect.getvalue(), filename=filename_inspect)
             
             ids_to_delete = [item[0].id for item in old_inspections]
             deleted_count = db.query(models.InspectionLog).filter(
@@ -199,7 +195,7 @@ def scheduled_audit_log_archive_and_cleanup():
             output_login.seek(0)
             
             filename_login = f"TamAn_LoginLog_Archive_{timestamp_now}.xlsx"
-            upload_backup_file_to_drive(file_bytes=output_login.getvalue(), filename=filename_login)
+            upload_db_backup_to_drive(file_bytes=output_login.getvalue(), filename=filename_login)
 
             deleted_login_count = db.query(models.LoginLog).filter(models.LoginLog.login_time < cutoff_time_login).delete(synchronize_session=False)
             db.commit()
