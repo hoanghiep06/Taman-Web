@@ -1,4 +1,3 @@
-import { ResidentSummary } from "../ResidentSummary/ResidentSummary";
 import { Notification } from "../Notification/Notification";
 
 import styles from "./DashboardHeader.module.css";
@@ -23,7 +22,6 @@ export const DashboardHeader = ({
             </div>
 
             <div className={styles.right}>
-                {facility && <ResidentSummary facility={facility} />}
 
                 <div className={styles.shift}>
                     {shift}
