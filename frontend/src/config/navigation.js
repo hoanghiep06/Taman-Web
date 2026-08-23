@@ -191,9 +191,9 @@ export const SIDEBAR_MENU = {
         },
 
         {
-            title: "Danh sách cụ",
-            icon: "👴",
-            path: "/elders"
+            title: "Ca trực",
+            icon: "📅",
+            path: "/shifts"
         },
 
         {
