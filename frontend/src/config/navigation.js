@@ -79,7 +79,7 @@ export const SIDEBAR_MENU = {
         {
             title: "Nhân sự",
             icon: "👨‍⚕️",
-            path: "/staffs"
+            path: "/users"
         },
 
         {
