@@ -25,6 +25,9 @@ export const UserManagementPage = () => {
   const [selectedHistoryUser, setSelectedHistoryUser] = useState(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen]   = useState(false);
 
+  // Manager quản lý toàn hệ thống (không gắn cố định 1 cơ sở) — dùng ở nhiều chỗ bên dưới
+  const isManagerWithoutFixedFacility = user?.role === ROLES.MANAGER && !user?.facility_id;
+
   const ROLE_FILTER_OPTIONS = [
     { value: 'ALL',              label: 'Tất cả chức vụ' },
     { value: ROLES.ADMIN,        label: 'Quản trị viên (Admin)' },
@@ -103,17 +106,27 @@ export const UserManagementPage = () => {
     catch { alert('Không thể xóa tài khoản này!'); }
   };
 
-  // Lọc theo cơ sở: Manager chỉ thấy user cùng facility_id với mình.
-  const visibleUsers = user?.role === ROLES.MANAGER
-    ? usersList.filter((u) => u.facility_id === user.facility_id)
-    : usersList;
+  // Lọc theo cơ sở:
+  // - Admin: thấy toàn bộ, không lọc gì.
+  // - Manager có facility_id cụ thể: chỉ thấy user cùng cơ sở với mình.
+  // - Manager KHÔNG có facility_id (quản lý toàn hệ thống/nhiều cơ sở): thấy TẤT CẢ user
+  //   ở mọi cơ sở, ngoại trừ tài khoản Admin.
+  const visibleUsers = useMemo(() => {
+    if (user?.role !== ROLES.MANAGER) return usersList;
 
+    if (isManagerWithoutFixedFacility) {
+      return usersList.filter((u) => u.role !== ROLES.ADMIN);
+    }
 
+    return usersList.filter((u) => u.facility_id === user.facility_id);
+  }, [usersList, user, isManagerWithoutFixedFacility]);
 
-  // Danh sách cơ sở duy nhất — chỉ Admin cần, lấy trực tiếp từ dữ liệu user đã tải,
-  // tránh phải gọi thêm API facilities riêng.
+  // Danh sách cơ sở duy nhất cho dropdown lọc — dùng cho Admin, và cho Manager quản lý
+  // toàn hệ thống (vì họ cũng đang thấy user của nhiều cơ sở nên cần lọc qua lại được).
+  const showFacilityFilter = user?.role === ROLES.ADMIN || isManagerWithoutFixedFacility;
+
   const facilityOptions = useMemo(() => {
-    if (user?.role !== ROLES.ADMIN) return [];
+    if (!showFacilityFilter) return [];
     const unique = new Map();
     usersList.forEach((u) => {
       if (u.facility_id && u.facility_name && !unique.has(u.facility_id)) {
@@ -121,7 +134,7 @@ export const UserManagementPage = () => {
       }
     });
     return Array.from(unique, ([id, name]) => ({ id, name }));
-  }, [usersList, user?.role]);
+  }, [usersList, showFacilityFilter]);
 
   const filteredUsers = visibleUsers.filter(({ full_name, username, role, facility_id }) => {
     const q = searchQuery.toLowerCase();
@@ -190,7 +203,11 @@ export const UserManagementPage = () => {
 
   if (loading) return <div className={styles.loadingText}>Đang nạp dữ liệu nhân sự...</div>;
 
-  const colSpanCount = user?.role === ROLES.ADMIN ? 7 : 6;
+  // Hiện cột "Cơ Sở" khi người xem thấy dữ liệu của nhiều cơ sở cùng lúc (Admin, hoặc
+  // Manager quản lý toàn hệ thống) — Manager có cơ sở cố định thì không cần cột này vì
+  // toàn bộ danh sách chỉ thuộc đúng 1 cơ sở của họ.
+  const showFacilityColumn = user?.role === ROLES.ADMIN || isManagerWithoutFixedFacility;
+  const colSpanCount = showFacilityColumn ? 7 : 6;
 
   return (
     <div className={styles.container}>
@@ -198,9 +215,11 @@ export const UserManagementPage = () => {
         <div>
           <h2 className={styles.pageTitle}>Quản Lý Nhân Sự Hệ Thống</h2>
           <p className={styles.pageSubtitle}>
-            {user?.role === ROLES.MANAGER
+            {user?.role === ROLES.MANAGER && !isManagerWithoutFixedFacility
               ? `Xem danh sách, phân quyền và điều phối tài khoản tại ${user?.facility_name || 'cơ sở của bạn'}`
-              : 'Xem danh sách, phân quyền và điều phối tài khoản vận hành'}
+              : isManagerWithoutFixedFacility
+                ? 'Xem danh sách, phân quyền và điều phối tài khoản tại mọi cơ sở'
+                : 'Xem danh sách, phân quyền và điều phối tài khoản vận hành'}
           </p>
         </div>
 
@@ -228,8 +247,8 @@ export const UserManagementPage = () => {
             ))}
           </select>
 
-          {/* Chỉ Admin mới thấy — Manager đã tự động giới hạn theo cơ sở của mình rồi */}
-          {user?.role === ROLES.ADMIN && facilityOptions.length > 0 && (
+          {/* Admin, hoặc Manager quản lý toàn hệ thống — vì cả 2 đều thấy dữ liệu nhiều cơ sở */}
+          {showFacilityFilter && facilityOptions.length > 0 && (
             <select
               className={styles.roleFilterSelect}
               value={facilityFilter}
@@ -270,7 +289,7 @@ export const UserManagementPage = () => {
                 <th className={styles.th}>Họ và Tên</th>
                 <th className={styles.th}>Tên Đăng Nhập</th>
                 <th className={styles.th}>Chức Vụ</th>
-                {user?.role === ROLES.ADMIN && <th className={styles.th}>Cơ Sở</th>}
+                {showFacilityColumn && <th className={styles.th}>Cơ Sở</th>}
                 <th className={styles.th}>Trạng Thái</th>
                 <th className={styles.thCenter}>Hành Động</th>
               </tr>
@@ -292,7 +311,7 @@ export const UserManagementPage = () => {
                       <td className={styles.td}>
                         <span className={roleBadgeClass(targetUser.role)}>{targetUser.role}</span>
                       </td>
-                      {user?.role === ROLES.ADMIN && (
+                      {showFacilityColumn && (
                         <td className={styles.td}>{targetUser.facility_name || '—'}</td>
                       )}
                       <td className={styles.td}>

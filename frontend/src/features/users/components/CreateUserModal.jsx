@@ -36,14 +36,21 @@ export const CreateUserModal = ({ isOpen, onClose, onSave, currentUserRole, curr
   const isManager = currentUserRole === ROLES.MANAGER;
   const isAdmin = currentUserRole === ROLES.ADMIN;
 
-  // Reset form mỗi lần mở modal, gán sẵn facility của Manager nếu có.
-  // Admin cần tải danh sách cơ sở để tự chọn — Manager không cần vì cơ sở đã bị khóa cứng.
+  // Manager có facility_id cụ thể -> bị khoá cứng vào đúng cơ sở đó.
+  // Manager KHÔNG có facility_id (facility_id = null, tức quản lý toàn bộ hệ thống/nhiều cơ sở)
+  // -> được tự chọn cơ sở cho tài khoản mới, giống hệt Admin.
+  const isManagerWithoutFixedFacility = isManager && !currentUserFacilityId;
+  const isManagerLockedToFacility = isManager && Boolean(currentUserFacilityId);
+  const canPickFacility = isAdmin || isManagerWithoutFixedFacility;
+
+  // Reset form mỗi lần mở modal, gán sẵn facility cố định của Manager nếu có.
+  // Tải danh sách cơ sở khi người tạo được quyền tự chọn (Admin, hoặc Manager không cố định cơ sở).
   useEffect(() => {
     if (!isOpen) return;
 
     setFormData(buildEmptyForm(currentUserFacilityId));
 
-    if (isAdmin) {
+    if (canPickFacility) {
       setLoadingFacilities(true);
       facilitiesApi.getAllFacilities()
         .then((data) => setFacilities(data))
@@ -53,7 +60,7 @@ export const CreateUserModal = ({ isOpen, onClose, onSave, currentUserRole, curr
         })
         .finally(() => setLoadingFacilities(false));
     }
-  }, [isOpen, currentUserFacilityId, isAdmin]);
+  }, [isOpen, currentUserFacilityId, canPickFacility]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -62,9 +69,11 @@ export const CreateUserModal = ({ isOpen, onClose, onSave, currentUserRole, curr
       return;
     }
 
-    // Manager: khoá cứng facility_id = cơ sở của chính Manager, không cho ghi đè dù form có sửa được hay không —
-    // đảm bảo an toàn ngay cả khi UI bị can thiệp, vì backend cũng tự ép lại giá trị này ở phía server.
-    const payload = isManager
+    // Manager có cơ sở cố định: khoá cứng facility_id theo đúng cơ sở của Manager, không cho ghi đè
+    // dù form có sửa được hay không — đảm bảo an toàn ngay cả khi UI bị can thiệp, vì backend cũng
+    // tự ép lại giá trị này ở phía server.
+    // Admin / Manager không cố định cơ sở: dùng đúng giá trị đã chọn trong dropdown.
+    const payload = isManagerLockedToFacility
       ? { ...formData, facility_id: currentUserFacilityId }
       : { ...formData, facility_id: formData.facility_id ? Number(formData.facility_id) : null };
 
@@ -121,8 +130,8 @@ export const CreateUserModal = ({ isOpen, onClose, onSave, currentUserRole, curr
           </select>
         </div>
 
-        {/* Admin: được tự chọn cơ sở cho tài khoản mới (hoặc để trống nếu không gắn cơ sở cụ thể) */}
-        {isAdmin && (
+        {/* Admin, hoặc Manager không cố định cơ sở (quản lý toàn bộ hệ thống): được tự chọn cơ sở */}
+        {canPickFacility && (
           <div className={styles.inputGroup}>
             <label className={styles.label}>Cơ Sở</label>
             <select
@@ -141,8 +150,8 @@ export const CreateUserModal = ({ isOpen, onClose, onSave, currentUserRole, curr
           </div>
         )}
 
-        {/* Manager: cơ sở bị khoá cứng, chỉ hiển thị để biết, không cho sửa */}
-        {isManager && (
+        {/* Manager có cơ sở cố định: khoá cứng, chỉ hiển thị để biết, không cho sửa */}
+        {isManagerLockedToFacility && (
           <div className={styles.inputGroup}>
             <label className={styles.label}>Cơ Sở</label>
             <input
