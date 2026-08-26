@@ -32,6 +32,17 @@ export const StatCard = ({ title, value, icon, color, onClick }) => (
 );
 
 /* =========================================================
+   UNDER DEVELOPMENT
+========================================================= */
+
+export const UnderDevelopment = ({ message = "Tính năng đang được phát triển" }) => (
+    <div className={styles.underDevelopment}>
+        <span className={styles.underDevelopmentIcon}>🚧</span>
+        <p>{message}</p>
+    </div>
+);
+
+/* =========================================================
    SECTION
 ========================================================= */
 

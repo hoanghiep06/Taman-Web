@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { StatCard, DetailListModal, DetailFieldsModal } from "../../ui/DashboardUI";
+import { StatCard, DetailListModal, DetailFieldsModal, Modal, UnderDevelopment } from "../../ui/DashboardUI";
 import { dashboardApi } from "../../../api/dashboardApi";
-import {
-    COORDINATOR_TASKS,
-    COORDINATOR_NOTIFICATIONS,
-} from "../../../mock/dashboardMockData";
 
 import uiStyles from "../../ui/DashboardUI.module.css";
 
@@ -16,7 +12,6 @@ export const CoordinatorOverview = () => {
 
     const [detailType, setDetailType] = useState(null);
     const [selectedElder, setSelectedElder] = useState(null);
-    const [selectedTask, setSelectedTask] = useState(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -60,7 +55,7 @@ export const CoordinatorOverview = () => {
 
                 <StatCard
                     title="Công việc hôm nay"
-                    value={COORDINATOR_TASKS.length}
+                    value="—"
                     icon="📋"
                     color="#ea580c"
                     onClick={() => setDetailType("tasks")}
@@ -68,7 +63,7 @@ export const CoordinatorOverview = () => {
 
                 <StatCard
                     title="Thông báo"
-                    value={COORDINATOR_NOTIFICATIONS.length}
+                    value="—"
                     icon="🔔"
                     color="#dc2626"
                     onClick={() => setDetailType("notifications")}
@@ -88,30 +83,15 @@ export const CoordinatorOverview = () => {
             )}
 
             {detailType === "tasks" && (
-                <DetailListModal
-                    title="Công việc hôm nay"
-                    items={COORDINATOR_TASKS}
-                    onClose={() => setDetailType(null)}
-                    onItemClick={(task) => setSelectedTask(task)}
-                    renderPrimary={(task) => task.task}
-                    renderSecondary={(task) => `${task.assignee} · ${task.time} (${task.date})`}
-                    enableSearch
-                    searchKeys={["assignee", "elder"]}
-                    enableFilter
-                    filterKey="status"
-                    filterLabel="trạng thái"
-                />
+                <Modal title="Công việc hôm nay" onClose={() => setDetailType(null)}>
+                    <UnderDevelopment message="Tính năng quản lý công việc đang được phát triển." />
+                </Modal>
             )}
 
             {detailType === "notifications" && (
-                <DetailListModal
-                    title="Thông báo"
-                    items={COORDINATOR_NOTIFICATIONS}
-                    onClose={() => setDetailType(null)}
-                    renderPrimary={(item) => item.title}
-                    renderSecondary={(item) => `${item.detail} · ${item.time}`}
-                    enableSearch
-                />
+                <Modal title="Thông báo" onClose={() => setDetailType(null)}>
+                    <UnderDevelopment message="Tính năng thông báo đang được phát triển." />
+                </Modal>
             )}
 
             {selectedElder && (
@@ -123,21 +103,6 @@ export const CoordinatorOverview = () => {
                         { label: "Họ tên", value: selectedElder.full_name },
                         { label: "Phòng", value: selectedElder.room },
                         { label: "Giới tính", value: selectedElder.gender },
-                    ]}
-                />
-            )}
-
-            {selectedTask && (
-                <DetailFieldsModal
-                    title="Chi tiết công việc"
-                    onClose={() => setSelectedTask(null)}
-                    fields={[
-                        { label: "Công việc", value: selectedTask.task },
-                        { label: "Cụ", value: selectedTask.elder },
-                        { label: "Người thực hiện", value: selectedTask.assignee },
-                        { label: "Chức vụ", value: selectedTask.assigneeRole || "Caregiver" },
-                        { label: "Thời gian", value: `${selectedTask.time} (${selectedTask.date})` },
-                        { label: "Trạng thái", value: selectedTask.status },
                     ]}
                 />
             )}

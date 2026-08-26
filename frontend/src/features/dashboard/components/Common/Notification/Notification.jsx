@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../../../../contexts/AuthContext";
 import { NotificationCard } from "../NotificationCard/NotificationCard";
-import { getRoleNotifications } from "../../../mock/dashboardMockData";
 import { dashboardApi } from "../../../api/dashboardApi";
-
+import { flattenAttentionElders, getElderNote } from "../../doctor/utils/doctorTree";
 import styles from "./Notification.module.css";
 
 const formatTime = (isoString) => {
@@ -55,25 +54,16 @@ const buildAdminNotifications = (logs, userById) => {
         .slice(0, 10);
 };
 
-/* ── DOCTOR: chỉ số sinh hiệu bất thường từ dashboard-doctor ── */
-const buildDoctorNotifications = (elders) => {
-    return elders
-        .filter((e) => e.has_abnormal_vital || (e.doctor_attention_reasons || []).length > 0)
-        .map((e) => {
-            const reasons = (e.doctor_attention_reasons || []).join(", ");
-            const vitalNote = e.latest_vital_signs
-                ? `HA ${e.latest_vital_signs.bp_systolic}/${e.latest_vital_signs.bp_diastolic} · SpO₂ ${e.latest_vital_signs.spo2}% · Nhiệt độ ${e.latest_vital_signs.temperature}°C`
-                : "";
-
-            return {
-                id: `elder-${e.elder_id}`,
-                type: e.has_abnormal_vital ? "danger" : "warning",
-                title: `${e.elder_name} · Phòng ${e.room_number}`,
-                message: reasons || vitalNote || "Cần chú ý theo dõi.",
-                time: formatTime(e.latest_vital_signs?.measured_at),
-                read: false,
-            };
-        });
+/* ── DOCTOR: chỉ số sinh hiệu bất thường từ dashboard-doctor (cây facility/zone/room) ── */
+const buildDoctorNotifications = (rawData) => {
+    return flattenAttentionElders(rawData).map((e) => ({
+        id: `elder-${e.elder_id}`,
+        type: "danger",
+        title: `${e.elder_name} · ${e.zone_name} · Phòng ${e.room_number}`,
+        message: e.note,
+        time: formatTime(e.measured_at),
+        read: false,
+    }));
 };
 
 /* ── MANAGER / COORDINATOR / CAREGIVER: nhắc lịch cân quá hạn/sắp đến hạn ── */

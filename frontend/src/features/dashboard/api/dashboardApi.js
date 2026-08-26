@@ -50,4 +50,10 @@ export const dashboardApi = {
   getRandomAudit: (params) => {
     return axiosClient.get('/admin/shifts/random-audit', { params });
   },
+  getVitalsHistory: (params) => {
+    return axiosClient.get('/health/vitals/history', { params });
+  },
+  getCurrentShift: () => {
+    return axiosClient.get('/health/current-shift');
+  },
 };

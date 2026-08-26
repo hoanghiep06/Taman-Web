@@ -1,23 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { dashboardApi } from "../../../api/dashboardApi";
-import { StatCard, DetailListModal, StatusBadge } from "../../ui/DashboardUI";
+import { StatCard, Modal } from "../../ui/DashboardUI";
+import uiStyles from "../../ui/DashboardUI.module.css";
+import { ElderTreeView } from "../ElderTreeView/ElderTreeView";
+import { countTree, filterTree } from "../utils/doctorTree";
 
 import styles from "./DoctorOverview.module.css";
-
-const STATUS_PRIORITY = { "Báo động": 1, "Cần chú ý": 2, "Ổn định": 3 };
-
-const getHealthStatus = (elder) => {
-    if (elder.has_abnormal_vital) return "Báo động";
-    if ((elder.doctor_attention_reasons || []).length > 0) return "Cần chú ý";
-    return "Ổn định";
-};
 
 export const DoctorOverview = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [elders, setElders] = useState([]);
-    const [activeView, setActiveView] = useState(null);
+    const [facilities, setFacilities] = useState([]);
+    const [activeView, setActiveView] = useState(null); // "elders" | "attention" | null
+    const [search, setSearch] = useState("");
 
     useEffect(() => {
         const fetchData = async () => {
@@ -25,7 +21,7 @@ export const DoctorOverview = () => {
                 setLoading(true);
                 setError(null);
                 const data = await dashboardApi.getDoctorDashboard();
-                setElders(data || []);
+                setFacilities(data || []);
             } catch (err) {
                 setError("Không thể tải dữ liệu tổng quan.");
                 console.error("DoctorOverview fetch error:", err);
@@ -36,11 +32,14 @@ export const DoctorOverview = () => {
         fetchData();
     }, []);
 
-    const eldersWithStatus = elders
-        .map((e) => ({ ...e, health: getHealthStatus(e) }))
-        .sort((a, b) => STATUS_PRIORITY[a.health] - STATUS_PRIORITY[b.health]);
+    const { total, attention } = countTree(facilities);
 
-    const attentionElders = eldersWithStatus.filter((e) => e.health !== "Ổn định");
+    const treeForView = useMemo(() => {
+        if (activeView === "attention") {
+            return filterTree(facilities, { search, statusFilter: "Báo động" });
+        }
+        return filterTree(facilities, { search, statusFilter: "all" });
+    }, [facilities, search, activeView]);
 
     if (loading) return <p>Đang tải...</p>;
     if (error) return <p>{error}</p>;
@@ -50,48 +49,45 @@ export const DoctorOverview = () => {
             <div className={styles.grid}>
                 <StatCard
                     title="Tổng số cụ"
-                    value={elders.length}
+                    value={total}
                     icon="👴"
                     color="#2563eb"
-                    onClick={() => setActiveView("elders")}
+                    onClick={() => {
+                        setSearch("");
+                        setActiveView("elders");
+                    }}
                 />
 
                 <StatCard
                     title="Cần chú ý"
-                    value={attentionElders.length}
+                    value={attention}
                     icon="🔔"
                     color="#dc2626"
-                    onClick={() => setActiveView("attention")}
+                    onClick={() => {
+                        setSearch("");
+                        setActiveView("attention");
+                    }}
                 />
             </div>
 
-            {activeView === "elders" && (
-                <DetailListModal
-                    title="Danh sách cụ"
-                    items={eldersWithStatus}
+            {activeView && (
+                <Modal
+                    title={activeView === "attention" ? "Cụ cần chú ý" : "Danh sách cụ"}
                     onClose={() => setActiveView(null)}
-                    renderPrimary={(p) => p.elder_name}
-                    renderSecondary={(p) => `Phòng ${p.room_number}`}
-                    renderBadge={(p) => <StatusBadge status={p.health} />}
-                    enableSearch
-                    searchKeys={["room_number", "health"]}
-                    enableFilter
-                    filterKey="health"
-                    filterLabel="tình trạng"
-                    filterOptions={["Báo động", "Cần chú ý", "Ổn định"]}
-                />
-            )}
+                    wide
+                >
+                    <div className={uiStyles.filterBar}>
+                        <input
+                            type="text"
+                            className={uiStyles.searchInput}
+                            placeholder="Tìm theo tên cụ hoặc số phòng..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
 
-            {activeView === "attention" && (
-                <DetailListModal
-                    title="Cụ cần chú ý"
-                    items={attentionElders}
-                    onClose={() => setActiveView(null)}
-                    renderPrimary={(p) => p.elder_name}
-                    renderSecondary={(p) => `Phòng ${p.room_number} · ${(p.doctor_attention_reasons || []).join(", ")}`}
-                    renderBadge={(p) => <StatusBadge status={p.health} />}
-                    enableSearch
-                />
+                    <ElderTreeView facilities={treeForView} />
+                </Modal>
             )}
         </>
     );

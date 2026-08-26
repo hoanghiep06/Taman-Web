@@ -1,27 +1,18 @@
 import { useState } from "react";
 
-import { CAREGIVER_STATS, CAREGIVER_NOTIFICATIONS } from "../../../mock/dashboardMockData";
-import { StatCard, DetailListModal, StatusBadge } from "../../ui/DashboardUI";
-
+import { StatCard, Modal, UnderDevelopment } from "../../ui/DashboardUI";
 import uiStyles from "../../ui/DashboardUI.module.css";
 
-// tasks: mảng công việc đã được lift state từ CaregiverDashboard (có status "completed" | "pending")
-export const CaregiverOverview = ({ tasks }) => {
+export const CaregiverOverview = () => {
     // "all" | "pending" | "completed" | "notifications" | null
     const [view, setView] = useState(null);
 
-    const completedTasks = tasks.filter((t) => t.status === "completed");
-    const pendingTasks = tasks.filter((t) => t.status !== "completed");
-
-    const VIEW_CONFIG = {
-        all: { title: "Tất cả công việc hôm nay", data: tasks },
-        pending: { title: "Công việc chưa hoàn thành", data: pendingTasks },
-        completed: { title: "Công việc đã hoàn thành", data: completedTasks },
-        notifications: { title: "Thông báo mới", data: CAREGIVER_NOTIFICATIONS },
+    const VIEW_TITLE = {
+        all: "Tất cả công việc hôm nay",
+        pending: "Công việc chưa hoàn thành",
+        completed: "Công việc đã hoàn thành",
+        notifications: "Thông báo mới",
     };
-
-    const config = view ? VIEW_CONFIG[view] : null;
-    const isTaskView = view === "all" || view === "pending" || view === "completed";
 
     return (
         <section>
@@ -30,7 +21,7 @@ export const CaregiverOverview = ({ tasks }) => {
             <div className={uiStyles.statistics}>
                 <StatCard
                     title="Công việc hôm nay"
-                    value={tasks.length}
+                    value="—"
                     icon="📋"
                     color="#2563eb"
                     onClick={() => setView("all")}
@@ -38,7 +29,7 @@ export const CaregiverOverview = ({ tasks }) => {
 
                 <StatCard
                     title="Đã hoàn thành"
-                    value={completedTasks.length}
+                    value="—"
                     icon="✅"
                     color="#15803d"
                     onClick={() => setView("completed")}
@@ -46,7 +37,7 @@ export const CaregiverOverview = ({ tasks }) => {
 
                 <StatCard
                     title="Cần thực hiện"
-                    value={pendingTasks.length}
+                    value="—"
                     icon="⏳"
                     color="#b45309"
                     onClick={() => setView("pending")}
@@ -54,39 +45,23 @@ export const CaregiverOverview = ({ tasks }) => {
 
                 <StatCard
                     title="Thông báo mới"
-                    value={CAREGIVER_STATS.notifications}
+                    value="—"
                     icon="🔔"
                     color="#dc2626"
                     onClick={() => setView("notifications")}
                 />
             </div>
 
-            {config && isTaskView && (
-                <DetailListModal
-                    title={config.title}
-                    items={config.data}
-                    onClose={() => setView(null)}
-                    renderPrimary={(task) => `Cho cụ ${task.elder} uống ${task.task}`}
-                    renderSecondary={(task) => `${task.time} · ${task.room}`}
-                    renderBadge={(task) => (
-                        <StatusBadge
-                            status={task.status === "completed" ? "Đã hoàn thành" : "Chưa hoàn thành"}
-                        />
-                    )}
-                    enableSearch
-                    searchKeys={["elder", "room"]}
-                />
-            )}
-
-            {config && view === "notifications" && (
-                <DetailListModal
-                    title={config.title}
-                    items={config.data}
-                    onClose={() => setView(null)}
-                    renderPrimary={(item) => item.title}
-                    renderSecondary={(item) => `${item.detail} · ${item.time}`}
-                    enableSearch
-                />
+            {view && (
+                <Modal title={VIEW_TITLE[view]} onClose={() => setView(null)}>
+                    <UnderDevelopment
+                        message={
+                            view === "notifications"
+                                ? "Tính năng thông báo đang được phát triển."
+                                : "Tính năng quản lý công việc đang được phát triển."
+                        }
+                    />
+                </Modal>
             )}
         </section>
     );

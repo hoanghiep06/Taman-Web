@@ -1,8 +1,46 @@
+import { useEffect, useState } from "react";
+import { dashboardApi } from "../../../api/dashboardApi";
 import styles from "./CurrentShift.module.css";
 
-// completedCount/totalCount nhận từ CaregiverDashboard (cùng nguồn state với TodayTasks)
-export const CurrentShift = ({ completedCount, totalCount }) => {
-    const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+export const CurrentShift = () => {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [shift, setShift] = useState(null);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                const data = await dashboardApi.getCurrentShift();
+                setShift(data || null);
+            } catch (err) {
+                setError("Không thể tải thông tin ca trực.");
+                console.error("CurrentShift fetch error:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    if (loading) {
+        return (
+            <section className={styles.card}>
+                <h2>Ca trực hiện tại</h2>
+                <p>Đang tải...</p>
+            </section>
+        );
+    }
+
+    if (error) {
+        return (
+            <section className={styles.card}>
+                <h2>Ca trực hiện tại</h2>
+                <p>{error}</p>
+            </section>
+        );
+    }
 
     return (
         <section className={styles.card}>
@@ -11,17 +49,14 @@ export const CurrentShift = ({ completedCount, totalCount }) => {
             <div className={styles.info}>
                 <div>
                     <span>Ca</span>
-                    <strong>Ca sáng</strong>
+                    <strong>{shift?.shift_type ?? "—"}</strong>
                 </div>
 
                 <div>
                     <span>Thời gian</span>
-                    <strong>08:00 - 16:00</strong>
-                </div>
-
-                <div>
-                    <span>Tiến độ</span>
-                    <strong>{progress}%</strong>
+                    <strong>
+                        {shift?.start_time ?? "—"} - {shift?.end_time ?? "—"}
+                    </strong>
                 </div>
             </div>
         </section>

@@ -1,34 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { dashboardApi } from "../../../api/dashboardApi";
-import { DetailListModal, Modal, StatusBadge } from "../../ui/DashboardUI";
+import { Modal, StatusBadge } from "../../ui/DashboardUI";
 import uiStyles from "../../ui/DashboardUI.module.css";
+import { ElderTreeView } from "../ElderTreeView/ElderTreeView";
+import { filterTree } from "../utils/doctorTree";
 import styles from "./PatientStatus.module.css";
-
-const STATUS_PRIORITY = { "Báo động": 1, "Cần chú ý": 2, "Ổn định": 3 };
-
-const getHealthStatus = (elder) => {
-    if (elder.has_abnormal_vital) return "Báo động";
-    if ((elder.doctor_attention_reasons || []).length > 0) return "Cần chú ý";
-    return "Ổn định";
-};
-
-const getNote = (elder) => {
-    if ((elder.doctor_attention_reasons || []).length) {
-        return elder.doctor_attention_reasons.join(", ");
-    }
-    if (elder.latest_vital_signs) {
-        const v = elder.latest_vital_signs;
-        return `HA ${v.bp_systolic}/${v.bp_diastolic} · SpO₂ ${v.spo2}% · Nhiệt độ ${v.temperature}°C`;
-    }
-    return "Chưa có dữ liệu sinh hiệu";
-};
 
 export const PatientStatus = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [elders, setElders] = useState([]);
+    const [facilities, setFacilities] = useState([]);
     const [showAllModal, setShowAllModal] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState(null);
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("all");
 
     useEffect(() => {
         const fetchData = async () => {
@@ -36,7 +21,7 @@ export const PatientStatus = () => {
                 setLoading(true);
                 setError(null);
                 const data = await dashboardApi.getDoctorDashboard();
-                setElders(data || []);
+                setFacilities(data || []);
             } catch (err) {
                 setError("Không thể tải tình trạng cụ.");
                 console.error("PatientStatus fetch error:", err);
@@ -47,17 +32,26 @@ export const PatientStatus = () => {
         fetchData();
     }, []);
 
-    const eldersWithStatus = elders.map((e) => ({
-        ...e,
-        health: getHealthStatus(e),
-        note: getNote(e),
-    }));
+    // Danh sách 3 cụ cần chú ý nhất để hiện preview (chỉ báo động/bất thường)
+    const attentionPreview = useMemo(() => {
+        const filtered = filterTree(facilities, { statusFilter: "Báo động" });
+        const flat = [];
+        filtered.forEach((f) =>
+            f.zones.forEach((z) =>
+                z.rooms.forEach((r) =>
+                    r.elders.forEach((e) =>
+                        flat.push({ ...e, room_number: r.room_number, zone_name: z.zone_name })
+                    )
+                )
+            )
+        );
+        return flat.slice(0, 3);
+    }, [facilities]);
 
-    const sortedPatients = [...eldersWithStatus].sort(
-        (a, b) => STATUS_PRIORITY[a.health] - STATUS_PRIORITY[b.health]
+    const modalTree = useMemo(
+        () => filterTree(facilities, { search, statusFilter }),
+        [facilities, search, statusFilter]
     );
-
-    const visibleAlerts = sortedPatients.slice(0, 3);
 
     if (loading) {
         return (
@@ -87,67 +81,90 @@ export const PatientStatus = () => {
             </div>
 
             <div className={styles.list}>
-                {visibleAlerts.map((patient) => (
+                {attentionPreview.map((patient) => (
                     <div key={patient.elder_id} className={styles.item}>
                         <button
                             type="button"
                             className={styles.name}
-                            onClick={() => setSelectedPatient(patient)}
+                            onClick={() =>
+                                setSelectedPatient({
+                                    ...patient,
+                                    health: "Báo động",
+                                })
+                            }
                         >
-                            {patient.elder_name}
+                            {patient.full_name}
                         </button>
 
                         <div className={styles.itemRight}>
                             <span className={styles.condition}>
-                                {patient.room_number} · {patient.note}
+                                {patient.zone_name} · {patient.room_number}
                             </span>
-                            <StatusBadge status={patient.health} />
+                            <StatusBadge status="Báo động" />
                         </div>
                     </div>
                 ))}
 
-                {!sortedPatients.length && (
-                    <p className={styles.emptyMessage}>Không có cảnh báo sức khỏe của cụ nào.</p>
+                {!attentionPreview.length && (
+                    <p className={styles.emptyMessage}>Không có cảnh báo sức khỏe nào cần chú ý ngay.</p>
                 )}
             </div>
 
             {showAllModal && (
-                <DetailListModal
-                    title="Tình trạng sức khỏe tất cả cụ"
-                    items={sortedPatients}
-                    onClose={() => setShowAllModal(false)}
-                    onItemClick={(item) => {
-                        setShowAllModal(false);
-                        setSelectedPatient(item);
-                    }}
-                    renderPrimary={(p) => p.elder_name}
-                    renderSecondary={(p) => `Phòng: ${p.room_number} · Ghi chú: ${p.note}`}
-                    renderBadge={(p) => <StatusBadge status={p.health} />}
-                    enableSearch
-                    searchKeys={["room_number"]}
-                    enableFilter
-                    filterKey="health"
-                    filterLabel="tình trạng"
-                    filterOptions={["Báo động", "Cần chú ý", "Ổn định"]}
-                />
+                <Modal title="Tình trạng sức khỏe tất cả cụ" onClose={() => setShowAllModal(false)} wide>
+                    <div className={uiStyles.filterBar}>
+                        <input
+                            type="text"
+                            className={uiStyles.searchInput}
+                            placeholder="Tìm theo tên cụ hoặc số phòng..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+
+                        <select
+                            className={uiStyles.filterSelect}
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                        >
+                            <option value="all">Tất cả tình trạng</option>
+                            <option value="Báo động">Báo động</option>
+                            <option value="Bất thường">Bất thường</option>
+                            <option value="Chưa đo">Chưa đo</option>
+                            <option value="Ổn định">Ổn định</option>
+                        </select>
+                    </div>
+
+                    <ElderTreeView
+                        facilities={modalTree}
+                        onElderClick={(elder) => {
+                            setShowAllModal(false);
+                            setSelectedPatient(elder);
+                        }}
+                    />
+                </Modal>
             )}
 
             {selectedPatient && (
                 <Modal title="Hồ sơ sức khỏe của cụ" onClose={() => setSelectedPatient(null)}>
                     <div className={uiStyles.profile}>
                         <div className={uiStyles.profileAvatar}>
-                            {selectedPatient.elder_name.charAt(0)}
+                            {(selectedPatient.full_name ?? selectedPatient.elder_name ?? "?").charAt(0)}
                         </div>
-                        <h3 className={styles.profileName}>{selectedPatient.elder_name}</h3>
-                        <p><b>Phòng ở:</b> {selectedPatient.room_number}</p>
-                        <p><b>Trạng thái sức khỏe:</b> <StatusBadge status={selectedPatient.health} /></p>
-                        <p><b>Chẩn đoán/Lưu ý:</b> {selectedPatient.note}</p>
-                        {selectedPatient.active_prescription_url && (
+                        <h3 className={styles.profileName}>
+                            {selectedPatient.full_name ?? selectedPatient.elder_name}
+                        </h3>
+                        <p>
+                            <b>Cơ sở:</b> {selectedPatient.facility_name ?? "—"}
+                        </p>
+                        <p>
+                            <b>Khu / Phòng:</b> {selectedPatient.zone_name} · {selectedPatient.room_number}
+                        </p>
+                        <p>
+                            <b>Trạng thái sức khỏe:</b> <StatusBadge status={selectedPatient.health} />
+                        </p>
+                        {selectedPatient.note && (
                             <p>
-                                <b>Đơn thuốc hiện tại:</b>{" "}
-                                <a href={selectedPatient.active_prescription_url} target="_blank" rel="noreferrer">
-                                    Xem đơn thuốc
-                                </a>
+                                <b>Ghi chú:</b> {selectedPatient.note}
                             </p>
                         )}
                     </div>

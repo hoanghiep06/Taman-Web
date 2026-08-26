@@ -1,71 +1,110 @@
-import { useState } from "react";
-import { MANAGER_HEALTH_ALERTS } from "../../../mock/dashboardMockData";
+import { useEffect, useState } from "react";
+import { dashboardApi } from "../../../api/dashboardApi";
 import { DetailListModal, StatusBadge } from "../../ui/DashboardUI";
 import styles from "./HealthcareOverview.module.css";
 
+const formatVital = (v) =>
+    `HA ${v.bp_systolic}/${v.bp_diastolic} · Mạch ${v.pulse} · SpO2 ${v.spo2}% · Nhiệt độ ${v.temperature}°C`;
+
 export const HealthcareOverview = () => {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [alerts, setAlerts] = useState([]);
     const [showModal, setShowModal] = useState(false);
 
-    // Sort: danger first, then warning
-    const sortedAlerts = [...MANAGER_HEALTH_ALERTS].sort((a, b) => {
-        const severityA = a.severity === "danger" ? 0 : 1;
-        const severityB = b.severity === "danger" ? 0 : 1;
-        return severityA - severityB;
-    });
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
 
-    const visibleAlerts = sortedAlerts.slice(0, 3);
+                const [vitalsData, eldersData] = await Promise.all([
+                    dashboardApi.getVitalsHistory({ limit_days: 1 }),
+                    dashboardApi.getElders(),
+                ]);
+
+                const elderById = (eldersData || []).reduce((acc, e) => {
+                    acc[e.id] = e;
+                    return acc;
+                }, {});
+
+                const abnormal = (vitalsData || [])
+                    .filter((v) => v.is_abnormal)
+                    .map((v) => ({
+                        ...v,
+                        elder_name: elderById[v.elder_id]?.full_name ?? `Cụ #${v.elder_id}`,
+                    }))
+                    .sort((a, b) => new Date(b.measured_at) - new Date(a.measured_at));
+
+                setAlerts(abnormal);
+            } catch (err) {
+                setError("Không thể tải cảnh báo sức khỏe.");
+                console.error("HealthcareOverview fetch error:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    const visibleAlerts = alerts.slice(0, 3);
+
+    if (loading) {
+        return (
+            <section className={styles.card}>
+                <h2>Tình hình y tế</h2>
+                <p className={styles.emptyMessage}>Đang tải...</p>
+            </section>
+        );
+    }
+
+    if (error) {
+        return (
+            <section className={styles.card}>
+                <h2>Tình hình y tế</h2>
+                <p className={styles.emptyMessage}>{error}</p>
+            </section>
+        );
+    }
 
     return (
         <section className={styles.card}>
             <div className={styles.header}>
                 <h2>Tình hình y tế</h2>
 
-                <button
-                    type="button"
-                    className={styles.viewAllButton}
-                    onClick={() => setShowModal(true)}
-                >
-                    Xem tất cả
-                </button>
+                {alerts.length > 0 && (
+                    <button type="button" className={styles.viewAllButton} onClick={() => setShowModal(true)}>
+                        Xem tất cả
+                    </button>
+                )}
             </div>
 
             <div className={styles.list}>
-                {visibleAlerts.map((item) => {
-                    const isDanger = item.severity === "danger";
-                    return (
-                        <div
-                            key={item.id}
-                            className={`${styles.item} ${isDanger ? styles.danger : styles.warning}`}
-                        >
-                            <div className={styles.info}>
-                                <strong>{item.name}</strong>
-                                <span>{item.condition} · {item.value}</span>
-                            </div>
-
-                            <StatusBadge
-                                status={isDanger ? "Báo động đỏ" : "Cần theo dõi"}
-                            />
+                {visibleAlerts.map((item) => (
+                    <div key={item.id} className={`${styles.item} ${styles.warning}`}>
+                        <div className={styles.info}>
+                            <strong>{item.elder_name}</strong>
+                            <span>{formatVital(item)}</span>
                         </div>
-                    );
-                })}
+                        <StatusBadge status="Chỉ số bất thường" />
+                    </div>
+                ))}
 
-                {!sortedAlerts.length && (
-                    <p className={styles.emptyMessage}>Không có cảnh báo sức khỏe nào.</p>
+                {!alerts.length && (
+                    <p className={styles.emptyMessage}>Không có cảnh báo sức khỏe nào hôm nay.</p>
                 )}
             </div>
 
             {showModal && (
                 <DetailListModal
-                    title="Cảnh báo sức khỏe (Đỏ & Vàng)"
-                    items={sortedAlerts}
+                    title="Cảnh báo sức khỏe (chỉ số bất thường hôm nay)"
+                    items={alerts}
                     onClose={() => setShowModal(false)}
-                    renderPrimary={(item) => item.name}
-                    renderSecondary={(item) => `${item.condition} · Chỉ số: ${item.value}`}
-                    renderBadge={(item) => (
-                        <StatusBadge
-                            status={item.severity === "danger" ? "Báo động đỏ" : "Cần theo dõi"}
-                        />
-                    )}
+                    renderPrimary={(item) => item.elder_name}
+                    renderSecondary={(item) => formatVital(item)}
+                    renderBadge={() => <StatusBadge status="Chỉ số bất thường" />}
+                    enableSearch
                 />
             )}
         </section>
