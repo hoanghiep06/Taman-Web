@@ -182,11 +182,14 @@ def record_vital_signs(
     elder = db.query(Elder).options(joinedload(Elder.room).joinedload(Room.zone).joinedload(Zone.facility)).filter(Elder.id == payload.elder_id).first()
     if not elder: raise HTTPException(status_code=404, detail="Không tìm thấy Cụ!")
 
+    active_shift = db.query(Shift).filter(Shift.status == "Open").order_by(Shift.id.desc()).first()
+    actual_shift_type = active_shift.shift_type if active_shift else payload.shift_type.value
+
     flags = calculate_abnormal_flags(payload.spo2, payload.bp_systolic, payload.bp_diastolic, payload.temperature, payload.pulse)
     is_abnormal = flags["any_vital"]
 
     new_record = VitalSignRecord(
-        elder_id=payload.elder_id, measured_by=current_user.id, shift_type=payload.shift_type.value,
+        elder_id=payload.elder_id, measured_by=current_user.id, shift_type=actual_shift_type,
         bp_systolic=payload.bp_systolic, bp_diastolic=payload.bp_diastolic, pulse=payload.pulse,
         spo2=payload.spo2, temperature=payload.temperature, notes=payload.notes, is_abnormal=is_abnormal
     )
@@ -277,16 +280,25 @@ def update_vital_signs(
     return record
 
 
-@router.get("/vitals/elder/{elder_id}", response_model=List[VitalSignResponse])
+@router.get("/vitals/elder/{elder_id}")
 def get_elder_vital_history(
     elder_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_care_vital)
 ):
     """Xem toàn bộ lịch sử sinh hiệu qua các ngày của 1 Cụ"""
-    return db.query(VitalSignRecord)\
+    records = db.query(VitalSignRecord)\
         .filter(VitalSignRecord.elder_id == elder_id)\
         .order_by(VitalSignRecord.measured_at.desc()).all()
+    
+    results = []
+    for r in records:
+        staff = db.query(User).filter(User.id == r.measured_by).first()
+        r_dict = r.__dict__.copy()
+        r_dict["recorded_by_name"] = staff.full_name if staff else "Nhân viên"
+        results.append(r_dict)
+        
+    return results
 
 
 @router.get("/vitals/history", response_model=List[VitalSignResponse])
