@@ -1051,15 +1051,21 @@ def build_health_dashboard_cards(db: Session, current_user: User, facility_id: O
         elder_cards = []
 
         for elder in elders:
+            # 1. Tính toán khoảng chặn thời gian 24h của ngày Việt Nam theo giờ UTC (-7 tiếng)
+            start_of_day_utc = datetime.combine(active_date, time.min) - timedelta(hours=7)
+            end_of_day_utc = datetime.combine(active_date, time.max) - timedelta(hours=7)
+
+            # 2. Query theo khoảng thời gian thay vì func.date()
             latest_vital = db.query(VitalSignRecord)\
                 .filter(
                     VitalSignRecord.elder_id == elder.id,
                     VitalSignRecord.shift_type == active_type,
-                    func.date(VitalSignRecord.measured_at) == active_date
+                    VitalSignRecord.measured_at >= start_of_day_utc,
+                    VitalSignRecord.measured_at <= end_of_day_utc
                 )\
                 .order_by(VitalSignRecord.measured_at.desc()).first()
 
-            status_tag = "NOT_MEASURED" # Chưa đo (Reset trắng khi sang ca mới)
+            status_tag = "NOT_MEASURED"
             is_abnormal = False
             is_edited = False
 
