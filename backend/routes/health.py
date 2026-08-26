@@ -473,7 +473,7 @@ def get_live_shift_dashboard_for_all(
 # =========================================================================
 # 4. DASHBOARD Y TẾ CHUYÊN SÂU DÀNH RIÊNG CHO BÁC SĨ & MANAGER
 # =========================================================================
-@router.get("/dashboard-doctor", response_model=List[ElderHealthSummaryCard])
+@router.get("/dashboard-doctor", response_model=List[dict])
 def get_doctor_advanced_dashboard(
     facility_id: Optional[int] = None,
     only_attention_needed: bool = False,
@@ -481,8 +481,27 @@ def get_doctor_advanced_dashboard(
     current_user: User = Depends(require_medical_team)
 ):
     cards = build_health_dashboard_cards(db, current_user, facility_id, is_doctor_view=True)
+
     if only_attention_needed:
-        cards = [c for c in cards if c.has_abnormal_vital]
+        filtered_facilities = []
+        for facility in cards:
+            filtered_zones = []
+            for zone in facility["zones"]:
+                filtered_rooms = []
+                for room in zone["rooms"]:
+                    attention_elders = [e for e in room["elders"] if e["has_abnormal_vital"]]
+                    if attention_elders:
+                        filtered_rooms.append({
+                            **room,
+                            "elders": attention_elders,
+                            "elder_count": len(attention_elders),
+                        })
+                if filtered_rooms:
+                    filtered_zones.append({**zone, "rooms": filtered_rooms})
+            if filtered_zones:
+                filtered_facilities.append({**facility, "zones": filtered_zones})
+        cards = filtered_facilities
+
     return cards
 
 @router.get("/vitals/audit-check", response_model=List[dict])
