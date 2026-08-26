@@ -919,6 +919,11 @@ def get_elder_weight_history(
         .filter(WeightRecord.elder_id == elder_id)\
         .order_by(WeightRecord.measured_month.desc()).all()
 
+    for r in records:
+        full_name = r.staff.full_name if r.staff else "Nhân viên"
+        setattr(r, "staff_name", full_name)
+        setattr(r, "recorded_by_name", full_name)
+        
     return records
 
 

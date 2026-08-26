@@ -336,6 +336,7 @@ class WeightRecordResponse(WeightRecordBase):
     measured_month: str = Field(..., example="2026-08", description="Tháng đo theo định dạng YYYY-MM")
     measured_by: Optional[int] = Field(None, description="ID nhân viên thực hiện đo")
     staff_name: Optional[str] = Field(None, example="Lê Anh Thư", description="Họ tên nhân viên/Y tế thực hiện")
+    recorded_by_name: Optional[str] = Field(None, description="Họ tên nhân viên") # <--- THÊM DÒNG NÀY
     measured_at: datetime = Field(..., description="Thời gian bấm máy lưu bản ghi")
 
     model_config = ConfigDict(from_attributes=True)
