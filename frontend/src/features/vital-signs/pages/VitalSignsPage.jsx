@@ -29,6 +29,7 @@ export const VitalSignsPage = () => {
     eldersList = [], 
     alerts = [], 
     weightDueList = [], 
+    activeShift,
     refreshData, 
     loading 
   } = useVitalSignsData(user?.facility_id);
@@ -145,7 +146,8 @@ export const VitalSignsPage = () => {
           onClose={() => setSelectedElderForModal(null)}
           elder={selectedElderForModal}
           role={currentRole}
-          defaultTab={viewMode} // Truyền viewMode hiện tại vào đây
+          defaultTab={viewMode}
+          activeShift={activeShift}
           onSaveVital={handleSaveVital}
           onSaveWeight={handleSaveWeight}
           onFetchHistory={(id, d) => vitalSignsApi.getVitalsHistory({ elder_id: id, limit_days: d })}

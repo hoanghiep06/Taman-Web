@@ -15,6 +15,7 @@ export const useVitalSignsData = (facilityId = null) => {
   const [eldersList, setEldersList] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [weightDueList, setWeightDueList] = useState([]);
+  const [activeShift, setActiveShift] = useState("Sang");
   const [loading, setLoading] = useState(true);
 
   const targetFacilityId = facilityId ? Number(facilityId) : null;
@@ -47,6 +48,11 @@ export const useVitalSignsData = (facilityId = null) => {
       setWeightDueList(formattedWeightDue);
 
       if (Array.isArray(dashboardData)) {
+
+        if (dashboardData.length > 0 && dashboardData[0].active_shift_type) {
+          setActiveShift(dashboardData[0].active_shift_type);
+        }
+
         const mappedElders = [];
         const abnormalAlertsList = [];
 
@@ -150,6 +156,7 @@ export const useVitalSignsData = (facilityId = null) => {
     alerts: alerts || [],
     weightDueList: weightDueList || [],
     weightDueCount: weightDueList?.length || 0,
+    activeShift,
     refreshData: fetchData,
     loading
   };

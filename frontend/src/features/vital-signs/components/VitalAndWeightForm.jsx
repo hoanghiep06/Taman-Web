@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import styles from './VitalAndWeightForm.module.css';
 
-export const VitalAndWeightForm = ({ selectedElder, onSaveVital, onSaveWeight }) => {
+export const VitalAndWeightForm = ({ selectedElder, activeShift = 'Sang', onSaveVital, onSaveWeight }) => {
   const [activeTab, setActiveTab] = useState('VITALS');
 
   const [bpSystolic, setBpSystolic] = useState('');
@@ -39,7 +39,7 @@ export const VitalAndWeightForm = ({ selectedElder, onSaveVital, onSaveWeight })
 
     onSaveVital({
       elder_id: selectedElder.id,
-      shift_type: "Sang",
+      shift_type: activeShift,
       bp_systolic: bpSystolic ? Number(bpSystolic) : null,
       bp_diastolic: bpDiastolic ? Number(bpDiastolic) : null,
       pulse: pulse ? Number(pulse) : null,

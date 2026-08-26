@@ -262,7 +262,9 @@ class VitalSignResponse(VitalSignCreate):
     is_abnormal: bool
     is_edited: bool = False
     edited_at: Optional[datetime] = None
-    
+
+    recorded_by_name: Optional[str] = "Nguyễn Văn A"
+
     model_config = ConfigDict(from_attributes=True)
 
 class VitalSignUpdate(BaseModel):

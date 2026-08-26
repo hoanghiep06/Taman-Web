@@ -40,6 +40,7 @@ export const VitalModal = ({
   elder, 
   role = 'CAREGIVER', 
   defaultTab = 'VITALS',
+  activeShift = 'Sang',
   onSaveVital,
   onSaveWeight,
   onFetchHistory,
@@ -109,7 +110,7 @@ export const VitalModal = ({
     e.preventDefault();
     onSaveVital({
       elder_id: elder.id,
-      shift_type: "Sang",
+      shift_type: activeShift,
       bp_systolic: bpSystolic ? Number(bpSystolic) : null,
       bp_diastolic: bpDiastolic ? Number(bpDiastolic) : null,
       pulse: pulse ? Number(pulse) : null,
@@ -303,7 +304,7 @@ export const VitalModal = ({
                             const rawDate = item.measured_at || item.shift_date || item.created_at || item.record_date || item.recorded_at;
                             const formattedDate = formatDateString(rawDate);
                             const shiftStr = item.shift_type || 'Trực';
-                            const staffStr = item.recorded_by_name || item.recorded_by || 'Nhân viên';
+                            const staffStr = item.recorded_by_name || item.staff_name || item.recorded_by || 'Nhân viên';
                             return (
                               <div key={idx} className={styles.historyCard}>
                                 <div className={styles.historyTopRow}>

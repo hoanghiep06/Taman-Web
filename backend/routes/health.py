@@ -359,7 +359,17 @@ def get_vital_signs_history(
         query = query.filter(VitalSignRecord.shift_type == shift_type.value)
 
     records = query.order_by(VitalSignRecord.measured_at.desc()).all()
-    return records
+    
+    results = []
+    for r in records:
+        # Truy vấn tìm tên User đã đo
+        staff = db.query(User).filter(User.id == r.measured_by).first()
+        
+        # Thêm thuộc tính recorded_by_name trực tiếp vào đối tượng
+        setattr(r, "recorded_by_name", staff.full_name if staff else "Nhân viên")
+        results.append(r)
+
+    return results
 
 
 # =========================================================================
