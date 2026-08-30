@@ -51,9 +51,7 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   const cleanEvents = rawEvents.map(e => e.replace(/\bCụ\s+/gi, ''));
   const handoverNotes = (report.handover_notes || 'Không có lưu ý đặc biệt.').replace(/\bCụ\s+/gi, '');
 
-  const realDangerAlerts = facilityAlerts.filter(
-    alt => alt.issueDetail && alt.issueDetail.trim() !== '' && alt.alertType !== 'NOTE_ONLY'
-  );
+  const allAlerts = facilityAlerts || [];
 
   const dummyCanvas = document.createElement('canvas');
   const dummyCtx = dummyCanvas.getContext('2d');
@@ -89,12 +87,34 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
     h += 12;
   }
 
-  if (realDangerAlerts.length > 0) {
+  if (allAlerts.length > 0) {
     h += 32;
-    realDangerAlerts.forEach(alt => {
-      const text = `${alt.roomNumber} • ${alt.elderName} - ${alt.issueDetail}`;
-      const lines = wrapText(text, contentWidth - 32, '700 13.5px system-ui, -apple-system, sans-serif');
-      h += lines.length * 22 + 18 + 8;
+    allAlerts.forEach(alt => {
+      let linesCount = 0;
+      
+      const nameLines = wrapText(`${alt.roomNumber} • ${alt.elderName}`, contentWidth - 32, '800 14px system-ui, -apple-system, sans-serif');
+      linesCount += nameLines.length;
+
+      let issueLines = [];
+      if (alt.issueDetail) {
+         issueLines = wrapText(`⚠️ Chỉ số: ${alt.issueDetail}`, contentWidth - 32, '700 13.5px system-ui, -apple-system, sans-serif');
+         linesCount += issueLines.length;
+      }
+
+      let noteLines = [];
+      if (alt.staffNote) {
+         noteLines = wrapText(`📝 Ghi chú NV: ${alt.staffNote}`, contentWidth - 32, '600 13px system-ui, -apple-system, sans-serif');
+         linesCount += noteLines.length;
+      }
+
+      // Lưu trữ trực tiếp kết quả bẻ dòng để tái sử dụng lúc vẽ
+      alt._nameLines = nameLines;
+      alt._issueLines = issueLines;
+      alt._noteLines = noteLines;
+
+      const boxH = linesCount * 22 + 18;
+      alt._boxH = boxH;
+      h += boxH + 10;
     });
     h += 12;
   }
@@ -214,26 +234,54 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   }
 
   // CẢNH BÁO SỨC KHỎE
-  if (realDangerAlerts.length > 0) {
+  if (allAlerts.length > 0) {
     ctx.fillStyle = '#9f1239';
     ctx.font = '800 14.5px system-ui, -apple-system, sans-serif';
-    ctx.fillText('🚨 CẢNH BÁO SỨC KHỎE & CHỈ SỐ BẤT THƯỜNG', margin, currentY);
+    ctx.fillText('🚨 CÁC CHỈ SỐ SỨC KHỎE CẦN LƯU Ý', margin, currentY);
     currentY += 12;
 
-    realDangerAlerts.forEach(alt => {
-      const text = `${alt.roomNumber} • ${alt.elderName} - ${alt.issueDetail}`;
-      const lines = wrapText(text, contentWidth - 32, '700 13.5px system-ui, -apple-system, sans-serif');
-      const boxH = lines.length * 22 + 18;
+    allAlerts.forEach(alt => {
+      const isNoteOnly = alt.alertType === 'NOTE_ONLY';
+      const isBoth = alt.alertType === 'BOTH';
+      const isDanger = alt.alertType === 'DANGER' || (!isNoteOnly && !isBoth);
 
-      drawRoundedRect(ctx, margin, currentY, contentWidth, boxH, 12, '#fff1f2', '#fecdd3');
+      // Phối màu nền & viền giống hệt trang VitalAlertList
+      const bg = isBoth ? '#f3e8ff' : (isNoteOnly ? '#fffbeb' : '#fff1f2');
+      const border = isBoth ? '#e9d5ff' : (isNoteOnly ? '#fde68a' : '#fecdd3');
+      
+      drawRoundedRect(ctx, margin, currentY, contentWidth, alt._boxH, 12, bg, border);
 
-      ctx.fillStyle = '#be123c';
-      ctx.font = '700 13.5px system-ui, -apple-system, sans-serif';
-      lines.forEach((line, idx) => {
-        ctx.fillText(line, margin + 16, currentY + 22 + idx * 22);
+      let textY = currentY + 22;
+
+      // 1. In tên người cao tuổi (Phối màu Đỏ/Tím/Cam)
+      ctx.fillStyle = isBoth ? '#6b21a8' : (isNoteOnly ? '#b45309' : '#be123c');
+      ctx.font = '800 14px system-ui, -apple-system, sans-serif';
+      alt._nameLines.forEach(line => {
+        ctx.fillText(line, margin + 16, textY);
+        textY += 22;
       });
 
-      currentY += boxH + 8;
+      // 2. In chỉ số bất thường (Luôn màu Đỏ)
+      if (alt.issueDetail) {
+         ctx.fillStyle = '#dc2626';
+         ctx.font = '700 13.5px system-ui, -apple-system, sans-serif';
+         alt._issueLines.forEach(line => {
+           ctx.fillText(line, margin + 16, textY);
+           textY += 22;
+         });
+      }
+
+      // 3. In ghi chú của điều dưỡng (In nghiêng + Phối màu)
+      if (alt.staffNote) {
+         ctx.fillStyle = isBoth ? '#7e22ce' : (isNoteOnly ? '#92400e' : '#9f1239');
+         ctx.font = 'italic 600 13px system-ui, -apple-system, sans-serif';
+         alt._noteLines.forEach(line => {
+           ctx.fillText(line, margin + 16, textY);
+           textY += 22;
+         });
+      }
+
+      currentY += alt._boxH + 10;
     });
     currentY += 12;
   }
