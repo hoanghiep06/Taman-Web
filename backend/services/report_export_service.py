@@ -1,7 +1,8 @@
 import io
 import re
 import logging
-from datetime import datetime, date
+import pytz
+from datetime import datetime, date, timedelta
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from database import SessionLocal
 import models
+from core.constants import VITAL_LIMITS
 from services.drive_service import upload_shift_handover_report_to_drive, sanitize_filename
 
 logger = logging.getLogger("report_export_service")
@@ -30,6 +32,73 @@ def export_and_upload_shift_report_background(report_id: int):
         shift_type_label = "Ca Sáng (08:00 - 19:00)" if report.shift_type == "Sang" else "Ca Tối (20:00 - 07:00)"
         shift_date_str = str(report.shift_date)
 
+        # =============================================================
+        # 1. TRUY VẤN VÀ ĐỒNG BỘ SINH HIỆU TRƯỚC TIÊN
+        # =============================================================
+        vn_tz = pytz.timezone('Asia/Ho_Chi_Minh')
+        
+        # SỬA LỖI MẤT DỮ LIỆU: Tính toán ranh giới giờ Ca Trực chuẩn xác bằng giờ Việt Nam
+        if report.shift_type == "Sang":
+            local_start = vn_tz.localize(datetime.combine(report.shift_date, datetime.min.time().replace(hour=0, minute=0))) 
+            local_end = vn_tz.localize(datetime.combine(report.shift_date, datetime.min.time().replace(hour=19, minute=59))) 
+        else:
+            # Ca Tối vắt ngang 2 ngày -> Lấy từ 19:00 hôm nay đến 09:00 sáng hôm sau
+            local_start = vn_tz.localize(datetime.combine(report.shift_date, datetime.min.time().replace(hour=19, minute=0))) 
+            local_end = local_start + timedelta(hours=14) 
+            
+        # Chuyển ranh giới về lại UTC để Query chuẩn xác trong Database
+        utc_start = local_start.astimezone(pytz.utc).replace(tzinfo=None)
+        utc_end = local_end.astimezone(pytz.utc).replace(tzinfo=None)
+
+        vitals = db.query(models.VitalSignRecord, models.Elder.full_name, models.Room.room_number, models.User.full_name.label("staff_name"))\
+                   .join(models.Elder, models.VitalSignRecord.elder_id == models.Elder.id)\
+                   .join(models.Room, models.Elder.room_id == models.Room.id)\
+                   .join(models.Zone, models.Room.zone_id == models.Zone.id)\
+                   .outerjoin(models.User, models.VitalSignRecord.measured_by == models.User.id)\
+                   .filter(
+                       models.Zone.facility_id == report.facility_id,
+                       models.VitalSignRecord.shift_type == report.shift_type,
+                       models.VitalSignRecord.measured_at >= utc_start,
+                       models.VitalSignRecord.measured_at <= utc_end
+                   ).order_by(models.Room.room_number, models.Elder.full_name).all()
+
+        # =============================================================
+        # 2. TẠO TÓM TẮT CẢNH BÁO TỰ ĐỘNG GIỐNG VITAL-SIGNS
+        # =============================================================
+        alerts_text = []
+        for v, elder_name, room_num, staff_name in vitals:
+            has_abnormal = v.is_abnormal
+            staff_note = v.notes.strip() if v.notes else ""
+            has_note = bool(staff_note)
+            
+            if has_abnormal or has_note:
+                issue_details = []
+                if v.spo2 and v.spo2 < VITAL_LIMITS.SPO2_WARNING: issue_details.append(f"SpO2 thấp ({v.spo2}%)")
+                if v.temperature and v.temperature >= VITAL_LIMITS.TEMP_FEVER: issue_details.append(f"Sốt ({v.temperature}°C)")
+                
+                bp_sys = v.bp_systolic
+                bp_dia = v.bp_diastolic
+                if bp_sys and bp_sys > VITAL_LIMITS.BP_SYSTOLIC_HIGH: issue_details.append(f"Huyết áp cao ({bp_sys}/{bp_dia})")
+                elif bp_sys and bp_sys < VITAL_LIMITS.BP_SYSTOLIC_LOW: issue_details.append(f"Huyết áp thấp ({bp_sys}/{bp_dia})")
+                elif bp_dia and bp_dia > VITAL_LIMITS.BP_DIASTOLIC_HIGH: issue_details.append(f"HA tâm trương cao ({bp_sys}/{bp_dia})")
+                elif bp_dia and bp_dia < VITAL_LIMITS.BP_DIASTOLIC_LOW: issue_details.append(f"HA tâm trương thấp ({bp_sys}/{bp_dia})")
+                
+                if v.pulse and (v.pulse > VITAL_LIMITS.PULSE_FAST or v.pulse < VITAL_LIMITS.PULSE_SLOW): issue_details.append(f"Mạch ({v.pulse} bpm)")
+                
+                detail_str = " - ".join(issue_details)
+                
+                if detail_str and staff_note:
+                    alerts_text.append(f"Phòng {room_num} • {elder_name}: {detail_str}\n(Ghi chú NV: {staff_note})")
+                elif detail_str:
+                    alerts_text.append(f"Phòng {room_num} • {elder_name}: {detail_str}")
+                elif staff_note:
+                    alerts_text.append(f"Phòng {room_num} • {elder_name}: Ghi chú NV: {staff_note}")
+
+        alerts_summary = "\n\n".join(alerts_text) if alerts_text else "Tất cả các Cụ đều ổn định, không có chỉ số sức khỏe bất thường nào cần lưu ý."
+
+        # =============================================================
+        # 3. KHỞI TẠO EXCEL & ĐỊNH DẠNG
+        # =============================================================
         wb = openpyxl.Workbook()
         
         # Styles
@@ -63,10 +132,16 @@ def export_and_upload_shift_report_background(report_id: int):
         ws1["A1"].alignment = center_align
         ws1.row_dimensions[1].height = 28
 
+        # SỬA LỖI GIỜ HIỂN THỊ TRÊN SHEET 1: Format về UTC+7
+        created_at_vn = ""
+        if report.created_at:
+            dt_utc = pytz.utc.localize(report.created_at) if report.created_at.tzinfo is None else report.created_at
+            created_at_vn = dt_utc.astimezone(vn_tz).strftime("%d/%m/%Y %H:%M:%S")
+
         meta_info = [
             ("Cơ Sở:", facility_name, "Ca Trực Bàn Giao:", shift_type_label),
             ("Ngày Ca Trực:", report.shift_date.strftime("%d/%m/%Y"), "Người Lập Báo Cáo:", coordinator_name),
-            ("Thời Gian Nộp:", report.created_at.strftime("%d/%m/%Y %H:%M:%S") if report.created_at else "", "Trạng Thái:", "Đã xác nhận giao ca (Submitted)")
+            ("Thời Gian Nộp:", created_at_vn, "Trạng Thái:", "Đã xác nhận giao ca (Submitted)")
         ]
 
         for r_idx, (l1, v1, l2, v2) in enumerate(meta_info, start=3):
@@ -76,25 +151,26 @@ def export_and_upload_shift_report_background(report_id: int):
             ws1.cell(row=r_idx, column=5, value=v2).font = normal_font
             ws1.row_dimensions[r_idx].height = 20
 
-        # 1. Tóm tắt nổi bật
-        ws1.cell(row=7, column=1, value="1. TÓM TẮT VẤN ĐỀ NỔI BẬT TRONG CA:").font = section_font
+        # Mục 1: Đã được thay thế bằng danh sách cảnh báo sinh hiệu tự động
+        ws1.cell(row=7, column=1, value="1. CÁC CHỈ SỐ SỨC KHỎE CẦN LƯU Ý:").font = section_font
         ws1.merge_cells("A8:F8")
-        ws1["A8"] = report.highlighted_issues or "Không có sự cố bất thường."
-        ws1["A8"].font = normal_font
+        ws1["A8"] = alerts_summary
+        ws1["A8"].font = danger_font if alerts_text else normal_font
         ws1["A8"].alignment = left_align_wrap
-        ws1.row_dimensions[8].height = 25
+        
+        num_lines = alerts_summary.count('\n') + 1
+        ws1.row_dimensions[8].height = max(25, num_lines * 16) # Auto height cho phần cảnh báo
 
-        # 2. Lưu ý ca tiếp theo
+        # Mục 2
         ws1.cell(row=10, column=1, value="2. LƯU Ý & HƯỚNG XỬ LÝ CA TIẾP THEO:").font = section_font
         ws1.merge_cells("A11:F12")
         ws1["A11"] = report.handover_notes or "Bàn giao ca bình thường."
         ws1["A11"].font = normal_font
         ws1["A11"].alignment = left_align_wrap
 
-        # 3. DIỄN BIẾN CHI TIẾT TỪNG CỤ (TÁCH THÀNH CÁC DÒNG RIÊNG BIỆT)
+        # Mục 3: Diễn biến chi tiết
         ws1.cell(row=14, column=1, value="3. DIỄN BIẾN CHI TIẾT TỪNG CỤ:").font = section_font
         
-        # Tiêu đề bảng
         ws1.cell(row=15, column=1, value="STT").fill = table_header_fill
         ws1.cell(row=15, column=1).font = table_header_font
         ws1.cell(row=15, column=1).alignment = center_align
@@ -112,7 +188,6 @@ def export_and_upload_shift_report_background(report_id: int):
         for col_c in range(3, 7):
             ws1.cell(row=15, column=col_c).border = thin_border
 
-        # Parse chuỗi elder_descriptions theo từng dòng (dạng "1. Cụ Long: Ghi chú...")
         raw_lines = [l.strip() for l in (report.elder_descriptions or "").split("\n") if l.strip()]
         current_r = 16
 
@@ -127,7 +202,6 @@ def export_and_upload_shift_report_background(report_id: int):
             for idx, line in enumerate(raw_lines, start=1):
                 ws1.row_dimensions[current_r].height = 22
                 
-                # Tách Tên Cụ và Ghi chú qua dấu hai chấm
                 if ":" in line:
                     parts = line.split(":", 1)
                     e_name = re.sub(r"^\d+\.\s*", "", parts[0]).strip()
@@ -184,23 +258,15 @@ def export_and_upload_shift_report_background(report_id: int):
             cell.alignment = center_align
             cell.border = thin_border
 
-        start_dt = datetime.combine(report.shift_date, datetime.min.time())
-        end_dt = datetime.combine(report.shift_date, datetime.max.time())
-
-        vitals = db.query(models.VitalSignRecord, models.Elder.full_name, models.Room.room_number, models.User.full_name.label("staff_name"))\
-                   .join(models.Elder, models.VitalSignRecord.elder_id == models.Elder.id)\
-                   .join(models.Room, models.Elder.room_id == models.Room.id)\
-                   .join(models.Zone, models.Room.zone_id == models.Zone.id)\
-                   .outerjoin(models.User, models.VitalSignRecord.measured_by == models.User.id)\
-                   .filter(
-                       models.Zone.facility_id == report.facility_id,
-                       models.VitalSignRecord.shift_type == report.shift_type,
-                       models.VitalSignRecord.measured_at >= start_dt,
-                       models.VitalSignRecord.measured_at <= end_dt
-                   ).order_by(models.Room.room_number, models.Elder.full_name).all()
-
         for r_i, (v, elder_name, room_num, staff_name) in enumerate(vitals, start=4):
             is_ab = v.is_abnormal
+            
+            # SỬA LỖI GIỜ HIỂN THỊ TRÊN SHEET 2: Chuyển thời gian đo từ UTC về UTC+7
+            time_vn_str = ""
+            if v.measured_at:
+                dt_v_utc = pytz.utc.localize(v.measured_at) if v.measured_at.tzinfo is None else v.measured_at
+                time_vn_str = dt_v_utc.astimezone(vn_tz).strftime("%H:%M:%S")
+
             row_vals = [
                 r_i - 3,
                 room_num or "N/A",
@@ -212,7 +278,7 @@ def export_and_upload_shift_report_background(report_id: int):
                 "⚠️ BẤT THƯỜNG" if is_ab else "Bình thường",
                 v.notes or "",
                 staff_name or "N/A",
-                v.measured_at.strftime("%H:%M:%S") if v.measured_at else ""
+                time_vn_str
             ]
             ws2.row_dimensions[r_i].height = 20
             for c_i, val in enumerate(row_vals, start=1):
@@ -241,8 +307,7 @@ def export_and_upload_shift_report_background(report_id: int):
         wb.save(output)
         output.seek(0)
 
-        # Đặt tên file ngắn gọn
-        filename = "Ca_Sang.xlsx" if report.shift_type == "Sang" else "Ca_Toi.xlsx"
+        filename = f"BaoCaoGiaoCa_CS_{report.facility_id}_{report.shift_type}_{report.shift_date.strftime('%Y%m%d')}.xlsx"
 
         drive_url = upload_shift_handover_report_to_drive(
             file_bytes=output.getvalue(),

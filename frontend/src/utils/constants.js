@@ -33,7 +33,7 @@ export const ROLE_LABELS = {
 // Ngưỡng cảnh báo y tế chuẩn
 export const VITAL_LIMITS = {
   SPO2_WARNING: 95.0,
-  BP_SYSTOLIC_HIGH: 150,
+  BP_SYSTOLIC_HIGH: 140,
   BP_DIASTOLIC_HIGH: 90,
   BP_SYSTOLIC_LOW: 90,
   BP_DIASTOLIC_LOW: 60,

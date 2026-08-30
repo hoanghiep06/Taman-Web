@@ -3,7 +3,7 @@
 # ==========================================
 VITAL_LIMITS = {
     "SPO2_WARNING": 95.0,           # SPO2 dưới 95% là bất thường
-    "BP_SYSTOLIC_HIGH": 150,        # Huyết áp tâm thu cao > 150
+    "BP_SYSTOLIC_HIGH": 140,        # Huyết áp tâm thu cao > 140
     "BP_DIASTOLIC_HIGH": 90,        # Huyết áp tâm trương cao > 90
     "BP_SYSTOLIC_LOW": 90,          # Huyết áp tâm thu thấp < 90
     "BP_DIASTOLIC_LOW": 60,         # Huyết áp tâm trương thấp < 60
