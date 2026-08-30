@@ -113,7 +113,15 @@ export const useVitalSignsData = (facilityId = null) => {
                   const issueText = [];
                   if (vital?.spo2 && vital.spo2 < VITAL_LIMITS.SPO2_WARNING) issueText.push(`SpO2 thấp (${vital.spo2}%)`);
                   if (vital?.temperature && vital.temperature >= VITAL_LIMITS.TEMP_FEVER) issueText.push(`Sốt (${vital.temperature}°C)`);
-                  if (bpSys && bpSys > VITAL_LIMITS.BP_SYSTOLIC_HIGH) issueText.push(`Huyết áp cao (${vital.bp})`);
+                  if (bpSys && bpSys > VITAL_LIMITS.BP_SYSTOLIC_HIGH) {
+                    issueText.push(`Huyết áp cao (${vital.bp})`);
+                  } else if (bpSys && bpSys < VITAL_LIMITS.BP_SYSTOLIC_LOW) {
+                    issueText.push(`Huyết áp thấp (${vital.bp})`);
+                  } else if (bpDia && bpDia > VITAL_LIMITS.BP_DIASTOLIC_HIGH) {
+                    issueText.push(`HA tâm trương cao (${vital.bp})`);
+                  } else if (bpDia && bpDia < VITAL_LIMITS.BP_DIASTOLIC_LOW) {
+                    issueText.push(`HA tâm trương thấp (${vital.bp})`);
+                  }
                   if (vital?.pulse && (vital.pulse > VITAL_LIMITS.PULSE_FAST || vital.pulse < VITAL_LIMITS.PULSE_SLOW)) issueText.push(`Mạch (${vital.pulse} bpm)`);
 
                   let alertType = 'NOTE_ONLY';
