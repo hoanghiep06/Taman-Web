@@ -322,55 +322,72 @@ export const exportReportAsJPG = (report, facilityAlerts = [], isHistory = false
   const timeWidth = dummyCtx.measureText(nowStr).width;
   ctx.fillText(nowStr, baseWidth - margin - timeWidth, currentY);
 
-  const imageUrl = canvas.toDataURL('image/jpeg', 0.95);
-  const fileName = `BaoCao_${(report.facility_name || `CS_${report.facility_id}`).replace(/\s+/g, '_')}_Ca_${report.shift_type}_${report.shift_date}.jpg`;
+  canvas.toBlob(async (blob) => {
+    if (!blob) return;
 
-  // 1. Nhận diện trình duyệt
-  const isZalo = /Zalo/i.test(navigator.userAgent);
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const fileName = `BaoCao_${(report.facility_name || `CS_${report.facility_id}`).replace(/\s+/g, '_')}_Ca_${report.shift_type}_${report.shift_date}.jpg`;
+    const file = new File([blob], fileName, { type: 'image/jpeg' });
+    const imageUrl = canvas.toDataURL('image/jpeg', 0.95);
 
-  // 2. Xử lý riêng biệt
-  if (isZalo && isIOS) {
-    // 1. Tạo overlay nền đen
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.85);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
-    
-    // 2. Tạo Container chứa chữ và ảnh (ngăn chọn văn bản)
-    const actionContainer = document.createElement('div');
-    actionContainer.style.cssText = 'position:relative;background:#ecfdf5;padding:24px 40px;border-radius:12px;border:2px dashed #10b981;text-align:center;overflow:hidden;-webkit-user-select:none;user-select:none;';
-    
-    // 3. Phần chữ hiển thị (nằm dưới)
-    const textGuide = document.createElement('div');
-    textGuide.innerHTML = '👉 <b>NHẤN GIỮ VÀO ĐÂY</b> 👈<br/><span style="font-size:14px;font-weight:normal;color:#047857;">sau đó chọn "Lưu hình ảnh"</span>';
-    textGuide.style.cssText = 'font-family:system-ui, sans-serif;line-height:1.6;font-size:18px;color:#10b981;';
-    
-    // 4. Phần ẢNH TÀNG HÌNH (nằm đè lên trên chữ)
-    const invisibleImg = document.createElement('img');
-    invisibleImg.src = imageUrl;
-    invisibleImg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;z-index:10;';
-    
-    // Ráp các thành phần lại
-    actionContainer.appendChild(textGuide);
-    actionContainer.appendChild(invisibleImg); // Ảnh nằm trên chữ
-    
-    // Nút đóng
-    const closeBtn = document.createElement('button');
-    closeBtn.innerText = 'Đóng lại';
-    closeBtn.style.cssText = 'margin-top:30px;padding:10px 24px;border:none;border-radius:8px;background:#ef4444;color:#fff;font-weight:bold;font-size:15px;cursor:pointer;';
-    closeBtn.onclick = () => document.body.removeChild(overlay);
-    
-    overlay.appendChild(actionContainer);
-    overlay.appendChild(closeBtn);
-    document.body.appendChild(overlay);
-  } else {
-    // CÁC TRÌNH DUYỆT KHÁC (PC, ANDROID, SAFARI): ÉP TẢI BÌNH THƯỜNG
-    const link = document.createElement('a');
-    link.href = imageUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isWebView = /Zalo|FBAV|FBAN|Line/i.test(navigator.userAgent); // Các trình duyệt nhúng chặn Share API
+
+    if (isIOS) {
+      // Ưu tiên 1 cho iOS (Safari/Chrome/Google App): Kích hoạt bảng Share gốc của Apple
+      if (!isWebView && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'Báo cáo giao ca'
+          });
+          return; // Nếu chọn Save Image thành công thì kết thúc
+        } catch (error) {
+          console.log('Bỏ qua Share API, chuyển sang chế độ Overlay:', error);
+        }
+      }
+
+      // Ưu tiên 2 cho iOS (Zalo, Facebook WebView, hoặc khi người dùng hủy Share): Khung ảnh tàng hình
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.85);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+
+      // 1. XÓA chặn copy ở thẻ bao ngoài để không làm liệt cảm ứng của ảnh
+      const actionContainer = document.createElement('div');
+      actionContainer.style.cssText = 'position:relative;background:#ecfdf5;padding:24px 40px;border-radius:12px;border:2px dashed #10b981;text-align:center;overflow:hidden;';
+
+      // 2. DỜI chặn copy vào riêng lớp chữ, thêm pointer-events: none để ngón tay bấm xuyên qua chữ
+      const textGuide = document.createElement('div');
+      textGuide.innerHTML = '👉 <b>NHẤN GIỮ VÀO ĐÂY</b> 👈<br/><span style="font-size:14px;font-weight:normal;color:#047857;">sau đó chọn "Lưu hình ảnh"</span>';
+      textGuide.style.cssText = 'font-family:system-ui, sans-serif;line-height:1.6;font-size:18px;color:#10b981;-webkit-user-select:none;user-select:none;pointer-events:none;';
+
+      // 3. QUAN TRỌNG: opacity: 0.01 (thay vì 0) và ép iOS hiện menu bằng -webkit-touch-callout
+      const invisibleImg = document.createElement('img');
+      invisibleImg.src = imageUrl;
+      invisibleImg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;opacity:0.01;z-index:10;-webkit-touch-callout:default;pointer-events:auto;';
+
+      actionContainer.appendChild(textGuide);
+      actionContainer.appendChild(invisibleImg);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.innerText = 'Đóng lại';
+      closeBtn.style.cssText = 'margin-top:30px;padding:10px 24px;border:none;border-radius:8px;background:#ef4444;color:#fff;font-weight:bold;font-size:15px;cursor:pointer;';
+      closeBtn.onclick = () => document.body.removeChild(overlay);
+
+      overlay.appendChild(actionContainer);
+      overlay.appendChild(closeBtn);
+      document.body.appendChild(overlay);
+
+    } else {
+      // Dành cho PC và Android: Chạy luồng tải file tốc độ cao bằng Blob
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    }
+  }, 'image/jpeg', 0.95);
 };
 
 export const ShiftReportView = ({ reports, alerts = [], onEditReport, role = 'CAREGIVER' }) => {
