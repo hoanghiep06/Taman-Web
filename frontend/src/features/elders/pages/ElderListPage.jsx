@@ -302,7 +302,7 @@ export const ElderListPage = () => {
                                 )}
 
                                 <p className={styles.elderRoom}>
-                                  {room ? `Phòng ${room.room_number}` : 'Chưa xếp phòng'}
+                                  {room ? `Phòng ${room.zone_name}.${room.room_number}` : 'Chưa xếp phòng'}
                                 </p>
                               </div>
                             </div>
@@ -316,7 +316,7 @@ export const ElderListPage = () => {
                                 ❤️ Sức Khỏe
                               </button>
 
-                              {isDoctor && (
+                              {(isDoctor || user?.role === ROLES.ADMIN) && (
                                 <button className={styles.btnSecondary} onClick={() => goToPrescriptions(elder)}>
                                   💊 Đơn Thuốc
                                 </button>
@@ -325,7 +325,7 @@ export const ElderListPage = () => {
                               {canManage && (
                                 <>
                                   <button className={styles.btnSecondary} onClick={() => handleOpenEdit(elder)}>✏️ Sửa</button>
-                                  <button className={styles.btnDelete} onClick={() => handleDeleteElder(elder)}>🗑️</button>
+                                  <button className={styles.btnDelete} onClick={() => handleDeleteElder(elder)}>🗑️ Xóa</button>
                                 </>
                               )}
                             </div>
