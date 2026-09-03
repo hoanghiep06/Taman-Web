@@ -56,9 +56,6 @@ export const DashboardPage = () => {
     const role = normalizeRole(user?.role);
     const roleLabel = ROLE_NAMES[role] || "Người dùng";
 
-    // Admin quản trị toàn hệ thống, không gắn với 1 cơ sở cụ thể
-    const isAdmin = role === "admin";
-
     const renderDashboard = () => {
         switch (role) {
             case "admin":
@@ -80,12 +77,13 @@ export const DashboardPage = () => {
 
     return (
         <Layout>
+            {/* shift và facility đã bỏ khỏi props — DashboardHeader giờ tự gọi API
+                lấy ca trực thật (GET /health/current-shift), và FacilityInfo (nếu có
+                trong dashboard) tự gọi API lấy tên cơ sở thật, không cần truyền từ đây nữa. */}
             <DashboardHeader
                 role={user?.role}
                 userName={user?.name || roleLabel}
-                shift="Ca sáng"
                 date={new Date().toLocaleDateString("vi-VN")}
-                facility={isAdmin ? undefined : "Cơ sở Tâm An - Quận 1"}
             />
 
             <div className={styles.dashboard}>
