@@ -3,6 +3,7 @@ import { usersApi } from '../api/usersApi';
 import { AuthContext } from '../../../contexts/AuthContext';
 import { CreateUserModal } from '../components/CreateUserModal';
 import { UserEditModal } from '../components/UserEditModal';
+import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { ImportDataModal } from '../../../components/ImportDataModal';
 import { UserHistoryModal } from '../components/UserHistoryModal';
 import { ROLES } from '../../../utils/constants';
@@ -25,7 +26,10 @@ export const UserManagementPage = () => {
   const [selectedHistoryUser, setSelectedHistoryUser] = useState(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen]   = useState(false);
 
-  // Manager quản lý toàn hệ thống (không gắn cố định 1 cơ sở) — dùng ở nhiều chỗ bên dưới
+  // Modal xác nhận xóa — dùng chung cho xóa đơn lẻ và xóa hàng loạt
+  const [deleteTarget, setDeleteTarget] = useState(null); // { type: 'single', user } | { type: 'bulk', ids }
+  const isDeleteModalOpen = Boolean(deleteTarget);
+
   const isManagerWithoutFixedFacility = user?.role === ROLES.MANAGER && !user?.facility_id;
 
   const ROLE_FILTER_OPTIONS = [
@@ -99,30 +103,37 @@ export const UserManagementPage = () => {
     catch { alert('Thao tác thất bại!'); }
   };
 
-  const handleDeleteUser = async (targetUser) => {
+  // ── Xóa đơn lẻ: mở modal xác nhận thay vì window.confirm ──
+  const requestDeleteSingle = (targetUser) => {
     if (targetUser.username === 'admin') { alert('Không thể xóa tài khoản admin gốc!'); return; }
-    if (!window.confirm(`Xóa vĩnh viễn tài khoản [${targetUser.username}]?`)) return;
-    try { await usersApi.deleteUser(targetUser.id); loadUsers(); }
-    catch { alert('Không thể xóa tài khoản này!'); }
+    setDeleteTarget({ type: 'single', user: targetUser });
   };
 
-  // Lọc theo cơ sở:
-  // - Admin: thấy toàn bộ, không lọc gì.
-  // - Manager có facility_id cụ thể: chỉ thấy user cùng cơ sở với mình.
-  // - Manager KHÔNG có facility_id (quản lý toàn hệ thống/nhiều cơ sở): thấy TẤT CẢ user
-  //   ở mọi cơ sở, ngoại trừ tài khoản Admin.
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      if (deleteTarget.type === 'single') {
+        await usersApi.deleteUser(deleteTarget.user.id);
+      } else {
+        await usersApi.bulkDeleteUsers(deleteTarget.ids);
+        setSelectedIds([]);
+      }
+      setDeleteTarget(null);
+      loadUsers();
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Không thể xóa tài khoản này!');
+      setDeleteTarget(null);
+    }
+  };
+
   const visibleUsers = useMemo(() => {
     if (user?.role !== ROLES.MANAGER) return usersList;
-
     if (isManagerWithoutFixedFacility) {
       return usersList.filter((u) => u.role !== ROLES.ADMIN);
     }
-
     return usersList.filter((u) => u.facility_id === user.facility_id);
   }, [usersList, user, isManagerWithoutFixedFacility]);
 
-  // Danh sách cơ sở duy nhất cho dropdown lọc — dùng cho Admin, và cho Manager quản lý
-  // toàn hệ thống (vì họ cũng đang thấy user của nhiều cơ sở nên cần lọc qua lại được).
   const showFacilityFilter = user?.role === ROLES.ADMIN || isManagerWithoutFixedFacility;
 
   const facilityOptions = useMemo(() => {
@@ -151,48 +162,75 @@ export const UserManagementPage = () => {
     targetUser.username !== 'admin' &&
     !(user?.role === ROLES.MANAGER && targetUser.role === ROLES.ADMIN);
 
+  // ── Chế độ chọn: xác định từ trạng thái is_active của người ĐẦU TIÊN được chọn.
+  // Khi đã có chế độ, chỉ cho chọn thêm người CÙNG trạng thái (đều active, hoặc đều đã khóa) —
+  // không cho trộn lẫn, để nút bulk action (Khóa/Mở khóa) luôn rõ ràng chỉ 1 hành động duy nhất.
+  const selectionMode = useMemo(() => {
+    if (selectedIds.length === 0) return null;
+    const first = usersList.find((u) => u.id === selectedIds[0]);
+    if (!first) return null;
+    return first.is_active ? 'active' : 'locked';
+  }, [selectedIds, usersList]);
+
+  const matchesSelectionMode = (targetUser) => {
+    if (selectionMode === null) return true;
+    return selectionMode === 'active' ? targetUser.is_active : !targetUser.is_active;
+  };
+
   const selectableUsers = filteredUsers.filter(isSelectable);
-  const selectableIds = selectableUsers.map((u) => u.id);
-  const isAllSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
+  const hasMixedStatuses =
+    selectableUsers.some((u) => u.is_active) && selectableUsers.some((u) => !u.is_active);
+
+  // Danh sách ID hợp lệ để "chọn tất cả" — chỉ tính người cùng chế độ hiện tại (nếu đã có chế độ)
+  const selectAllTargetIds = selectableUsers.filter(matchesSelectionMode).map((u) => u.id);
+  const isAllSelected = selectAllTargetIds.length > 0 && selectAllTargetIds.every((id) => selectedIds.includes(id));
+
+  // Vô hiệu hóa checkbox "chọn tất cả" nếu chưa xác định chế độ VÀ danh sách đang lẫn cả 2 trạng thái
+  // (tránh chọn tất cả sẽ trộn active + locked ngay từ đầu, phá vỡ quy tắc chỉ 1 hành động).
+  const isSelectAllDisabled = selectableUsers.length === 0 || (selectionMode === null && hasMixedStatuses);
 
   const toggleSelectAll = () => {
-    setSelectedIds(isAllSelected ? [] : selectableIds);
+    setSelectedIds(isAllSelected ? [] : selectAllTargetIds);
   };
 
-  const toggleSelectOne = (id) => {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleSelectOne = (targetUser) => {
+    if (!isSelectable(targetUser)) return;
+
+    if (selectionMode !== null && !matchesSelectionMode(targetUser)) {
+      alert(
+        selectionMode === 'active'
+          ? 'Bạn đang chọn nhóm tài khoản đang hoạt động. Vui lòng bỏ chọn hết trước khi chọn tài khoản đã khóa.'
+          : 'Bạn đang chọn nhóm tài khoản đã khóa. Vui lòng bỏ chọn hết trước khi chọn tài khoản đang hoạt động.'
+      );
+      return;
+    }
+
+    setSelectedIds((prev) =>
+      prev.includes(targetUser.id) ? prev.filter((x) => x !== targetUser.id) : [...prev, targetUser.id]
+    );
   };
 
-  const handleBulkLock = async () => {
-    const targets = usersList.filter((u) => selectedIds.includes(u.id) && u.is_active);
-    if (targets.length === 0) { alert('Các tài khoản đã chọn đều đang bị khóa sẵn.'); return; }
-    if (!window.confirm(`Khóa ${targets.length} tài khoản đã chọn?`)) return;
+  // ── Bulk lock/unlock: dùng đúng 1 lệnh gọi API bulk-lock thật, không lặp gọi từng người ──
+  const handleBulkToggleLock = async () => {
+    if (selectedIds.length === 0 || selectionMode === null) return;
+    const nextIsActive = selectionMode === 'locked'; // đang chọn nhóm đã khóa -> hành động là MỞ KHÓA (is_active=true)
+    const actionLabel = nextIsActive ? 'Mở khóa' : 'Khóa';
+
     setBulkLoading(true);
     try {
-      await Promise.all(targets.map((u) => usersApi.toggleLockUser(u.id)));
+      await usersApi.bulkLockUsers(selectedIds, nextIsActive);
       setSelectedIds([]);
       await loadUsers();
-    } catch {
-      alert('Có lỗi xảy ra khi khóa hàng loạt, vui lòng thử lại!');
+    } catch (err) {
+      alert(err.response?.data?.detail || `Có lỗi xảy ra khi ${actionLabel.toLowerCase()} hàng loạt!`);
     } finally {
       setBulkLoading(false);
     }
   };
 
-  const handleBulkUnlock = async () => {
-    const targets = usersList.filter((u) => selectedIds.includes(u.id) && !u.is_active);
-    if (targets.length === 0) { alert('Các tài khoản đã chọn đều đang hoạt động sẵn.'); return; }
-    if (!window.confirm(`Mở khóa ${targets.length} tài khoản đã chọn?`)) return;
-    setBulkLoading(true);
-    try {
-      await Promise.all(targets.map((u) => usersApi.toggleLockUser(u.id)));
-      setSelectedIds([]);
-      await loadUsers();
-    } catch {
-      alert('Có lỗi xảy ra khi mở khóa hàng loạt, vui lòng thử lại!');
-    } finally {
-      setBulkLoading(false);
-    }
+  const requestBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    setDeleteTarget({ type: 'bulk', ids: selectedIds });
   };
 
   const roleBadgeClass = (role) => {
@@ -203,9 +241,6 @@ export const UserManagementPage = () => {
 
   if (loading) return <div className={styles.loadingText}>Đang nạp dữ liệu nhân sự...</div>;
 
-  // Hiện cột "Cơ Sở" khi người xem thấy dữ liệu của nhiều cơ sở cùng lúc (Admin, hoặc
-  // Manager quản lý toàn hệ thống) — Manager có cơ sở cố định thì không cần cột này vì
-  // toàn bộ danh sách chỉ thuộc đúng 1 cơ sở của họ.
   const showFacilityColumn = user?.role === ROLES.ADMIN || isManagerWithoutFixedFacility;
   const colSpanCount = showFacilityColumn ? 7 : 6;
 
@@ -247,7 +282,6 @@ export const UserManagementPage = () => {
             ))}
           </select>
 
-          {/* Admin, hoặc Manager quản lý toàn hệ thống — vì cả 2 đều thấy dữ liệu nhiều cơ sở */}
           {showFacilityFilter && facilityOptions.length > 0 && (
             <select
               className={styles.roleFilterSelect}
@@ -269,11 +303,32 @@ export const UserManagementPage = () => {
 
       {selectedIds.length > 0 && (
         <div className={styles.bulkActionBar}>
-          <span className={styles.bulkCount}>Đã chọn {selectedIds.length} tài khoản</span>
+          <span className={styles.bulkCount}>
+            Đã chọn {selectedIds.length} tài khoản
+            {selectionMode && (
+              <span className={styles.bulkModeTag}>
+                {selectionMode === 'active' ? '(đang hoạt động)' : '(đã khóa)'}
+              </span>
+            )}
+          </span>
           <div className={styles.bulkButtons}>
-            <button className={styles.bulkLockBtn} onClick={handleBulkLock} disabled={bulkLoading}>🔒 Khóa hàng loạt</button>
-            <button className={styles.bulkUnlockBtn} onClick={handleBulkUnlock} disabled={bulkLoading}>🔓 Mở khóa hàng loạt</button>
-            <button className={styles.bulkClearBtn} onClick={() => setSelectedIds([])} disabled={bulkLoading}>Bỏ chọn</button>
+            {/* Chỉ 1 trong 2 nút hiện ra tùy chế độ đang chọn — không bao giờ hiện cả 2 cùng lúc */}
+            {selectionMode === 'active' && (
+              <button className={styles.bulkLockBtn} onClick={handleBulkToggleLock} disabled={bulkLoading}>
+                🔒 Khóa hàng loạt
+              </button>
+            )}
+            {selectionMode === 'locked' && (
+              <button className={styles.bulkUnlockBtn} onClick={handleBulkToggleLock} disabled={bulkLoading}>
+                🔓 Mở khóa hàng loạt
+              </button>
+            )}
+            <button className={styles.bulkDeleteBtn} onClick={requestBulkDelete} disabled={bulkLoading}>
+              🗑️ Xóa hàng loạt
+            </button>
+            <button className={styles.bulkClearBtn} onClick={() => setSelectedIds([])} disabled={bulkLoading}>
+              Bỏ chọn
+            </button>
           </div>
         </div>
       )}
@@ -284,7 +339,17 @@ export const UserManagementPage = () => {
             <thead className={styles.thead}>
               <tr>
                 <th className={styles.thCheckbox}>
-                  <input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll} disabled={selectableUsers.length === 0} />
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={toggleSelectAll}
+                    disabled={isSelectAllDisabled}
+                    title={
+                      isSelectAllDisabled && !isAllSelected
+                        ? 'Danh sách đang lẫn cả tài khoản hoạt động và đã khóa — chọn từng người trước để xác định loại thao tác'
+                        : undefined
+                    }
+                  />
                 </th>
                 <th className={styles.th}>Họ và Tên</th>
                 <th className={styles.th}>Tên Đăng Nhập</th>
@@ -298,12 +363,24 @@ export const UserManagementPage = () => {
               {filteredUsers.length > 0 ? (
                 filteredUsers.map((targetUser) => {
                   const isActionBlocked = !isSelectable(targetUser);
+                  const isCheckboxDisabled =
+                    isActionBlocked || (selectionMode !== null && !matchesSelectionMode(targetUser));
 
                   return (
                     <tr key={targetUser.id} className={styles.tr}>
                       <td className={styles.tdCheckbox}>
                         {!isActionBlocked && (
-                          <input type="checkbox" checked={selectedIds.includes(targetUser.id)} onChange={() => toggleSelectOne(targetUser.id)} />
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(targetUser.id)}
+                            onChange={() => toggleSelectOne(targetUser)}
+                            disabled={isCheckboxDisabled}
+                            title={
+                              isCheckboxDisabled
+                                ? 'Không cùng trạng thái với các tài khoản đang chọn'
+                                : undefined
+                            }
+                          />
                         )}
                       </td>
                       <td className={styles.tdBold}>{targetUser.full_name}</td>
@@ -341,7 +418,7 @@ export const UserManagementPage = () => {
                             </button>
                             <button
                               className={styles.btnDelete}
-                              onClick={() => handleDeleteUser(targetUser)}
+                              onClick={() => requestDeleteSingle(targetUser)}
                               disabled={targetUser.username === 'admin'}
                             >Xóa</button>
                           </div>
@@ -377,6 +454,7 @@ export const UserManagementPage = () => {
         onResetPassword={handleResetPassword}
         targetUser={editTargetUser}
         currentUserRole={user?.role}
+        currentUserFacilityId={user?.facility_id}
       />
 
       <ImportDataModal
@@ -403,6 +481,18 @@ export const UserManagementPage = () => {
         isOpen={isHistoryModalOpen}
         onClose={() => setIsHistoryModalOpen(false)}
         user={selectedHistoryUser}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={deleteTarget?.type === 'bulk' ? '⚠️ Xác Nhận Xóa Hàng Loạt' : '⚠️ Xác Nhận Xóa Tài Khoản'}
+        message={
+          deleteTarget?.type === 'bulk'
+            ? `Bạn sắp xóa vĩnh viễn ${deleteTarget.ids.length} tài khoản đã chọn.`
+            : `Bạn sắp xóa vĩnh viễn tài khoản [${deleteTarget?.user?.username}].`
+        }
       />
     </div>
   );

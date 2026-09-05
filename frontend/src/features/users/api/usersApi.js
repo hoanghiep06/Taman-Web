@@ -9,7 +9,6 @@ export const usersApi = {
     return axiosClient.post('/admin/users', userData);
   },
 
-  // MỚI: Sửa thông tin tài khoản (full_name, phone_number, role, facility_id, is_active)
   updateUser: (userId, userData) => {
     return axiosClient.put(`/admin/users/${userId}`, userData);
   },
@@ -18,7 +17,14 @@ export const usersApi = {
     return axiosClient.put(`/admin/users/${userId}/toggle-lock`);
   },
 
-  // MỚI: Reset mật khẩu về mặc định, hoặc đặt mật khẩu mới cụ thể
+  // Kiểm tra: 2 hàm này có tồn tại trong file thật của bạn chưa?
+  bulkLockUsers: (userIds, isActive) => {
+    return axiosClient.post('/admin/users/bulk-lock', {
+      user_ids: userIds,
+      is_active: isActive,
+    });
+  },
+
   resetPassword: (userId, newPassword = null) => {
     return axiosClient.put(`/admin/users/${userId}/reset-password`, {
       new_password: newPassword,
@@ -27,6 +33,12 @@ export const usersApi = {
 
   deleteUser: (userId) => {
     return axiosClient.delete(`/admin/users/${userId}`);
+  },
+
+  bulkDeleteUsers: (userIds) => {
+    return axiosClient.post('/admin/users/bulk-delete', {
+      user_ids: userIds,
+    });
   },
 
   importUsersExcel: (file) => {

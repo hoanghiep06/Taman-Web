@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ROLES } from '../../../utils/constants';
 import { Modal } from '../../../components/Modal';
-import styles from './CreateUserModal.module.css'; // dùng chung style với CreateUserModal
+import { facilitiesApi } from '../api/facilitiesApi';
+import styles from './CreateUserModal.module.css';
 
 const ALL_ROLE_OPTIONS = [
   { value: ROLES.ADMIN,       label: 'Quản trị viên cấp cao (Admin)' },
@@ -17,10 +18,20 @@ const getAvailableRoles = (currentUserRole) => {
   return [];
 };
 
-export const UserEditModal = ({ isOpen, onClose, onSave, onResetPassword, targetUser, currentUserRole }) => {
+export const UserEditModal = ({ isOpen, onClose, onSave, onResetPassword, targetUser, currentUserRole, currentUserFacilityId }) => {
   const [formData, setFormData] = useState(null);
+  const [facilities, setFacilities] = useState([]);
+  const [loadingFacilities, setLoadingFacilities] = useState(false);
+
   const availableRoles = getAvailableRoles(currentUserRole);
   const isManager = currentUserRole === ROLES.MANAGER;
+  const isAdmin = currentUserRole === ROLES.ADMIN;
+
+  // Manager có cơ sở cố định: không được đổi cơ sở của người khác (đã bị giới hạn ngay từ đầu
+  // chỉ thấy/sửa được người cùng cơ sở, nên field này không cần cho sửa — khóa cứng).
+  // Manager KHÔNG có cơ sở cố định (quản lý toàn hệ thống), hoặc Admin: được tự do đổi cơ sở.
+  const isManagerLockedToFacility = isManager && Boolean(currentUserFacilityId);
+  const canPickFacility = isAdmin || (isManager && !currentUserFacilityId);
 
   useEffect(() => {
     if (isOpen && targetUser) {
@@ -28,9 +39,21 @@ export const UserEditModal = ({ isOpen, onClose, onSave, onResetPassword, target
         full_name: targetUser.full_name || '',
         phone_number: targetUser.phone_number || '',
         role: targetUser.role,
+        facility_id: targetUser.facility_id ?? '',
       });
+
+      if (canPickFacility) {
+        setLoadingFacilities(true);
+        facilitiesApi.getAllFacilities()
+          .then((data) => setFacilities(data))
+          .catch((err) => {
+            console.error('Lỗi tải danh sách cơ sở:', err);
+            setFacilities([]);
+          })
+          .finally(() => setLoadingFacilities(false));
+      }
     }
-  }, [isOpen, targetUser]);
+  }, [isOpen, targetUser, canPickFacility]);
 
   if (!targetUser || !formData) return null;
 
@@ -40,12 +63,23 @@ export const UserEditModal = ({ isOpen, onClose, onSave, onResetPassword, target
       alert('Vui lòng nhập họ tên!');
       return;
     }
-    // Manager không được tự đổi role user thành Admin (đồng bộ với hàng rào backend)
     if (isManager && formData.role === ROLES.ADMIN) {
       alert('Bạn không có quyền cấp quyền Quản trị viên cho tài khoản này!');
       return;
     }
-    onSave(targetUser.id, formData);
+
+    const payload = {
+      full_name: formData.full_name,
+      phone_number: formData.phone_number,
+      role: formData.role,
+      // Manager có cơ sở cố định: không gửi facility_id thay đổi, giữ nguyên giá trị cũ của user
+      // (không ép về facility của Manager vì đây là SỬA người đã có sẵn, không phải TẠO mới).
+      facility_id: canPickFacility
+        ? (formData.facility_id ? Number(formData.facility_id) : null)
+        : targetUser.facility_id,
+    };
+
+    onSave(targetUser.id, payload);
   };
 
   const handleResetPassword = () => {
@@ -96,6 +130,34 @@ export const UserEditModal = ({ isOpen, onClose, onSave, onResetPassword, target
             ))}
           </select>
         </div>
+
+        {/* Admin, hoặc Manager không cố định cơ sở: được tự chọn/đổi cơ sở cho tài khoản này */}
+        {canPickFacility && (
+          <div className={styles.inputGroup}>
+            <label className={styles.label}>Cơ Sở</label>
+            <select
+              className={styles.select}
+              value={formData.facility_id}
+              onChange={(e) => setFormData({ ...formData, facility_id: e.target.value })}
+              disabled={loadingFacilities}
+            >
+              <option value="">
+                {loadingFacilities ? 'Đang tải...' : '-- Không gắn cơ sở cụ thể --'}
+              </option>
+              {facilities.map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Manager có cơ sở cố định: không hiển thị field sửa cơ sở vì đã bị khóa cứng theo cơ sở của Manager */}
+        {isManagerLockedToFacility && (
+          <div className={styles.inputGroup}>
+            <label className={styles.label}>Cơ Sở</label>
+            <input type="text" className={styles.input} value="Cùng cơ sở với bạn" disabled />
+          </div>
+        )}
 
         <button
           type="button"
