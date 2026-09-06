@@ -1,6 +1,6 @@
 # models.py
 import uuid
-from sqlalchemy import Column, Integer, String, Boolean, Text, ForeignKey, Date, BigInteger, UniqueConstraint, CheckConstraint, Float
+from sqlalchemy import Column, Integer, String, Boolean, Text, ForeignKey, Date, BigInteger, UniqueConstraint, CheckConstraint, Float, Numeric
 from sqlalchemy.dialects.postgresql import ARRAY, TIMESTAMP
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -199,17 +199,155 @@ class VitalSignRecord(Base):
     is_edited = Column(Boolean, default=False)
     edited_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
+
+class MedicineCategory(Base):
+    __tablename__ = "medicine_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="active")
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    medicines = relationship("Medicine", back_populates="category")
+
+
+class Medicine(Base):
+    __tablename__ = "medicines"
+    __table_args__ = (
+        UniqueConstraint(
+            "generic_name", "strength", "dosage_form",
+            name="uq_medicine_identify"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    # Tên thuốc hiển thị / tên thương mại
+    name = Column(String(200), nullable=False)
+
+    # Tên dùng gợi ý quen thuộc
+    generic_name = Column(String(200), nullable=True)
+    strength = Column(String(100), nullable=True)  # Định lượng: 500mg
+    unit = Column(String(50), nullable=False)   # Viên, gói, chai
+    dosage_form = Column(String(100), nullable=True)
+    category_id = Column(Integer, ForeignKey("medicine_categories.id", ondelete="SET NULL"), nullable=True, index=True)
+    route = Column(String(50), nullable=True)  # Uống, bôi, nhỏ mắt, tiêm...
+
+    # active: được đề xuất; pending_review: chờ Doctor/Manager duyệt; inactive: ngừng dùng.
+    status = Column(String(20), nullable=False, default="active")
+    is_high_alert = Column(Boolean, nullable=False, default=False)
+    storage_note = Column(Text, nullable=True)
+    note = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+
+    category = relationship("MedicineCategory", back_populates="medicines")
+    created_by_user = relationship("User", foreign_keys=[created_by])
+    approved_by_user = relationship("User", foreign_keys=[approved_by])
+
+class PrescriptionItem(Base):
+    __tablename__ = "prescription_items"
+    __table_args__ = (
+        CheckConstraint("total_quantity >= 0", name="ck_item_quatity_positive"),
+        CheckConstraint(
+            "morning_dose >= 0 AND noon_dose >= 0 "
+            "AND evening_dose >= 0 AND night_dose >= 0",
+            name="ck_item_doses_positive"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    prescription_id = Column(
+        Integer,
+        ForeignKey("prescriptions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    medicine_id = Column(
+        Integer,
+        ForeignKey("medicines.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
+    medicine_name = Column(String(255), nullable=False)
+    medicine_strength = Column(String(100), nullable=True)
+    unit = Column(String(50), nullable=False)
+
+    total_quantity = Column(Numeric(10, 2), nullable=False, default=0)
+
+    morning_dose = Column(Numeric(10, 2), nullable=False, default=0)
+    noon_dose = Column(Numeric(10, 2), nullable=False, default=0)
+    evening_dose = Column(Numeric(10, 2), nullable=False, default=0)
+    night_dose = Column(Numeric(10, 2), nullable=False, default=0)
+
+    route = Column(String(50), nullable=True)   # Uống, bôi, nhỏ mắt,...
+    instructions = Column(Text, nullable=True)
+    prn_condition = Column(Text, nullable=True)    # Điều kiện khi dùng: VD khi sốt > 39 độ
+
+    prescription = relationship("Prescription", back_populates="items")
+    medicine = relationship("Medicine")
+
+
+
+
 class Prescription(Base):
     __tablename__ = "prescriptions"
     id = Column(Integer, primary_key=True, index=True)
-    elder_id = Column(Integer, ForeignKey("elders.id", ondelete="CASCADE"))
+    elder_id = Column(
+        Integer,
+        ForeignKey("elders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
     image_url = Column(Text)
     start_date = Column(Date, nullable=False)
     prescribed_by = Column(String(100))
     follow_up_date = Column(Date)
     is_active = Column(Boolean, default=True)
 
-    logs = relationship("PrescriptionLog", back_populates="prescription", cascade="all, delete-orphan")
+    prescribed_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    diagnosis = Column(Text, nullable=True)
+    note = Column(Text, nullable=True)
+    end_date = Column(Date, nullable=True)
+
+    # active | stopped | completed | superseded | draft
+    status = Column(String(20), nullable=False, default="draft")
+
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+
+    logs = relationship(
+        "PrescriptionLog",
+        back_populates="prescription",
+        cascade="all, delete-orphan"
+    )
+
+    items = relationship(
+        "PrescriptionItem",
+        back_populates="prescription",
+        cascade="all, delete-orphan"
+    )
+
+    elder = relationship("Elder")
+    prescribed_by_user = relationship("User")
 
 class PrescriptionLog(Base):
     __tablename__ = "prescription_logs"

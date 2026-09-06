@@ -23,6 +23,8 @@ from routes import (
     rooms,
     elders,
     health,
+    medicines,
+    prescriptions,
     assets,
     inspections,
     system,
@@ -41,7 +43,7 @@ async def lifespan(app: FastAPI):
     print("[SYSTEM]: Đang kiểm tra trạng thái hạ tầng hệ thống Viện Dưỡng Lão Tâm An...")
     
     # 1. Tự động quét và dựng cấu trúc các bảng trong DB
-    models.Base.metadata.create_all(bind=engine)
+    # models.Base.metadata.create_all(bind=engine)
 
     # 2. Tự động Seed dữ liệu hệ thống cơ bản
     db = Session(bind=engine)
@@ -154,6 +156,9 @@ app.include_router(facilities.router)    # 3. Quản lý Cơ sở & Phân khu (Z
 app.include_router(rooms.router)         # 4. Quản lý Phòng ốc
 app.include_router(elders.router)        # 5. Quản lý NCT & Bệnh án mở rộng
 app.include_router(health.router)        # 6. Y tế (Sinh hiệu, Toa thuốc, Cân nặng, Giao ca, Dashboard Y tế)
+app.include_router(medicines.router)     # 6a. Danh mục thuốc chuẩn
+app.include_router(medicines.category_router) # 6a.1. Nhóm thuốc chuẩn
+app.include_router(prescriptions.router) # 6b. Toa thuốc nhiều dòng
 app.include_router(assets.router)        # 7. Quản lý Danh mục Tư trang / Tài sản
 app.include_router(inspections.router)   # 8. Nghiệp vụ Đi tuần, Chụp ảnh, Mã Nonce, Báo mất
 app.include_router(system.router)        # 9. Quản trị hệ thống, Backup/Restore, Config Ca trực

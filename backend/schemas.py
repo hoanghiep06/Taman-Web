@@ -1,6 +1,7 @@
 # schemas.py
 from typing import Optional, List
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from decimal import Decimal
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from datetime import datetime, date
 from enum import Enum 
 
@@ -276,12 +277,108 @@ class VitalSignUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class MedicineCategoryCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+
+
+class MedicineCategoryResponse(MedicineCategoryCreate):
+    id: int
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MedicineBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    generic_name: Optional[str] = Field(None, max_length=200)
+    strength: Optional[str] = Field(None, max_length=100)
+    unit: str = Field(..., min_length=1, max_length=50)
+    dosage_form: Optional[str] = Field(None, max_length=100)
+    category_id: Optional[int] = None
+    route: Optional[str] = Field(None, max_length=50)
+    is_high_alert: bool = False
+    storage_note: Optional[str] = None
+    note: Optional[str] = None
+
+
+class MedicineCreate(MedicineBase):
+    pass
+
+
+class MedicineUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    generic_name: Optional[str] = Field(None, max_length=200)
+    strength: Optional[str] = Field(None, max_length=100)
+    unit: Optional[str] = Field(None, min_length=1, max_length=50)
+    dosage_form: Optional[str] = Field(None, max_length=100)
+    category_id: Optional[int] = None
+    route: Optional[str] = Field(None, max_length=50)
+    is_high_alert: Optional[bool] = None
+    storage_note: Optional[str] = None
+    note: Optional[str] = None
+
+
+class MedicineStatusUpdate(BaseModel):
+    status: str = Field(..., pattern="^(active|pending_review|inactive)$")
+
+
+class MedicineResponse(MedicineBase):
+    id: int
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    category: Optional[MedicineCategoryResponse] = None
+    created_by: Optional[int] = None
+    approved_by: Optional[int] = None
+    approved_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PrescriptionNewMedicine(MedicineBase):
+    """A medicine entered inline while creating a prescription."""
+    pass
+
+
+class PrescriptionItemCreate(BaseModel):
+    medicine_id: Optional[int] = None
+    new_medicine: Optional[PrescriptionNewMedicine] = None
+    medicine_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    medicine_strength: Optional[str] = Field(None, max_length=100)
+    unit: Optional[str] = Field(None, min_length=1, max_length=50)
+    total_quantity: Decimal = Field(..., ge=0, max_digits=10, decimal_places=2)
+    morning_dose: Decimal = Field(0, ge=0, max_digits=10, decimal_places=2)
+    noon_dose: Decimal = Field(0, ge=0, max_digits=10, decimal_places=2)
+    evening_dose: Decimal = Field(0, ge=0, max_digits=10, decimal_places=2)
+    night_dose: Decimal = Field(0, ge=0, max_digits=10, decimal_places=2)
+    route: Optional[str] = Field(None, max_length=50)
+    instructions: Optional[str] = None
+    prn_condition: Optional[str] = None
+
+    @model_validator(mode="after")
+    def require_one_medicine_source(self):
+        if bool(self.medicine_id) == bool(self.new_medicine):
+            raise ValueError("Mỗi dòng toa phải chọn một thuốc có sẵn hoặc nhập một thuốc mới.")
+        return self
+
+
+class PrescriptionItemResponse(PrescriptionItemCreate):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PrescriptionCreate(BaseModel):
     elder_id: int
     image_url: Optional[str] = None
     start_date: date
-    prescribed_by: str
+    prescribed_by: Optional[str] = Field(None, max_length=100)
     follow_up_date: Optional[date] = None
+    diagnosis: Optional[str] = None
+    note: Optional[str] = None
+    end_date: Optional[date] = None
+    items: List[PrescriptionItemCreate] = Field(..., min_length=1)
 
 class PrescriptionChangeLog(BaseModel):
     change_type: str
@@ -655,3 +752,14 @@ class ShiftSettingUpdate(BaseModel):
 class ShiftSettingResponse(ShiftSettingUpdate):
     id: int
     model_config = ConfigDict(from_attributes=True)
+
+
+class PrescriptionDetailResponse(PrescriptionResponse):
+    prescribed_by_user_id: Optional[int] = None
+    diagnosis: Optional[str] = None
+    note: Optional[str] = None
+    end_date: Optional[date] = None
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    items: List[PrescriptionItemResponse]
